@@ -1,6 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/widgets/login_dialog.dart';
+import 'package:trip_share_app/screens/booking_screen.dart';
+import 'package:trip_share_app/screens/tour_detail_screen.dart';
 
 class TourCard extends StatelessWidget {
   final Tour tour;
@@ -10,183 +15,52 @@ class TourCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = tour.status;
+    final isFull = status == TourStatus.fullBooked;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          height: 180,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              // Left side – tour details (3/5)
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Tour name
-                      Text(
-                        tour.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B5E20),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      // Start date
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDate(tour.startDate),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      // Time
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatTime(tour.startDate),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Seats & status badge
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.event_seat,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${tour.remainingSeats}/${tour.totalSeats} seats',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _buildStatusBadge(status),
-                        ],
-                      ),
-                      const Spacer(),
-                      // Action buttons row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 32,
-                              child: OutlinedButton(
-                                onPressed: () {},
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFF1B5E20),
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                ),
-                                child: const Text(
-                                  'More Details',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF1B5E20),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (status != TourStatus.fullBooked) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: SizedBox(
-                                height: 32,
-                                child: ElevatedButton(
-                                  onPressed: () {},
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1B5E20),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  child: Text(
-                                    status == TourStatus.idle
-                                        ? 'Start Tour'
-                                        : 'Join Tour',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            height: 190,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              // Right side – image (2/5)
-              Expanded(
-                flex: 2,
-                child: SizedBox.expand(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Thumbnail
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
+                  ),
+                  child: SizedBox(
+                    width: 110,
                     child: Image.network(
                       tour.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
+                      height: double.infinity,
+                      errorBuilder: (_, _, _) => Container(
                         color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
                         child: const Center(
                           child: Icon(
                             Icons.landscape,
-                            size: 40,
+                            size: 36,
                             color: Color(0xFF1B5E20),
                           ),
                         ),
@@ -194,42 +68,221 @@ class TourCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-            ],
+                // Details
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Tour name
+                        Text(
+                          tour.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1B5E20),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        // Date & time row
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 13,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatDate(tour.startDate),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.access_time,
+                              size: 13,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(tour.startDate),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Capacity row
+                        if (status == TourStatus.active ||
+                            status == TourStatus.fullBooked)
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.event_seat,
+                                size: 13,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(width: 4),
+                              isFull
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFEBEE),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Full',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFC62828),
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      '${tour.remainingSeats} of ${tour.totalSeats} seats',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        const SizedBox(height: 4),
+                        // Price
+                        Text(
+                          '\$${tour.price.toInt()} per person',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1B5E20),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Buttons row
+                        Row(
+                          children: [
+                            // Join/Start button (hidden when full)
+                            if (!isFull)
+                              Expanded(
+                                child: SizedBox(
+                                  height: 30,
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      if (!AuthService().isLoggedIn) {
+                                        final loggedIn = await LoginDialog.show(
+                                          context,
+                                        );
+                                        if (!loggedIn) return;
+                                      }
+                                      if (!context.mounted) return;
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              BookingScreen(tour: tour),
+                                        ),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF1B5E20),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                    child: Text(
+                                      status == TourStatus.idle
+                                          ? 'Start'
+                                          : 'Join',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (!isFull) const SizedBox(width: 6),
+                            // Details button
+                            Expanded(
+                              child: SizedBox(
+                                height: 30,
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            TourDetailScreen(tour: tour),
+                                      ),
+                                    );
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                      color: Color(0xFF1B5E20),
+                                      width: 1,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  child: const Text(
+                                    'Details',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF1B5E20),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Share button
+                            SizedBox(
+                              width: 30,
+                              height: 30,
+                              child: IconButton.outlined(
+                                onPressed: () {
+                                  SharePlus.instance.share(
+                                    ShareParams(
+                                      text:
+                                          'Check out this tour: ${tour.name} - \$${tour.price.toInt()} per person!',
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.share, size: 14),
+                                color: const Color(0xFF1B5E20),
+                                padding: EdgeInsets.zero,
+                                style: IconButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Color(0xFF1B5E20),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(TourStatus status) {
-    final (String label, Color bg, Color fg) = switch (status) {
-      TourStatus.fullBooked => (
-        'Full Booked',
-        const Color(0xFFFFEBEE),
-        const Color(0xFFC62828),
-      ),
-      TourStatus.idle => (
-        'Idle',
-        const Color(0xFFFFF8E1),
-        const Color(0xFFF57F17),
-      ),
-      TourStatus.active => (
-        'Active',
-        const Color(0xFFE8F5E9),
-        const Color(0xFF2E7D32),
-      ),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg),
       ),
     );
   }
