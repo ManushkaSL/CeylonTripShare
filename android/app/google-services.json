@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "230136178640",
+    "project_id": "ceylon-share-tour",
+    "storage_bucket": "ceylon-share-tour.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230136178640:android:9fa53c7fd20d8a061bfbd5",
+        "android_client_info": {
+          "package_name": "com.example.trip_share_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCU76ZdlAQiag6lPNOt2hRoVPjEacAkfuk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

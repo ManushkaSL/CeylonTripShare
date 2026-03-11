@@ -4,6 +4,7 @@ import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/widgets/tour_card.dart';
 import 'package:trip_share_app/screens/joined_tours_screen.dart';
 import 'package:trip_share_app/screens/chats_list_screen.dart';
+import 'package:trip_share_app/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -288,12 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return const JoinedToursBody();
       case 3:
-        return const Center(
-          child: Text(
-            'Profile',
-            style: TextStyle(fontSize: 18, color: Colors.grey),
-          ),
-        );
+        return const ProfileBody();
       default:
         return _buildHomeContent();
     }

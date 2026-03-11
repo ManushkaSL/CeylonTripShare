@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/auth_service.dart';
@@ -83,7 +82,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                       return Image.network(
                         photos[index],
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
                           child: const Center(
                             child: Icon(
@@ -313,7 +312,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: photos.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        separatorBuilder: (_, _) => const SizedBox(width: 10),
                         itemBuilder: (context, index) {
                           return GestureDetector(
                             onTap: () {
@@ -339,7 +338,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                                 child: Image.network(
                                   photos[index],
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  errorBuilder: (_, _, _) => Container(
                                     color: const Color(
                                       0xFF1B5E20,
                                     ).withValues(alpha: 0.1),
