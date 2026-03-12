@@ -85,7 +85,7 @@ class _LoginDialogState extends State<LoginDialog> {
                             'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
                             width: 20,
                             height: 20,
-                            errorBuilder: (_, __, ___) =>
+                            errorBuilder: (_, _, _) =>
                                 const Icon(Icons.g_mobiledata, size: 24),
                           ),
                     label: Text(
