@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, CheckCircle, Tag, Play, StopCircle, AlarmClock, Upload, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, CheckCircle, Tag, Play, StopCircle, AlarmClock, Upload, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
 import { db } from './firebase';
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { supabase } from './supabase';
 
 const SUPABASE_BUCKET = 'images';
@@ -81,6 +81,22 @@ function TourImageCarousel({ images, title }: { images: string[]; title: string 
 }
 
 export default function App() {
+  const initialTourForm: Partial<Tour> = {
+    title: '',
+    category: '',
+    description: '',
+    price: 0,
+    location: '',
+    duration: '',
+    start_time_location: '',
+    last_joining_time: '',
+    end_time_location: '',
+    route: '',
+    operator_name: '',
+    whats_included: '',
+    tour_features: ''
+  };
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('admin_auth') === 'true');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -100,24 +116,11 @@ export default function App() {
   const [tours, setTours] = useState<Tour[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingTourId, setEditingTourId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createStep, setCreateStep] = useState('');
   const [createError, setCreateError] = useState('');
-  const [newTour, setNewTour] = useState<Partial<Tour>>({
-    title: '',
-    category: '',
-    description: '',
-    price: 0,
-    location: '',
-    duration: '',
-    start_time_location: '',
-    last_joining_time: '',
-    end_time_location: '',
-    route: '',
-    operator_name: '',
-    whats_included: '',
-    tour_features: ''
-  });
+  const [newTour, setNewTour] = useState<Partial<Tour>>(initialTourForm);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +128,49 @@ export default function App() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('admin_auth');
+  };
+
+  const closeTourModal = () => {
+    setIsAdding(false);
+    setEditingTourId(null);
+    setCreateError('');
+    setCreateStep('');
+    imagePreviews.forEach(url => URL.revokeObjectURL(url));
+    setImageFiles([]);
+    setImagePreviews([]);
+    setNewTour(initialTourForm);
+  };
+
+  const openCreateTourModal = () => {
+    setEditingTourId(null);
+    setCreateError('');
+    setCreateStep('');
+    setIsAdding(true);
+  };
+
+  const handleEditTour = (tour: Tour) => {
+    imagePreviews.forEach(url => URL.revokeObjectURL(url));
+    setImageFiles([]);
+    setImagePreviews([]);
+    setCreateError('');
+    setCreateStep('');
+    setEditingTourId(tour.id);
+    setNewTour({
+      title: tour.title,
+      category: tour.category,
+      description: tour.description,
+      price: tour.price,
+      location: tour.location,
+      duration: tour.duration,
+      start_time_location: tour.start_time_location,
+      last_joining_time: tour.last_joining_time,
+      end_time_location: tour.end_time_location,
+      route: tour.route,
+      operator_name: tour.operator_name,
+      whats_included: tour.whats_included,
+      tour_features: tour.tour_features,
+    });
+    setIsAdding(true);
   };
 
   useEffect(() => {
@@ -241,6 +287,7 @@ export default function App() {
 
   const handleAddTour = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isEditMode = Boolean(editingTourId);
     setCreateError('');
     setIsCreating(true);
     setCreateStep('Preparing upload...');
@@ -272,35 +319,30 @@ export default function App() {
 
       setCreateStep('Finalizing...');
 
-      await addDoc(collection(db, 'tours'), {
-        ...newTour,
-        price: Number(newTour.price || 0),
-        images: imageUrls,
-        created_at: serverTimestamp(),
-      });
+      if (isEditMode && editingTourId) {
+        const existingTour = tours.find(tour => tour.id === editingTourId);
+        const existingImages = existingTour ? (Array.isArray(existingTour.images) ? existingTour.images : []) : [];
+        const finalImages = imageUrls.length > 0 ? imageUrls : existingImages;
 
-      setIsAdding(false);
-      imagePreviews.forEach(url => URL.revokeObjectURL(url));
-      setImageFiles([]);
-      setImagePreviews([]);
-      setNewTour({
-        title: '',
-        category: '',
-        description: '',
-        price: 0,
-        location: '',
-        duration: '',
-        start_time_location: '',
-        last_joining_time: '',
-        end_time_location: '',
-        route: '',
-        operator_name: '',
-        whats_included: '',
-        tour_features: ''
-      });
+        await updateDoc(doc(db, 'tours', editingTourId), {
+          ...newTour,
+          price: Number(newTour.price || 0),
+          images: finalImages,
+          updated_at: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, 'tours'), {
+          ...newTour,
+          price: Number(newTour.price || 0),
+          images: imageUrls,
+          created_at: serverTimestamp(),
+        });
+      }
+
+      closeTourModal();
       await fetchTours();
     } catch (error) {
-      console.error('Failed to add tour:', error);
+      console.error(`Failed to ${isEditMode ? 'update' : 'add'} tour:`, error);
       const appError = error as { code?: string; message?: string; error?: string; statusCode?: string };
       const message = appError?.code
         ? `${appError.code}: ${appError.message || 'Unknown error'}`
@@ -375,7 +417,7 @@ export default function App() {
         <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8 sticky top-0 z-10">
           <h2 className="text-lg font-semibold text-zinc-900">Tours Management</h2>
           <button
-            onClick={() => setIsAdding(true)}
+            onClick={openCreateTourModal}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95"
           >
             <Plus className="w-4 h-4" />
@@ -418,12 +460,20 @@ export default function App() {
                         );
                       })()}
                       <div className="absolute top-4 right-4">
-                        <button
-                          onClick={() => handleDeleteTour(tour.id, Array.isArray(tour.images) ? tour.images : [])}
-                          className="p-2 bg-white/90 backdrop-blur-sm text-red-600 rounded-full hover:bg-red-50 transition-colors shadow-sm"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditTour(tour)}
+                            className="p-2 bg-white/90 backdrop-blur-sm text-zinc-700 rounded-full hover:bg-zinc-100 transition-colors shadow-sm"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTour(tour.id, Array.isArray(tour.images) ? tour.images : [])}
+                            className="p-2 bg-white/90 backdrop-blur-sm text-red-600 rounded-full hover:bg-red-50 transition-colors shadow-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="p-6">
@@ -468,7 +518,7 @@ export default function App() {
               <h3 className="text-lg font-semibold text-zinc-900 mb-1">No tours found</h3>
               <p className="text-zinc-500 mb-6">Get started by creating your first tour package.</p>
               <button
-                onClick={() => setIsAdding(true)}
+                onClick={openCreateTourModal}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all inline-flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
@@ -487,7 +537,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsAdding(false)}
+              onClick={closeTourModal}
               className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
             />
             <motion.div
@@ -498,9 +548,9 @@ export default function App() {
             >
               <div className="p-8 overflow-y-auto">
                 <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-2xl font-bold text-zinc-900">Create New Tour</h3>
+                  <h3 className="text-2xl font-bold text-zinc-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
                   <button
-                    onClick={() => setIsAdding(false)}
+                    onClick={closeTourModal}
                     className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
                   >
                     <Plus className="w-6 h-6 rotate-45 text-zinc-400" />
@@ -727,7 +777,7 @@ export default function App() {
                   <div className="pt-4 flex gap-3 sticky bottom-0 bg-white">
                     <button
                       type="button"
-                      onClick={() => setIsAdding(false)}
+                      onClick={closeTourModal}
                       className="flex-1 px-6 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold rounded-xl transition-all"
                     >
                       Cancel
@@ -737,7 +787,7 @@ export default function App() {
                       disabled={isCreating}
                       className="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition-all active:scale-95 disabled:cursor-not-allowed"
                     >
-                      {isCreating ? (createStep || 'Creating...') : 'Create Tour'}
+                      {isCreating ? (createStep || (editingTourId ? 'Saving...' : 'Creating...')) : (editingTourId ? 'Save Changes' : 'Create Tour')}
                     </button>
                   </div>
                 </form>
