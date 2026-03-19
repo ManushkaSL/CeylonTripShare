@@ -117,6 +117,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
+  const [editingOriginalImages, setEditingOriginalImages] = useState<string[]>([]);
+  const [editingImages, setEditingImages] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [createStep, setCreateStep] = useState('');
   const [createError, setCreateError] = useState('');
@@ -133,6 +135,8 @@ export default function App() {
   const closeTourModal = () => {
     setIsAdding(false);
     setEditingTourId(null);
+    setEditingOriginalImages([]);
+    setEditingImages([]);
     setCreateError('');
     setCreateStep('');
     imagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -149,12 +153,15 @@ export default function App() {
   };
 
   const handleEditTour = (tour: Tour) => {
+    const existingImages = Array.isArray(tour.images) ? tour.images : [];
     imagePreviews.forEach(url => URL.revokeObjectURL(url));
     setImageFiles([]);
     setImagePreviews([]);
     setCreateError('');
     setCreateStep('');
     setEditingTourId(tour.id);
+    setEditingOriginalImages(existingImages);
+    setEditingImages(existingImages);
     setNewTour({
       title: tour.title,
       category: tour.category,
@@ -171,6 +178,21 @@ export default function App() {
       tour_features: tour.tour_features,
     });
     setIsAdding(true);
+  };
+
+  const removeExistingImage = (index: number) => {
+    setEditingImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const moveExistingImage = (index: number, direction: 'left' | 'right') => {
+    setEditingImages(prev => {
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
+      const next = [...prev];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -320,9 +342,7 @@ export default function App() {
       setCreateStep('Finalizing...');
 
       if (isEditMode && editingTourId) {
-        const existingTour = tours.find(tour => tour.id === editingTourId);
-        const existingImages = existingTour ? (Array.isArray(existingTour.images) ? existingTour.images : []) : [];
-        const finalImages = imageUrls.length > 0 ? imageUrls : existingImages;
+        const finalImages = [...editingImages, ...imageUrls];
 
         await updateDoc(doc(db, 'tours', editingTourId), {
           ...newTour,
@@ -330,6 +350,17 @@ export default function App() {
           images: finalImages,
           updated_at: serverTimestamp(),
         });
+
+        const removedImages = editingOriginalImages.filter(image => !editingImages.includes(image));
+        for (const imageUrl of removedImages) {
+          const imagePath = extractSupabasePathFromUrl(imageUrl, SUPABASE_BUCKET);
+          if (imagePath) {
+            const { error: removeError } = await supabase.storage.from(SUPABASE_BUCKET).remove([imagePath]);
+            if (removeError) {
+              console.warn('Failed to delete removed image from Supabase Storage:', removeError);
+            }
+          }
+        }
       } else {
         await addDoc(collection(db, 'tours'), {
           ...newTour,
@@ -740,6 +771,49 @@ export default function App() {
 
                   <div>
                     <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Images</label>
+                    {editingTourId && (
+                      <div className="mb-3">
+                        <p className="text-xs font-medium text-zinc-500 mb-2">Current Images</p>
+                        {editingImages.length > 0 ? (
+                          <div className="grid grid-cols-4 gap-2">
+                            {editingImages.map((src, i) => (
+                              <div key={`${src}-${i}`} className="relative aspect-square rounded-lg overflow-hidden group/img border border-zinc-200">
+                                <img src={src} className="w-full h-full object-cover" />
+                                <div className="absolute inset-x-1 bottom-1 flex items-center justify-between gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={() => moveExistingImage(i, 'left')}
+                                    disabled={i === 0}
+                                    className="p-1 bg-white/95 text-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronLeft className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveExistingImage(i, 'right')}
+                                    disabled={i === editingImages.length - 1}
+                                    className="p-1 bg-white/95 text-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronRight className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeExistingImage(i)}
+                                  className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                            No current images. Add new ones below.
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -754,7 +828,7 @@ export default function App() {
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-zinc-50 border-2 border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 transition-all"
                     >
                       <Upload className="w-4 h-4" />
-                      Browse Images
+                      {editingTourId ? 'Add More Images' : 'Browse Images'}
                     </button>
                     {imagePreviews.length > 0 && (
                       <div className="mt-3 grid grid-cols-4 gap-2">
