@@ -655,13 +655,9 @@ export default function App() {
                       {tour.operator_name && (
                         <p className="text-xs text-zinc-400 mb-3">by <span className="font-medium text-zinc-600">{tour.operator_name}</span></p>
                       )}
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
-                        <span className="text-xs font-medium bg-zinc-100 text-zinc-700 px-2 py-1 rounded-full">
-                          Total Seats: {Number(tour.seat_count || 0)}
-                        </span>
-                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                          Available Seats: {Number(tour.available_seats ?? tour.seat_count ?? 0)}
-                        </span>
+                      <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <p className="text-xs font-medium text-zinc-600">Total Seats: <span className="font-semibold text-zinc-800">{Number(tour.seat_count || 0)}</span></p>
+                        <p className="text-sm font-bold text-emerald-700">Available Seats: {Number(tour.available_seats ?? tour.seat_count ?? 0)}</p>
                       </div>
                       <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
                         <div className="flex items-center gap-4">
