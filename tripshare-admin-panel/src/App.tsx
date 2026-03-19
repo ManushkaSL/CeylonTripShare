@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, CheckCircle, Tag, Play, StopCircle, AlarmClock, Upload, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
 import { db } from './firebase';
@@ -33,6 +33,62 @@ function extractSupabasePathFromUrl(imageUrl: string, bucket: string) {
   }
 
   return null;
+}
+
+function normalizeRouteValue(route: Tour['route'] | string | undefined) {
+  if (Array.isArray(route)) {
+    return route.filter(stop => stop?.trim().length > 0);
+  }
+
+  if (typeof route === 'string') {
+    const trimmed = route.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(stop => typeof stop === 'string' && stop.trim().length > 0);
+        }
+      } catch {
+        return [];
+      }
+    }
+
+    return trimmed
+      .split('\n')
+      .map(stop => stop.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function parseTimeValueAndPeriod(value?: string, defaultPeriod: 'AM' | 'PM' = 'AM') {
+  if (!value) {
+    return { time: '', period: defaultPeriod };
+  }
+
+  const normalized = value.trim();
+  const periodMatch = normalized.match(/\b(a\.?m\.?|p\.?m\.?)\b/i);
+  const period = periodMatch
+    ? periodMatch[0].toLowerCase().includes('p')
+      ? 'PM'
+      : 'AM'
+    : defaultPeriod;
+
+  const time = normalized
+    .replace(/\b(a\.?m\.?|p\.?m\.?)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return { time, period };
+}
+
+function mergeTimeWithPeriod(time?: string, period?: string) {
+  const cleanTime = (time || '').trim();
+  if (!cleanTime) return '';
+  return `${cleanTime} ${period === 'PM' ? 'PM' : 'AM'}`;
 }
 
 function TourImageCarousel({ images, title }: { images: string[]; title: string }) {
@@ -84,14 +140,21 @@ export default function App() {
   const initialTourForm: Partial<Tour> = {
     title: '',
     category: '',
+    seat_count: 0,
     description: '',
     price: 0,
-    location: '',
-    duration: '',
-    start_time_location: '',
-    last_joining_time: '',
-    end_time_location: '',
-    route: '',
+    start_location: '',
+    start_day: '',
+    start_time: '',
+    start_time_period: 'AM',
+    end_location: '',
+    end_day: '',
+    end_time: '',
+    end_time_period: 'PM',
+    booking_close_date: '',
+    booking_close_time: '',
+    booking_close_period: 'PM',
+    route: [],
     operator_name: '',
     whats_included: '',
     tour_features: ''
@@ -123,6 +186,7 @@ export default function App() {
   const [createStep, setCreateStep] = useState('');
   const [createError, setCreateError] = useState('');
   const [newTour, setNewTour] = useState<Partial<Tour>>(initialTourForm);
+  const [routeInput, setRouteInput] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -142,6 +206,7 @@ export default function App() {
     imagePreviews.forEach(url => URL.revokeObjectURL(url));
     setImageFiles([]);
     setImagePreviews([]);
+    setRouteInput('');
     setNewTour(initialTourForm);
   };
 
@@ -149,14 +214,20 @@ export default function App() {
     setEditingTourId(null);
     setCreateError('');
     setCreateStep('');
+    setRouteInput('');
     setIsAdding(true);
   };
 
   const handleEditTour = (tour: Tour) => {
     const existingImages = Array.isArray(tour.images) ? tour.images : [];
+    const existingRoute = normalizeRouteValue(tour.route);
+    const parsedStartTime = parseTimeValueAndPeriod(tour.start_time || tour.start_time_location, 'AM');
+    const parsedEndTime = parseTimeValueAndPeriod(tour.end_time || tour.end_time_location, 'PM');
+    const parsedBookingCloseTime = parseTimeValueAndPeriod(tour.last_joining_time || tour.booking_close_time, 'PM');
     imagePreviews.forEach(url => URL.revokeObjectURL(url));
     setImageFiles([]);
     setImagePreviews([]);
+    setRouteInput('');
     setCreateError('');
     setCreateStep('');
     setEditingTourId(tour.id);
@@ -167,17 +238,45 @@ export default function App() {
       category: tour.category,
       description: tour.description,
       price: tour.price,
-      location: tour.location,
-      duration: tour.duration,
-      start_time_location: tour.start_time_location,
-      last_joining_time: tour.last_joining_time,
-      end_time_location: tour.end_time_location,
-      route: tour.route,
+      seat_count: Number(tour.seat_count || 0),
+      start_location: tour.start_location || tour.location || '',
+      start_day: tour.start_day || '',
+      start_time: parsedStartTime.time,
+      start_time_period: tour.start_time_period || parsedStartTime.period,
+      end_location: tour.end_location || '',
+      end_day: tour.end_day || '',
+      end_time: parsedEndTime.time,
+      end_time_period: tour.end_time_period || parsedEndTime.period,
+      booking_close_date: tour.booking_close_date || '',
+      booking_close_time: parsedBookingCloseTime.time,
+      booking_close_period: tour.booking_close_period || parsedBookingCloseTime.period,
+      route: existingRoute,
       operator_name: tour.operator_name,
       whats_included: tour.whats_included,
       tour_features: tour.tour_features,
     });
     setIsAdding(true);
+  };
+
+  const addRouteStop = () => {
+    const stop = routeInput.trim();
+    if (!stop) return;
+
+    setNewTour(prev => ({
+      ...prev,
+      route: [...normalizeRouteValue(prev.route), stop],
+    }));
+    setRouteInput('');
+  };
+
+  const removeRouteStop = (index: number) => {
+    setNewTour(prev => {
+      const currentRoute = normalizeRouteValue(prev.route);
+      return {
+        ...prev,
+        route: currentRoute.filter((_, i) => i !== index),
+      };
+    });
   };
 
   const removeExistingImage = (index: number) => {
@@ -266,15 +365,32 @@ export default function App() {
       const q = query(collection(db, 'tours'), orderBy('created_at', 'desc'));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((docSnapshot) => {
-        const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string };
+        const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string; route?: string[] | string };
         const images = Array.isArray(tour.images)
           ? tour.images
           : typeof tour.images === 'string'
             ? JSON.parse(tour.images)
             : [];
+        const route = normalizeRouteValue(tour.route);
+        const parsedStartTime = parseTimeValueAndPeriod(tour.start_time || tour.start_time_location, 'AM');
+        const parsedEndTime = parseTimeValueAndPeriod(tour.end_time || tour.end_time_location, 'PM');
+        const parsedBookingCloseTime = parseTimeValueAndPeriod(tour.last_joining_time || tour.booking_close_time, 'PM');
         return {
           id: docSnapshot.id,
           ...tour,
+          seat_count: Number(tour.seat_count || 0),
+          start_location: tour.start_location || tour.location || '',
+          start_day: tour.start_day || '',
+          start_time: parsedStartTime.time,
+          start_time_period: tour.start_time_period || parsedStartTime.period,
+          end_location: tour.end_location || '',
+          end_day: tour.end_day || '',
+          end_time: parsedEndTime.time,
+          end_time_period: tour.end_time_period || parsedEndTime.period,
+          booking_close_date: tour.booking_close_date || '',
+          booking_close_time: parsedBookingCloseTime.time,
+          booking_close_period: tour.booking_close_period || parsedBookingCloseTime.period,
+          route,
           images,
         } as Tour;
       });
@@ -341,12 +457,25 @@ export default function App() {
 
       setCreateStep('Finalizing...');
 
+      const route = normalizeRouteValue(newTour.route);
+      const payload = {
+        ...newTour,
+        price: Number(newTour.price || 0),
+        seat_count: Number(newTour.seat_count || 0),
+        start_day: newTour.start_day || '',
+        start_time: mergeTimeWithPeriod(newTour.start_time, newTour.start_time_period),
+        end_day: newTour.end_day || '',
+        end_time: mergeTimeWithPeriod(newTour.end_time, newTour.end_time_period),
+        booking_close_date: newTour.booking_close_date || '',
+        booking_close_time: mergeTimeWithPeriod(newTour.booking_close_time, newTour.booking_close_period),
+        route,
+      };
+
       if (isEditMode && editingTourId) {
         const finalImages = [...editingImages, ...imageUrls];
 
         await updateDoc(doc(db, 'tours', editingTourId), {
-          ...newTour,
-          price: Number(newTour.price || 0),
+          ...payload,
           images: finalImages,
           updated_at: serverTimestamp(),
         });
@@ -363,8 +492,7 @@ export default function App() {
         }
       } else {
         await addDoc(collection(db, 'tours'), {
-          ...newTour,
-          price: Number(newTour.price || 0),
+          ...payload,
           images: imageUrls,
           created_at: serverTimestamp(),
         });
@@ -511,7 +639,7 @@ export default function App() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 uppercase tracking-wider">
                           <MapPin className="w-3 h-3" />
-                          {tour.location || 'Unknown Location'}
+                          {tour.start_location || tour.location || 'Unknown Location'}
                         </div>
                         {tour.category && (
                           <span className="text-xs font-medium bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{tour.category}</span>
@@ -526,7 +654,11 @@ export default function App() {
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
                             <Clock className="w-4 h-4" />
-                            {tour.duration || 'N/A'}
+                            {tour.start_time ? `${tour.start_time} ${tour.start_time_period || 'AM'}` : 'N/A'}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
+                            <User className="w-4 h-4" />
+                            {tour.seat_count ? `${tour.seat_count} seats` : 'N/A'}
                           </div>
                           <div className="flex items-center gap-1.5 text-zinc-900 font-bold">
                             <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -575,11 +707,14 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+              className="relative w-full max-w-4xl bg-white rounded-3xl border border-zinc-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
             >
-              <div className="p-8 overflow-y-auto">
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-2xl font-bold text-zinc-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
+              <div className="p-7 border-b border-zinc-100 bg-white sticky top-0 z-10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-2xl font-bold text-zinc-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
+                    <p className="text-sm text-zinc-500 mt-1">Fill in the details below to publish this tour.</p>
+                  </div>
                   <button
                     onClick={closeTourModal}
                     className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
@@ -587,8 +722,10 @@ export default function App() {
                     <Plus className="w-6 h-6 rotate-45 text-zinc-400" />
                   </button>
                 </div>
+              </div>
 
-                <form onSubmit={handleAddTour} className="space-y-5">
+              <div className="p-7 overflow-y-auto bg-zinc-50/50">
+                <form onSubmit={handleAddTour} className="space-y-6">
                   {createError && (
                     <div className="bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100 break-words">
                       {createError}
@@ -599,19 +736,21 @@ export default function App() {
                       {createStep}
                     </div>
                   )}
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Name</label>
-                    <input
-                      required
-                      type="text"
-                      value={newTour.title}
-                      onChange={e => setNewTour({ ...newTour, title: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      placeholder="e.g. Wilpattu Full Day Safari from Anuradhapura"
-                    />
-                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Basic Details</p>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Name</label>
+                      <input
+                        required
+                        type="text"
+                        value={newTour.title}
+                        onChange={e => setNewTour({ ...newTour, title: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        placeholder="e.g. Wilpattu Full Day Safari from Anuradhapura"
+                      />
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Category</label>
                       <div className="relative">
@@ -626,151 +765,277 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Price (USD)</label>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Seat Count</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          required
+                          type="number"
+                          min={0}
+                          value={newTour.seat_count}
+                          onChange={e => setNewTour({ ...newTour, seat_count: Number(e.target.value) })}
+                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          placeholder="e.g. 6"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Price</label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                         <input
                           required
                           type="number"
+                          min={0}
                           value={newTour.price}
                           onChange={e => setNewTour({ ...newTour, price: Number(e.target.value) })}
                           className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="0.00"
+                          placeholder="e.g. 250"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Description</label>
-                    <textarea
-                      value={newTour.description}
-                      onChange={e => setNewTour({ ...newTour, description: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all h-20 resize-none"
-                      placeholder="Describe the tour highlights..."
-                    />
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Description</label>
+                      <textarea
+                        value={newTour.description}
+                        onChange={e => setNewTour({ ...newTour, description: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all h-24 resize-none"
+                        placeholder="Describe the tour highlights..."
+                      />
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Schedule</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Location</label>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Location</label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                         <input
                           type="text"
-                          value={newTour.location}
-                          onChange={e => setNewTour({ ...newTour, location: e.target.value })}
+                          value={newTour.start_location}
+                          onChange={e => setNewTour({ ...newTour, start_location: e.target.value })}
                           className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="e.g. Anuradhapura"
+                          placeholder="e.g. Anuradhapura Town"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Duration</label>
-                      <div className="relative">
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                        <input
-                          type="text"
-                          value={newTour.duration}
-                          onChange={e => setNewTour({ ...newTour, duration: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="e.g. Full Day"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Time & Location</label>
-                      <div className="relative">
-                        <Play className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                        <input
-                          type="text"
-                          value={newTour.start_time_location}
-                          onChange={e => setNewTour({ ...newTour, start_time_location: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="e.g. 5.00 a.m at Anuradhapura Town"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Last Joining Time</label>
-                      <div className="relative">
-                        <AlarmClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                        <input
-                          type="text"
-                          value={newTour.last_joining_time}
-                          onChange={e => setNewTour({ ...newTour, last_joining_time: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="e.g. 10.00 p.m previous night"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Time & Location</label>
-                    <div className="relative">
-                      <StopCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Start Day</label>
                       <input
-                        type="text"
-                        value={newTour.end_time_location}
-                        onChange={e => setNewTour({ ...newTour, end_time_location: e.target.value })}
-                        className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                        placeholder="e.g. 7.00 p.m at Anuradhapura Town"
+                        type="date"
+                        value={newTour.start_day}
+                        onChange={e => setNewTour({ ...newTour, start_day: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Route</label>
-                    <textarea
-                      value={newTour.route}
-                      onChange={e => setNewTour({ ...newTour, route: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all h-20 resize-none"
-                      placeholder="Enter route details, one stop per line..."
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Time</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                          <input
+                            type="text"
+                            value={newTour.start_time}
+                            onChange={e => setNewTour({ ...newTour, start_time: e.target.value })}
+                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                            placeholder="e.g. 5:00"
+                          />
+                        </div>
+                        <select
+                          value={newTour.start_time_period || 'AM'}
+                          onChange={e => setNewTour({ ...newTour, start_time_period: e.target.value as 'AM' | 'PM' })}
+                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Location</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={newTour.end_location}
+                          onChange={e => setNewTour({ ...newTour, end_location: e.target.value })}
+                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          placeholder="e.g. Anuradhapura Town"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Operator Name</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour End Day</label>
+                      <input
+                        type="date"
+                        value={newTour.end_day}
+                        onChange={e => setNewTour({ ...newTour, end_day: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Time</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                          <input
+                            type="text"
+                            value={newTour.end_time}
+                            onChange={e => setNewTour({ ...newTour, end_time: e.target.value })}
+                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                            placeholder="e.g. 7:00"
+                          />
+                        </div>
+                        <select
+                          value={newTour.end_time_period || 'PM'}
+                          onChange={e => setNewTour({ ...newTour, end_time_period: e.target.value as 'AM' | 'PM' })}
+                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Booking Close Date</label>
+                      <input
+                        type="date"
+                        value={newTour.booking_close_date}
+                        onChange={e => setNewTour({ ...newTour, booking_close_date: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Booking Close Time</label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                          <input
+                            type="text"
+                            value={newTour.booking_close_time}
+                            onChange={e => setNewTour({ ...newTour, booking_close_time: e.target.value })}
+                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                            placeholder="e.g. 10:00"
+                          />
+                        </div>
+                        <select
+                          value={newTour.booking_close_period || 'PM'}
+                          onChange={e => setNewTour({ ...newTour, booking_close_period: e.target.value as 'AM' | 'PM' })}
+                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Route</p>
+                    <label className="block text-sm font-semibold text-zinc-700">Locations</label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Route className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={routeInput}
+                          onChange={e => setRouteInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addRouteStop();
+                            }
+                          }}
+                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          placeholder="e.g. Kurunegala"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addRouteStop}
+                        className="px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-medium hover:bg-emerald-100 transition-all"
+                      >
+                        Add Location
+                      </button>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {normalizeRouteValue(newTour.route).length === 0 ? (
+                        <div className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                          No route locations added yet.
+                        </div>
+                      ) : (
+                        normalizeRouteValue(newTour.route).map((stop, index) => (
+                          <div key={`${stop}-${index}`} className="flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                            <span className="text-sm text-zinc-700">{index + 1}. {stop}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeRouteStop(index)}
+                              className="text-red-600 hover:text-red-700 text-xs font-medium"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Extra Details</p>
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Operator Name</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={newTour.operator_name}
+                          onChange={e => setNewTour({ ...newTour, operator_name: e.target.value })}
+                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          placeholder="e.g. Ceylon Transit Safaris"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">What's Included</label>
                       <input
                         type="text"
-                        value={newTour.operator_name}
-                        onChange={e => setNewTour({ ...newTour, operator_name: e.target.value })}
-                        className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                        placeholder="e.g. Ceylon Transit Safaris"
+                        value={newTour.whats_included}
+                        onChange={e => setNewTour({ ...newTour, whats_included: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        placeholder="e.g. Entry Tickets, Jeep and Guide, Lunch, Water"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Features</label>
+                      <input
+                        type="text"
+                        value={newTour.tour_features}
+                        onChange={e => setNewTour({ ...newTour, tour_features: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        placeholder="e.g. Expert Tracking, Quality Jeeps, Ethical Practices"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">What's Included</label>
-                    <input
-                      type="text"
-                      value={newTour.whats_included}
-                      onChange={e => setNewTour({ ...newTour, whats_included: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      placeholder="e.g. Entry Tickets, Jeep and Guide, Lunch, Water"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Features</label>
-                    <input
-                      type="text"
-                      value={newTour.tour_features}
-                      onChange={e => setNewTour({ ...newTour, tour_features: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      placeholder="e.g. Expert Tracking, Quality Jeeps, Ethical Practices"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Images</label>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Images</p>
+                    <label className="block text-sm font-semibold text-zinc-700">Tour Images</label>
                     {editingTourId && (
                       <div className="mb-3">
                         <p className="text-xs font-medium text-zinc-500 mb-2">Current Images</p>
@@ -848,7 +1113,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="pt-4 flex gap-3 sticky bottom-0 bg-white">
+                  <div className="pt-5 -mx-7 px-7 pb-1 flex gap-3 sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-zinc-200">
                     <button
                       type="button"
                       onClick={closeTourModal}
