@@ -141,6 +141,7 @@ export default function App() {
     title: '',
     category: '',
     seat_count: 0,
+    available_seats: 0,
     description: '',
     price: 0,
     start_location: '',
@@ -239,6 +240,7 @@ export default function App() {
       description: tour.description,
       price: tour.price,
       seat_count: Number(tour.seat_count || 0),
+      available_seats: Number(tour.available_seats ?? tour.seat_count ?? 0),
       start_location: tour.start_location || tour.location || '',
       start_day: tour.start_day || '',
       start_time: parsedStartTime.time,
@@ -365,7 +367,7 @@ export default function App() {
       const q = query(collection(db, 'tours'), orderBy('created_at', 'desc'));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((docSnapshot) => {
-        const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string; route?: string[] | string };
+        const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string; route?: string[] | string; available_seats?: number };
         const images = Array.isArray(tour.images)
           ? tour.images
           : typeof tour.images === 'string'
@@ -379,6 +381,7 @@ export default function App() {
           id: docSnapshot.id,
           ...tour,
           seat_count: Number(tour.seat_count || 0),
+          available_seats: Number(tour.available_seats ?? tour.seat_count ?? 0),
           start_location: tour.start_location || tour.location || '',
           start_day: tour.start_day || '',
           start_time: parsedStartTime.time,
@@ -462,6 +465,7 @@ export default function App() {
         ...newTour,
         price: Number(newTour.price || 0),
         seat_count: Number(newTour.seat_count || 0),
+        available_seats: Number(newTour.available_seats ?? newTour.seat_count ?? 0),
         start_day: newTour.start_day || '',
         start_time: mergeTimeWithPeriod(newTour.start_time, newTour.start_time_period),
         end_day: newTour.end_day || '',
@@ -493,6 +497,7 @@ export default function App() {
       } else {
         await addDoc(collection(db, 'tours'), {
           ...payload,
+          available_seats: Number(newTour.seat_count || 0),
           images: imageUrls,
           created_at: serverTimestamp(),
         });
@@ -650,15 +655,19 @@ export default function App() {
                       {tour.operator_name && (
                         <p className="text-xs text-zinc-400 mb-3">by <span className="font-medium text-zinc-600">{tour.operator_name}</span></p>
                       )}
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="text-xs font-medium bg-zinc-100 text-zinc-700 px-2 py-1 rounded-full">
+                          Total Seats: {Number(tour.seat_count || 0)}
+                        </span>
+                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
+                          Available Seats: {Number(tour.available_seats ?? tour.seat_count ?? 0)}
+                        </span>
+                      </div>
                       <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
                             <Clock className="w-4 h-4" />
                             {tour.start_time ? `${tour.start_time} ${tour.start_time_period || 'AM'}` : 'N/A'}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
-                            <User className="w-4 h-4" />
-                            {tour.seat_count ? `${tour.seat_count} seats` : 'N/A'}
                           </div>
                           <div className="flex items-center gap-1.5 text-zinc-900 font-bold">
                             <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -773,7 +782,14 @@ export default function App() {
                           type="number"
                           min={0}
                           value={newTour.seat_count}
-                          onChange={e => setNewTour({ ...newTour, seat_count: Number(e.target.value) })}
+                          onChange={e => {
+                            const seatCount = Number(e.target.value);
+                            setNewTour({
+                              ...newTour,
+                              seat_count: seatCount,
+                              available_seats: editingTourId ? newTour.available_seats : seatCount,
+                            });
+                          }}
                           className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. 6"
                         />

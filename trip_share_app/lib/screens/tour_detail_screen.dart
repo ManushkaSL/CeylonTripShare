@@ -442,7 +442,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
               ),
             )
           : Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.9),
                 boxShadow: [
@@ -453,13 +453,38 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   ),
                 ],
               ),
-              child: const Center(
-                child: Text(
-                  'This tour is fully booked',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFC62828),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Color(0xFFC62828),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'This tour is fully booked',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFFC62828),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

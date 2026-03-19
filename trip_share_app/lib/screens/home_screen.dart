@@ -145,8 +145,11 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _tourService.streamTours(),
       builder: (context, snapshot) {
         final tours = snapshot.data ?? const <Tour>[];
+        debugPrint('📊 Tours loaded from database: ${tours.length}');
         final activeTours = _activeTours(tours);
         final passiveTours = _passiveTours(tours);
+        debugPrint('   - Active tours: ${activeTours.length}');
+        debugPrint('   - Idle tours: ${passiveTours.length}');
 
         return Column(
           children: [

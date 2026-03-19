@@ -28,17 +28,18 @@ class TourService {
     final totalSeats = _intFrom(
       _pick(map, ['totalSeats', 'total_seats', 'seats']),
     );
-    final remainingSeats = _intFrom(
-      _pick(map, [
-        'remainingSeats',
-        'remaining_seats',
-        'availableSeats',
-        'available_seats',
-      ]),
-    );
 
-    final resolvedRemainingSeats = remainingSeats > 0
-        ? remainingSeats
+    // Check if remainingSeats field exists in the database
+    final remainingSeatsField = _pick(map, [
+      'remainingSeats',
+      'remaining_seats',
+      'availableSeats',
+      'available_seats',
+    ]);
+
+    // If field exists (even if 0), use it; otherwise use totalSeats as default
+    final resolvedRemainingSeats = remainingSeatsField != null
+        ? _intFrom(remainingSeatsField)
         : totalSeats;
 
     return Tour(

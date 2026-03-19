@@ -6,6 +6,7 @@ export interface Tour {
   price: number;
   images: string[];
   seat_count: number;
+  available_seats: number;
   start_location: string;
   start_day: string;
   start_time: string;
