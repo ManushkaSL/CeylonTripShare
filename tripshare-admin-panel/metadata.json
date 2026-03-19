@@ -1,0 +1,5 @@
+{
+  "name": "TripShare Admin Panel",
+  "description": "An administrative dashboard for managing tours and trips in the TripShare app.",
+  "requestFramePermissions": []
+}
