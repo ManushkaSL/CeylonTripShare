@@ -47,6 +47,15 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   void _confirmBooking() {
+    if (!widget.tour.canBook) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This tour is fully booked'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (!_agreeToPolicy) {
       ScaffoldMessenger.of(context).showSnackBar(

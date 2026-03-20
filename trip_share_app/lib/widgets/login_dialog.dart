@@ -58,10 +58,20 @@ class _LoginDialogState extends State<LoginDialog> {
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
-    final success = await AuthService().signInWithGoogle();
+    final error = await AuthService().signInWithGoogle();
     if (!mounted) return;
     setState(() => _isLoading = false);
-    Navigator.of(context).pop(success);
+
+    if (error == null) {
+      // Success
+      Navigator.of(context).pop(true);
+    } else if (error.isNotEmpty) {
+      // Show error only if not cancelled
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+    }
+    // If error is empty string, user cancelled - no message needed
   }
 
   Future<void> _openRegisterScreen() async {

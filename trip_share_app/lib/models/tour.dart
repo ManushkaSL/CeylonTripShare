@@ -44,9 +44,11 @@ class Tour {
     this.tourFeatures = const [],
   });
 
+  bool get canBook => remainingSeats > 0;
+
   TourStatus get status {
-    if (remainingSeats == 0) return TourStatus.fullBooked;
-    if (remainingSeats == totalSeats) return TourStatus.idle;
+    if (!canBook) return TourStatus.fullBooked;
+    if (totalSeats > 0 && remainingSeats == totalSeats) return TourStatus.idle;
     return TourStatus.active;
   }
 }

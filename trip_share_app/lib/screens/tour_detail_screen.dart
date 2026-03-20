@@ -380,7 +380,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
         ],
       ),
       // Bottom Join/Start button
-      bottomNavigationBar: status != TourStatus.fullBooked
+      bottomNavigationBar: tour.canBook
           ? Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
               decoration: BoxDecoration(

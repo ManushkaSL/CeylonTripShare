@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/models/tour.dart';
 
@@ -25,25 +26,127 @@ class TourService {
       _pick(map, ['imageUrl', 'image', 'image_url', 'thumbnail']),
     );
 
-    final totalSeats = _intFrom(
-      _pick(map, ['totalSeats', 'total_seats', 'seats']),
+    debugPrint('🔍 Parsing tour: ${map['name'] ?? 'Unknown'}');
+    debugPrint('   Raw map keys: ${map.keys.toList()}');
+
+    final seatInfo = _pick(map, ['seatInfo', 'seat_info', 'capacityInfo']);
+
+    var totalSeats = _intFrom(
+      _pick(map, [
+        'totalSeats',
+        'total_seats',
+        'totalSeat',
+        'total_seat',
+        'seats',
+        'capacity',
+        'maxSeats',
+        'max_seats',
+      ]),
     );
 
-    // Check if remainingSeats field exists in the database
-    final remainingSeatsField = _pick(map, [
+    debugPrint('   totalSeats found: $totalSeats');
+
+    dynamic remainingSeatsField = _pick(map, [
       'remainingSeats',
       'remaining_seats',
+      'remainingSeat',
+      'remaining_seat',
       'availableSeats',
       'available_seats',
+      'availableSeat',
+      'available_seat',
+      'seatsAvailable',
+      'seats_available',
+      'available',
+      'remaining',
     ]);
 
-    // If field exists (even if 0), use it; otherwise use totalSeats as default
-    final resolvedRemainingSeats = remainingSeatsField != null
+    debugPrint('   remainingSeatsField: $remainingSeatsField');
+
+    dynamic bookedSeatsField = _pick(map, [
+      'bookedSeats',
+      'booked_seats',
+      'booked',
+      'reservedSeats',
+      'reserved_seats',
+      'reserved',
+      'joinedCount',
+      'joined_count',
+      'participantsCount',
+      'participants_count',
+    ]);
+
+    debugPrint('   bookedSeatsField: $bookedSeatsField');
+
+    if (seatInfo is Map) {
+      if (totalSeats <= 0) {
+        totalSeats = _intFrom(
+          _pick(seatInfo, [
+            'total',
+            'totalSeats',
+            'capacity',
+            'max',
+            'maxSeats',
+          ]),
+        );
+      }
+
+      remainingSeatsField ??= _pick(seatInfo, [
+        'available',
+        'remaining',
+        'availableSeats',
+        'remainingSeats',
+        'left',
+      ]);
+
+      bookedSeatsField ??= _pick(seatInfo, [
+        'booked',
+        'bookedSeats',
+        'reserved',
+        'reservedSeats',
+        'joined',
+      ]);
+    }
+
+    final bookedSeats = bookedSeatsField != null
+        ? _intFrom(bookedSeatsField)
+        : 0;
+
+    final parsedRemainingSeats = remainingSeatsField != null
         ? _intFrom(remainingSeatsField)
-        : totalSeats;
+        : (totalSeats > 0 ? totalSeats - bookedSeats : totalSeats);
+
+    var resolvedRemainingSeats = parsedRemainingSeats < 0
+        ? 0
+        : parsedRemainingSeats;
+
+    if (totalSeats > 0 && resolvedRemainingSeats > totalSeats) {
+      resolvedRemainingSeats = totalSeats;
+    }
+
+    if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
+      totalSeats = resolvedRemainingSeats;
+      debugPrint('   ⚠️ Inferred totalSeats from remaining: $totalSeats');
+    }
+
+    if (totalSeats <= 0) {
+      totalSeats = 1;
+      debugPrint('   ⚠️ Defaulting totalSeats to 1');
+    }
+
+    if (resolvedRemainingSeats <= 0 && totalSeats > 0) {
+      resolvedRemainingSeats = totalSeats;
+      debugPrint('   ⚠️ No remaining seats found, defaulting to totalSeats');
+    }
+
+    debugPrint(
+      '   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats',
+    );
+
+    final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
     return Tour(
-      name: _stringFrom(_pick(map, ['name', 'title', 'tourName'])),
+      name: name,
       imageUrl: imageUrl.isNotEmpty
           ? imageUrl
           : (photos.isNotEmpty ? photos.first : ''),
@@ -113,7 +216,15 @@ class TourService {
   int _intFrom(dynamic value) {
     if (value is int) return value;
     if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
+    if (value is String) {
+      final direct = int.tryParse(value.trim());
+      if (direct != null) return direct;
+
+      final firstNumber = RegExp(r'-?\d+').firstMatch(value);
+      if (firstNumber != null) {
+        return int.tryParse(firstNumber.group(0) ?? '') ?? 0;
+      }
+    }
     return 0;
   }
 

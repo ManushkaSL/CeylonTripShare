@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
 import 'package:trip_share_app/widgets/tour_card.dart';
+import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/screens/joined_tours_screen.dart';
 import 'package:trip_share_app/screens/chats_list_screen.dart';
 import 'package:trip_share_app/screens/profile_screen.dart';
@@ -17,6 +18,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final TourService _tourService = TourService();
+
+  static final Tour _mockTour = Tour(
+    name: 'Mock Tour - Ella Day Trip',
+    imageUrl:
+        'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=800',
+    startDate: DateTime.now().add(const Duration(days: 1, hours: 2)),
+    totalSeats: 20,
+    remainingSeats: 12,
+    price: 45,
+    description:
+        'Mock tour for testing card tap and detail screen navigation from Home.',
+    category: 'Test',
+    startLocation: 'Colombo Fort',
+    endLocation: 'Colombo Fort',
+    operatorName: 'TripShare Test Operator',
+  );
 
   List<Tour> _activeTours(List<Tour> tours) => tours
       .where(
@@ -144,7 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<List<Tour>>(
       stream: _tourService.streamTours(),
       builder: (context, snapshot) {
-        final tours = snapshot.data ?? const <Tour>[];
+        final loadedTours = snapshot.data ?? const <Tour>[];
+        final tours = <Tour>[_mockTour, ...loadedTours];
         debugPrint('📊 Tours loaded from database: ${tours.length}');
         final activeTours = _activeTours(tours);
         final passiveTours = _passiveTours(tours);
@@ -198,37 +216,38 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Builder(
                 builder: (context) {
-                  if (snapshot.hasError) {
-                    return const Center(
-                      child: Text(
-                        'Failed to load tours',
-                        style: TextStyle(color: Colors.redAccent),
-                      ),
-                    );
-                  }
-
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (tours.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No tours available right now',
-                        style: TextStyle(color: Color(0xFF666666)),
-                      ),
-                    );
-                  }
-
                   return ListView(
                     physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                     children: [
+                      if (snapshot.hasError)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Database loading issue. Showing local mock tour.',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                      if (snapshot.connectionState == ConnectionState.waiting)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 3),
+                        ),
                       if (activeTours.isNotEmpty) ...[
                         const _SectionHeader(title: 'Active Tours'),
                         const SizedBox(height: 10),
                         for (int i = 0; i < activeTours.length; i++) ...[
-                          TourCard(tour: activeTours[i]),
+                          TourCard(
+                            tour: activeTours[i],
+                            onCardTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      TourDetailScreen(tour: activeTours[i]),
+                                ),
+                              );
+                            },
+                          ),
                           if (i < activeTours.length - 1)
                             const SizedBox(height: 12),
                         ],
@@ -238,10 +257,71 @@ class _HomeScreenState extends State<HomeScreen> {
                         const _SectionHeader(title: 'Upcoming Tours'),
                         const SizedBox(height: 10),
                         for (int i = 0; i < passiveTours.length; i++) ...[
-                          TourCard(tour: passiveTours[i]),
+                          TourCard(
+                            tour: passiveTours[i],
+                            onCardTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      TourDetailScreen(tour: passiveTours[i]),
+                                ),
+                              );
+                            },
+                          ),
                           if (i < passiveTours.length - 1)
                             const SizedBox(height: 12),
                         ],
+                      ],
+                      const SizedBox(height: 24),
+                      if (loadedTours.isNotEmpty) ...[
+                        const _SectionHeader(title: '🐛 Debug Info'),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Loaded Tours: ${loadedTours.length}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1B5E20),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              for (final tour in loadedTours)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        tour.name,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Total: ${tour.totalSeats} | Remaining: ${tour.remainingSeats} | Status: ${tour.status.name}',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   );

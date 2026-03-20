@@ -41,22 +41,31 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> signInWithGoogle() async {
+  Future<String?> signInWithGoogle() async {
     try {
       final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return false; // user cancelled
+      if (googleUser == null) {
+        debugPrint('Google sign-in cancelled by user');
+        return ''; // user cancelled - empty string indicates no error message to show
+      }
 
+      debugPrint('Google user signed in: ${googleUser.email}');
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
+      debugPrint('Signing in to Firebase with Google credential...');
       await _auth.signInWithCredential(credential);
-      return true;
+      debugPrint('Firebase sign-in successful');
+      return null; // success
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase auth error: ${e.code} - ${e.message}');
+      return _authErrorMessage(e.code);
     } catch (e) {
       debugPrint('Google sign-in error: $e');
-      return false;
+      return 'Google sign-in failed. Please try again.';
     }
   }
 
@@ -80,36 +89,44 @@ class AuthService extends ChangeNotifier {
     required String password,
   }) async {
     try {
+      debugPrint('Registering user: $email');
       final trimmedEmail = email.trim();
       final credential = await _auth.createUserWithEmailAndPassword(
         email: trimmedEmail,
         password: password,
       );
 
+      debugPrint('Account created successfully');
       final trimmedName = username.trim();
       _updateFromUser(credential.user ?? _auth.currentUser);
       notifyListeners();
 
-      if (trimmedName.isNotEmpty) {
+      if (trimmedName.isNotEmpty && credential.user != null) {
         try {
-          await credential.user?.updateDisplayName(trimmedName);
-          await credential.user?.reload();
+          debugPrint('Updating display name: $trimmedName');
+          await credential.user!.updateDisplayName(trimmedName);
+          await credential.user!.reload();
           _updateFromUser(_auth.currentUser);
           notifyListeners();
+          debugPrint('Display name updated');
         } catch (e) {
           debugPrint('Profile update after sign up failed: $e');
         }
       }
 
+      debugPrint('Registration completed for: $email');
       return null;
     } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase registration error: ${e.code} - ${e.message}');
       return _authErrorMessage(e.code);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Registration error: $e');
       return 'Something went wrong. Please try again.';
     }
   }
 
   String _authErrorMessage(String code) {
+    debugPrint('Auth error code: $code');
     switch (code) {
       case 'invalid-email':
         return 'Please enter a valid email address.';
@@ -128,8 +145,10 @@ class AuthService extends ChangeNotifier {
         return 'Email/password sign-in is not enabled in Firebase.';
       case 'too-many-requests':
         return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Please check your internet connection.';
       default:
-        return 'Authentication failed. Please try again.';
+        return 'Authentication failed ($code). Please try again.';
     }
   }
 

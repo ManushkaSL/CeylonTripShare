@@ -9,20 +9,27 @@ import 'package:trip_share_app/screens/tour_detail_screen.dart';
 
 class TourCard extends StatelessWidget {
   final Tour tour;
+  final VoidCallback? onCardTap;
 
-  const TourCard({super.key, required this.tour});
+  const TourCard({super.key, required this.tour, this.onCardTap});
 
   @override
   Widget build(BuildContext context) {
     final status = tour.status;
-    final isFull = status == TourStatus.fullBooked;
+    final isFull = !tour.canBook;
+    void openTourDetails() {
+      if (onCardTap != null) {
+        onCardTap!();
+        return;
+      }
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
+    }
 
     return GestureDetector(
-      onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
-      },
+      behavior: HitTestBehavior.opaque,
+      onTap: openTourDetails,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
@@ -121,44 +128,42 @@ class TourCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         // Capacity row
-                        if (status == TourStatus.active ||
-                            status == TourStatus.fullBooked)
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.event_seat,
-                                size: 13,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(width: 4),
-                              isFull
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFEBEE),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'Full',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFFC62828),
-                                        ),
-                                      ),
-                                    )
-                                  : Text(
-                                      '${tour.remainingSeats} of ${tour.totalSeats} seats',
-                                      style: const TextStyle(
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.event_seat,
+                              size: 13,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            isFull
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFEBEE),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Full',
+                                      style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFFC62828),
                                       ),
                                     ),
-                            ],
-                          ),
+                                  )
+                                : Text(
+                                    '${tour.remainingSeats} of ${tour.totalSeats} seats',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                          ],
+                        ),
                         const SizedBox(height: 4),
                         // Price
                         Text(
@@ -217,14 +222,7 @@ class TourCard extends StatelessWidget {
                               child: SizedBox(
                                 height: 30,
                                 child: OutlinedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            TourDetailScreen(tour: tour),
-                                      ),
-                                    );
-                                  },
+                                  onPressed: openTourDetails,
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(
                                       color: Color(0xFF1B5E20),
