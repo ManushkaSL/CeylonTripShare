@@ -14,7 +14,11 @@ class AuthService extends ChangeNotifier {
   }
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+    serverClientId:
+        '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
+  );
 
   bool _isLoggedIn = false;
   String _userName = '';
@@ -43,6 +47,7 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> signInWithGoogle() async {
     try {
+      debugPrint('Starting Google sign-in...');
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         debugPrint('Google sign-in cancelled by user');
@@ -50,10 +55,20 @@ class AuthService extends ChangeNotifier {
       }
 
       debugPrint('Google user signed in: ${googleUser.email}');
+      debugPrint('Requesting authentication...');
       final googleAuth = await googleUser.authentication;
+
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        debugPrint('FAILED: Missing accessToken or idToken');
+        debugPrint('AccessToken: ${googleAuth.accessToken}');
+        debugPrint('IdToken: ${googleAuth.idToken}');
+        return 'Failed to get authentication tokens. Please try again.';
+      }
+
+      debugPrint('Creating Firebase credential...');
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken!,
+        idToken: googleAuth.idToken!,
       );
 
       debugPrint('Signing in to Firebase with Google credential...');
@@ -63,8 +78,9 @@ class AuthService extends ChangeNotifier {
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase auth error: ${e.code} - ${e.message}');
       return _authErrorMessage(e.code);
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Google sign-in error: $e');
+      debugPrint('Stack: $stackTrace');
       return 'Google sign-in failed. Please try again.';
     }
   }
