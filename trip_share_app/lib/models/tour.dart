@@ -6,6 +6,7 @@ class RouteStop {
 }
 
 class Tour {
+  final String id;
   final String name;
   final String imageUrl;
   final DateTime startDate;
@@ -25,6 +26,7 @@ class Tour {
   final List<String> tourFeatures;
 
   const Tour({
+    required this.id,
     required this.name,
     required this.imageUrl,
     required this.startDate,
@@ -43,6 +45,17 @@ class Tour {
     this.whatsIncluded = const [],
     this.tourFeatures = const [],
   });
+
+  /// Creates an empty tour instance (useful for placeholders)
+  factory Tour.empty() => Tour(
+    id: '',
+    name: '',
+    imageUrl: '',
+    startDate: DateTime.now(),
+    totalSeats: 0,
+    remainingSeats: 0,
+    price: 0.0,
+  );
 
   bool get canBook => remainingSeats > 0;
 

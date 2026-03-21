@@ -46,7 +46,7 @@ class _BookingScreenState extends State<BookingScreen> {
     super.dispose();
   }
 
-  void _confirmBooking() {
+  Future<void> _confirmBooking() async {
     if (!widget.tour.canBook) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -76,8 +76,16 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
-    // Save to joined tours
-    JoinedTourService().joinTour(widget.tour, _totalPersons);
+    // Save to Firestore with booking details
+    await JoinedTourService().joinTour(
+      tour: widget.tour,
+      adults: _adults,
+      kids6to12: _kids6to12,
+      kidsUnder6: _kidsUnder6,
+      pickupLocation: _pickupController.text,
+      totalPrice: _totalPrice,
+      cardHolderName: _cardHolderController.text,
+    );
 
     showDialog(
       context: context,

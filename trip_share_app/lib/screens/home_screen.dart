@@ -20,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TourService _tourService = TourService();
 
   static final Tour _mockTour = Tour(
+    id: 'mock_tour_1',
     name: 'Mock Tour - Ella Day Trip',
     imageUrl:
         'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=800',

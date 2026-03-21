@@ -11,7 +11,7 @@ class TourService {
   Stream<List<Tour>> streamTours() {
     return _firestore.collection('tours').snapshots().map((snapshot) {
       final tours = snapshot.docs
-          .map((doc) => _tourFromMap(doc.data()))
+          .map((doc) => _tourFromMap(doc.data(), doc.id))
           .toList(growable: false);
 
       final sortedTours = [...tours]
@@ -20,7 +20,7 @@ class TourService {
     });
   }
 
-  Tour _tourFromMap(Map<String, dynamic> map) {
+  Tour _tourFromMap(Map<String, dynamic> map, String docId) {
     final photos = _toStringList(_pick(map, ['photos', 'images', 'gallery']));
     final imageUrl = _stringFrom(
       _pick(map, ['imageUrl', 'image', 'image_url', 'thumbnail']),
@@ -146,6 +146,7 @@ class TourService {
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
     return Tour(
+      id: docId,
       name: name,
       imageUrl: imageUrl.isNotEmpty
           ? imageUrl

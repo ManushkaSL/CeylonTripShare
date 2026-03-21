@@ -29,6 +29,7 @@ class AuthService extends ChangeNotifier {
   String get userName => _userName;
   String get userEmail => _userEmail;
   String get photoUrl => _photoUrl;
+  String get userId => _auth.currentUser?.uid ?? '';
   User? get currentUser => _auth.currentUser;
 
   void _updateFromUser(User? user) {
