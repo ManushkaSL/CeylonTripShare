@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/tour_card.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/screens/joined_tours_screen.dart';
@@ -18,6 +19,16 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final TourService _tourService = TourService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Bookings load automatically when user authenticates
+    // This ensures they load even if auth was cached
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) JoinedTourService().loadBookings();
+    });
+  }
 
   static final Tour _mockTour = Tour(
     id: 'mock_tour_1',

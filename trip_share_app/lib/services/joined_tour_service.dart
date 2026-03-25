@@ -30,7 +30,9 @@ class JoinedTour {
 class JoinedTourService extends ChangeNotifier {
   static final JoinedTourService _instance = JoinedTourService._();
   factory JoinedTourService() => _instance;
-  JoinedTourService._();
+  JoinedTourService._() {
+    _initializeAuthListener();
+  }
 
   final List<JoinedTour> _joinedTours = [];
   final List<Booking> _bookings = [];
@@ -39,6 +41,22 @@ class JoinedTourService extends ChangeNotifier {
 
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
   List<Booking> get bookings => List.unmodifiable(_bookings);
+
+  /// Listen to auth state changes and reload bookings automatically
+  void _initializeAuthListener() {
+    _authService.addListener(() {
+      final userId = _authService.userId;
+      if (userId.isNotEmpty) {
+        debugPrint('✅ User authenticated: $userId');
+        loadBookings();
+      } else {
+        debugPrint('❌ User logged out');
+        _joinedTours.clear();
+        _bookings.clear();
+        notifyListeners();
+      }
+    });
+  }
 
   /// Load all bookings from Firestore for the current user
   Future<void> loadBookings() async {
@@ -55,11 +73,43 @@ class JoinedTourService extends ChangeNotifier {
           .get();
 
       _bookings.clear();
+      _joinedTours.clear();
+
       for (var doc in snapshot.docs) {
-        _bookings.add(Booking.fromMap(doc.data(), Tour.empty()));
+        final data = doc.data();
+
+        // Reconstruct Tour from booking data
+        final tour = Tour(
+          id: data['tourId'] ?? '',
+          name: data['tourName'] ?? '',
+          imageUrl: '',
+          startDate: DateTime.parse(
+            data['tourDate'] as String? ?? DateTime.now().toIso8601String(),
+          ),
+          totalSeats: 0,
+          remainingSeats: 0,
+          price: 0.0,
+        );
+
+        final booking = Booking.fromMap(data, tour);
+        _bookings.add(booking);
+
+        // Add to joined tours
+        _joinedTours.add(
+          JoinedTour(
+            tour: tour,
+            joinedAt: DateTime.parse(
+              data['bookedAt'] as String? ?? DateTime.now().toIso8601String(),
+            ),
+            persons: data['totalPersons'] ?? 0,
+          ),
+        );
       }
+
       notifyListeners();
-      debugPrint('✅ Loaded ${_bookings.length} bookings');
+      debugPrint(
+        '✅ Loaded ${_bookings.length} bookings and ${_joinedTours.length} joined tours',
+      );
     } catch (e) {
       debugPrint('❌ Error loading bookings: $e');
     }
@@ -125,6 +175,56 @@ class JoinedTourService extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Error saving booking: $e');
     }
+  }
+
+  /// Stream real-time bookings from Firestore
+  Stream<List<JoinedTour>> streamBookings() {
+    final userId = _authService.userId;
+    if (userId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    return _firestore
+        .collection('bookings')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+          final joinedTours = <JoinedTour>[];
+
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+
+            final tour = Tour(
+              id: data['tourId'] ?? '',
+              name: data['tourName'] ?? '',
+              imageUrl: '',
+              startDate: DateTime.parse(
+                data['tourDate'] as String? ?? DateTime.now().toIso8601String(),
+              ),
+              totalSeats: 0,
+              remainingSeats: 0,
+              price: 0.0,
+            );
+
+            joinedTours.add(
+              JoinedTour(
+                tour: tour,
+                joinedAt: DateTime.parse(
+                  data['bookedAt'] as String? ??
+                      DateTime.now().toIso8601String(),
+                ),
+                persons: data['totalPersons'] ?? 0,
+              ),
+            );
+          }
+
+          debugPrint('🔄 Real-time update: ${joinedTours.length} bookings');
+          return joinedTours;
+        })
+        .handleError((e) {
+          debugPrint('❌ Error streaming bookings: $e');
+          return [];
+        });
   }
 
   void startJourney(String tourName) {

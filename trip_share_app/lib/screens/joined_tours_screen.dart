@@ -61,70 +61,66 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
   @override
   void initState() {
     super.initState();
-    JoinedTourService().addListener(_onUpdate);
-  }
-
-  @override
-  void dispose() {
-    JoinedTourService().removeListener(_onUpdate);
-    super.dispose();
-  }
-
-  void _onUpdate() {
-    if (mounted) setState(() {});
+    // Load bookings once to populate cache
+    JoinedTourService().loadBookings();
   }
 
   @override
   Widget build(BuildContext context) {
-    final joined = JoinedTourService().joinedTours;
+    return StreamBuilder<List<JoinedTour>>(
+      stream: JoinedTourService().streamBookings(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return joined.isEmpty
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.luggage_outlined,
-                  size: 64,
-                  color: Colors.grey.withValues(alpha: 0.4),
+        final joined = snapshot.data ?? [];
+
+        return joined.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.luggage_outlined,
+                      size: 64,
+                      color: Colors.grey.withValues(alpha: 0.4),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No joined tours yet',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Join a tour from the home screen',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'No joined tours yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Join a tour from the home screen',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ],
-            ),
-          )
-        : ListView.builder(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            itemCount: joined.length,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: index < joined.length - 1 ? 12 : 0,
-                ),
-                child: _JoinedTourCard(
-                  joinedTour: joined[index],
-                  onUpdate: () => setState(() {}),
-                ),
+              )
+            : ListView.builder(
+                physics: const ClampingScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: joined.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < joined.length - 1 ? 12 : 0,
+                    ),
+                    child: _JoinedTourCard(joinedTour: joined[index]),
+                  );
+                },
               );
-            },
-          );
+      },
+    );
   }
 }
 
 class _JoinedTourCard extends StatelessWidget {
   final JoinedTour joinedTour;
-  final VoidCallback onUpdate;
 
-  const _JoinedTourCard({required this.joinedTour, required this.onUpdate});
+  const _JoinedTourCard({required this.joinedTour});
 
   @override
   Widget build(BuildContext context) {
