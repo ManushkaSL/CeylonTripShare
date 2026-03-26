@@ -42,6 +42,39 @@ class JoinedTourService extends ChangeNotifier {
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
   List<Booking> get bookings => List.unmodifiable(_bookings);
 
+  /// Parse booking close date and time fields into DateTime
+  DateTime? _parseBookingCloseDateTime(Map<String, dynamic> tourData) {
+    try {
+      final dateStr = tourData['booking_close_date'] as String?;
+      final timeStr = tourData['booking_close_time'] as String?;
+      final periodStr = tourData['booking_close_period'] as String?;
+
+      if (dateStr == null || timeStr == null || periodStr == null) {
+        return null;
+      }
+
+      // Parse date: "2026-03-20"
+      final date = DateTime.parse(dateStr);
+
+      // Parse time: "2" or "02" and period: "AM" or "PM"
+      int hour = int.parse(timeStr.replaceAll(RegExp(r'\D'), ''));
+
+      // Convert 12-hour format to 24-hour
+      if (periodStr.toUpperCase() == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (periodStr.toUpperCase() == 'AM' && hour == 12) {
+        hour = 0;
+      }
+
+      // Combine into DateTime
+      final closeDateTime = DateTime(date.year, date.month, date.day, hour, 0);
+      return closeDateTime;
+    } catch (e) {
+      debugPrint('⚠️ Error parsing booking close time: $e');
+      return null;
+    }
+  }
+
   /// Listen to auth state changes and reload bookings automatically
   void _initializeAuthListener() {
     _authService.addListener(() {
@@ -77,10 +110,11 @@ class JoinedTourService extends ChangeNotifier {
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final tourId = data['tourId'] ?? '';
 
-        // Reconstruct Tour from booking data
-        final tour = Tour(
-          id: data['tourId'] ?? '',
+        // Fetch complete tour data from tours collection
+        Tour tour = Tour(
+          id: tourId,
           name: data['tourName'] ?? '',
           imageUrl: '',
           startDate: DateTime.parse(
@@ -90,6 +124,46 @@ class JoinedTourService extends ChangeNotifier {
           remainingSeats: 0,
           price: 0.0,
         );
+
+        // Try to fetch full tour details with booking close time
+        try {
+          final tourDoc = await _firestore
+              .collection('tours')
+              .doc(tourId)
+              .get();
+          if (tourDoc.exists) {
+            final tourData = tourDoc.data() ?? {};
+
+            // Parse booking close time from three fields
+            final lastJoiningTime = _parseBookingCloseDateTime(tourData);
+
+            tour = Tour(
+              id: tourId,
+              name: tourData['name'] ?? data['tourName'] ?? '',
+              imageUrl: tourData['imageUrl'] ?? tourData['image'] ?? '',
+              startDate: DateTime.parse(
+                tourData['startDate'] as String? ??
+                    data['tourDate'] ??
+                    DateTime.now().toIso8601String(),
+              ),
+              totalSeats: tourData['totalSeats'] ?? 0,
+              remainingSeats: tourData['remainingSeats'] ?? 0,
+              price: (tourData['price'] as num?)?.toDouble() ?? 0.0,
+              description: tourData['description'] ?? '',
+              photos: List<String>.from(tourData['photos'] ?? []),
+              category: tourData['category'] ?? '',
+              startLocation: tourData['startLocation'] ?? '',
+              lastJoiningTime: lastJoiningTime,
+              endTime: tourData['endTime'] ?? '',
+              endLocation: tourData['endLocation'] ?? '',
+              operatorName: tourData['operatorName'] ?? '',
+              whatsIncluded: List<String>.from(tourData['whatsIncluded'] ?? []),
+              tourFeatures: List<String>.from(tourData['tourFeatures'] ?? []),
+            );
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error fetching full tour details for $tourId: $e');
+        }
 
         final booking = Booking.fromMap(data, tour);
         _bookings.add(booking);

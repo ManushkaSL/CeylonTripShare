@@ -8,6 +8,39 @@ class TourService {
 
   final FirebaseFirestore _firestore;
 
+  /// Parse booking close date and time fields into DateTime
+  DateTime? _parseBookingCloseDateTime(Map<String, dynamic> map) {
+    try {
+      final dateStr = map['booking_close_date'] as String?;
+      final timeStr = map['booking_close_time'] as String?;
+      final periodStr = map['booking_close_period'] as String?;
+
+      if (dateStr == null || timeStr == null || periodStr == null) {
+        return null;
+      }
+
+      // Parse date: "2026-03-20"
+      final date = DateTime.parse(dateStr);
+
+      // Parse time: "2" or "02" and period: "AM" or "PM"
+      int hour = int.parse(timeStr.replaceAll(RegExp(r'\D'), ''));
+
+      // Convert 12-hour format to 24-hour
+      if (periodStr.toUpperCase() == 'PM' && hour != 12) {
+        hour += 12;
+      } else if (periodStr.toUpperCase() == 'AM' && hour == 12) {
+        hour = 0;
+      }
+
+      // Combine into DateTime
+      final closeDateTime = DateTime(date.year, date.month, date.day, hour, 0);
+      return closeDateTime;
+    } catch (e) {
+      debugPrint('⚠️ Error parsing booking close time: $e');
+      return null;
+    }
+  }
+
   Stream<List<Tour>> streamTours() {
     return _firestore.collection('tours').snapshots().map((snapshot) {
       final tours = snapshot.docs
@@ -145,6 +178,12 @@ class TourService {
 
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
+    // Parse booking close time from three fields or fallback to legacy field
+    DateTime? lastJoiningTime = _parseBookingCloseDateTime(map);
+    lastJoiningTime ??= _dateTimeFrom(
+      _pick(map, ['lastJoiningTime', 'last_joining_time', 'lastJoinTime']),
+    );
+
     return Tour(
       id: docId,
       name: name,
@@ -163,9 +202,7 @@ class TourService {
       startLocation: _stringFrom(
         _pick(map, ['startLocation', 'start_location', 'pickupLocation']),
       ),
-      lastJoiningTime: _dateTimeFrom(
-        _pick(map, ['lastJoiningTime', 'last_joining_time', 'lastJoinTime']),
-      ),
+      lastJoiningTime: lastJoiningTime,
       endTime: _stringFrom(_pick(map, ['endTime', 'end_time'])),
       endLocation: _stringFrom(
         _pick(map, ['endLocation', 'end_location', 'dropLocation']),

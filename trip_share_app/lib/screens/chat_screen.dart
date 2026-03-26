@@ -1,19 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
-
-class ChatMessage {
-  final String senderName;
-  final String text;
-  final DateTime timestamp;
-  final bool isMe;
-
-  const ChatMessage({
-    required this.senderName,
-    required this.text,
-    required this.timestamp,
-    this.isMe = false,
-  });
-}
+import 'package:trip_share_app/services/chat_service.dart';
+import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/notification_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final Tour tour;
@@ -27,36 +16,31 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  late final ChatService _chatService = ChatService();
+  late final AuthService _authService = AuthService();
+  late final NotificationService _notificationService = NotificationService();
 
-  // Demo messages
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-      senderName: 'Operator',
-      text: 'Welcome everyone! Looking forward to the tour.',
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-    ),
-    ChatMessage(
-      senderName: 'Kasun',
-      text: 'Hi! Excited to join. What should we bring?',
-      timestamp: DateTime.now().subtract(const Duration(hours: 1, minutes: 45)),
-    ),
-    ChatMessage(
-      senderName: 'Operator',
-      text:
-          'Comfortable walking shoes, sunscreen, and a hat. Water will be provided.',
-      timestamp: DateTime.now().subtract(const Duration(hours: 1, minutes: 30)),
-    ),
-    ChatMessage(
-      senderName: 'Nimali',
-      text: 'Can we bring cameras for photography?',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 50)),
-    ),
-    ChatMessage(
-      senderName: 'Operator',
-      text: 'Absolutely! There will be plenty of photo opportunities.',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 40)),
-    ),
-  ];
+  bool _isChatActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ChatMessage.setCurrentUserId(_authService.userId);
+    _checkChatStatus();
+  }
+
+  void _checkChatStatus() {
+    final now = DateTime.now();
+    final lastJoiningTime = widget.tour.lastJoiningTime;
+
+    setState(() {
+      _isChatActive = lastJoiningTime != null && now.isAfter(lastJoiningTime);
+    });
+
+    debugPrint(
+      '📱 Chat status: $_isChatActive | Deadline: $lastJoiningTime | Now: $now',
+    );
+  }
 
   @override
   void dispose() {
@@ -65,29 +49,34 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          senderName: 'You',
-          text: text,
-          timestamp: DateTime.now(),
-          isMe: true,
-        ),
-      );
-    });
+    if (text.isEmpty || !_isChatActive) return;
+
     _messageController.clear();
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+
+    try {
+      await _chatService.sendMessage(
+        tourId: widget.tour.id,
+        userId: _authService.userId,
+        senderName: _authService.userName,
+        messageText: text,
+      );
+
+      // Auto-scroll to latest message
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } catch (e) {
+      _notificationService.showError('Failed to send message');
+      debugPrint('❌ Error sending message: $e');
+    }
   }
 
   @override
@@ -121,89 +110,209 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.group, color: Color(0xFF1B5E20)),
-            onPressed: () {
-              // placeholder for members list
-            },
-          ),
+          if (!_isChatActive)
+            Tooltip(
+              message: 'Chat opens after booking deadline',
+              child: IconButton(
+                icon: const Icon(Icons.lock, color: Colors.red),
+                onPressed: () {},
+              ),
+            ),
         ],
       ),
       body: Column(
         children: [
-          // Messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final msg = _messages[index];
-                return _buildMessageBubble(msg);
-              },
-            ),
-          ),
-          // Input bar
-          Container(
-            padding: EdgeInsets.fromLTRB(
-              12,
-              8,
-              12,
-              8 + MediaQuery.of(context).padding.bottom,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F0F0),
-                      borderRadius: BorderRadius.circular(24),
+          // Status banner if chat is locked
+          if (!_isChatActive)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              color: Colors.amber.withValues(alpha: 0.2),
+              child: Column(
+                children: [
+                  const Icon(Icons.schedule, color: Colors.orange, size: 24),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Chat unlocks after booking deadline',
+                    style: TextStyle(
+                      color: Colors.orange[800],
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
-                    child: TextField(
-                      controller: _messageController,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message...',
-                        hintStyle: TextStyle(color: Colors.grey),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Deadline: ${_formatDeadline(widget.tour.lastJoiningTime)}',
+                    style: TextStyle(color: Colors.orange[700], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          // Messages Stream
+          Expanded(
+            child: _isChatActive
+                ? StreamBuilder<List<ChatMessage>>(
+                    stream: _chatService.streamChatMessages(widget.tour.id),
+                    builder: (context, snapshot) {
+                      final messages = snapshot.data ?? [];
+
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          messages.isEmpty) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF1B5E20),
+                          ),
+                        );
+                      }
+
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.chat_bubble_outline,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No messages yet',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Be the first to start the conversation!',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      // Scroll to bottom when new messages arrive
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            _scrollController.position.maxScrollExtent,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
+
+                      return ListView.builder(
+                        controller: _scrollController,
+                        physics: const ClampingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          return _buildMessageBubble(messages[index]);
+                        },
+                      );
+                    },
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 64,
+                          color: Colors.grey[300],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Chat is Locked',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'This group chat will be available\nafter the booking deadline passes',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          // Input bar (only show if chat is active)
+          if (_isChatActive)
+            Container(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                8,
+                12,
+                8 + MediaQuery.of(context).padding.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F0F0),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _messageController,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                        decoration: const InputDecoration(
+                          hintText: 'Type a message...',
+                          hintStyle: TextStyle(color: Colors.grey),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _sendMessage,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1B5E20),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.send,
-                      color: Colors.white,
-                      size: 20,
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1B5E20),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -296,5 +405,23 @@ class _ChatScreenState extends State<ChatScreen> {
     final h = dt.hour > 12 ? dt.hour - 12 : dt.hour;
     final amPm = dt.hour >= 12 ? 'PM' : 'AM';
     return '${h == 0 ? 12 : h}:${dt.minute.toString().padLeft(2, '0')} $amPm';
+  }
+
+  String _formatDeadline(DateTime? deadline) {
+    if (deadline == null) return 'Unknown';
+    final now = DateTime.now();
+    final diff = deadline.difference(now);
+
+    if (diff.isNegative) {
+      return 'Deadline passed';
+    }
+
+    if (diff.inHours < 1) {
+      return 'In ${diff.inMinutes} minutes';
+    } else if (diff.inHours < 24) {
+      return 'In ${diff.inHours} hours';
+    } else {
+      return 'In ${diff.inDays} days';
+    }
   }
 }

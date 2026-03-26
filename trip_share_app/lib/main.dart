@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:trip_share_app/firebase_options.dart';
 import 'package:trip_share_app/screens/home_screen.dart';
+import 'package:trip_share_app/services/notification_service.dart';
+import 'package:trip_share_app/services/booking_deadline_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +31,36 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const AppInitializer(),
     );
+  }
+}
+
+class AppInitializer extends StatefulWidget {
+  const AppInitializer({super.key});
+
+  @override
+  State<AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends State<AppInitializer> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Initialize notification service with context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService().setRootContext(context);
+
+      // Start monitoring booking deadlines
+      BookingDeadlineService().startMonitoring();
+
+      debugPrint('✅ App services initialized');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const HomeScreen();
   }
 }

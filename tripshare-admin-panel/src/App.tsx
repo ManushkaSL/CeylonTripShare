@@ -91,6 +91,40 @@ function mergeTimeWithPeriod(time?: string, period?: string) {
   return `${cleanTime} ${period === 'PM' ? 'PM' : 'AM'}`;
 }
 
+function convertTo24HourFormat(time: string, period: 'AM' | 'PM'): string {
+  const cleanTime = time.trim().replace('.', ':');
+  const timeParts = cleanTime.split(':');
+  let hours = parseInt(timeParts[0], 10);
+  const minutes = (timeParts[1] || '00').trim();
+
+  if (period === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function hasBookingClosePassed(
+  bookingCloseDate?: string,
+  bookingCloseTime?: string,
+  bookingClosePeriod: 'AM' | 'PM' = 'PM'
+): boolean {
+  if (!bookingCloseDate || !bookingCloseTime) return false;
+
+  try {
+    const time24 = convertTo24HourFormat(bookingCloseTime, bookingClosePeriod);
+    const closeDatetime = new Date(`${bookingCloseDate}T${time24}:00`);
+    const now = new Date();
+
+    return now > closeDatetime;
+  } catch (error) {
+    console.error('Error checking booking close time:', error);
+    return false;
+  }
+}
+
 function TourImageCarousel({ images, title }: { images: string[]; title: string }) {
   const [idx, setIdx] = useState(0);
 
@@ -849,26 +883,28 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Time</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                          <input
-                            type="text"
-                            value={newTour.start_time}
-                            onChange={e => setNewTour({ ...newTour, start_time: e.target.value })}
-                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                            placeholder="e.g. 5:00"
-                          />
-                        </div>
-                        <select
-                          value={newTour.start_time_period || 'AM'}
-                          onChange={e => setNewTour({ ...newTour, start_time_period: e.target.value as 'AM' | 'PM' })}
-                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                        >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </div>
+                      <input
+                        type="time"
+                        value={
+                          newTour.start_time
+                            ? convertTo24HourFormat(newTour.start_time, newTour.start_time_period || 'AM')
+                            : ''
+                        }
+                        onChange={e => {
+                          if (e.target.value) {
+                            const [hours, minutes] = e.target.value.split(':');
+                            const hour = parseInt(hours, 10);
+                            const isPM = hour >= 12;
+                            const hour12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                            setNewTour({
+                              ...newTour,
+                              start_time: `${hour12}:${minutes}`,
+                              start_time_period: isPM ? 'PM' : 'AM',
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Location</label>
@@ -897,26 +933,28 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Time</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                          <input
-                            type="text"
-                            value={newTour.end_time}
-                            onChange={e => setNewTour({ ...newTour, end_time: e.target.value })}
-                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                            placeholder="e.g. 7:00"
-                          />
-                        </div>
-                        <select
-                          value={newTour.end_time_period || 'PM'}
-                          onChange={e => setNewTour({ ...newTour, end_time_period: e.target.value as 'AM' | 'PM' })}
-                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                        >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </div>
+                      <input
+                        type="time"
+                        value={
+                          newTour.end_time
+                            ? convertTo24HourFormat(newTour.end_time, newTour.end_time_period || 'PM')
+                            : ''
+                        }
+                        onChange={e => {
+                          if (e.target.value) {
+                            const [hours, minutes] = e.target.value.split(':');
+                            const hour = parseInt(hours, 10);
+                            const isPM = hour >= 12;
+                            const hour12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                            setNewTour({
+                              ...newTour,
+                              end_time: `${hour12}:${minutes}`,
+                              end_time_period: isPM ? 'PM' : 'AM',
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      />
                     </div>
                   </div>
 
@@ -932,26 +970,28 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Booking Close Time</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                          <input
-                            type="text"
-                            value={newTour.booking_close_time}
-                            onChange={e => setNewTour({ ...newTour, booking_close_time: e.target.value })}
-                            className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                            placeholder="e.g. 10:00"
-                          />
-                        </div>
-                        <select
-                          value={newTour.booking_close_period || 'PM'}
-                          onChange={e => setNewTour({ ...newTour, booking_close_period: e.target.value as 'AM' | 'PM' })}
-                          className="px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                        >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </div>
+                      <input
+                        type="time"
+                        value={
+                          newTour.booking_close_time
+                            ? convertTo24HourFormat(newTour.booking_close_time, newTour.booking_close_period || 'PM')
+                            : ''
+                        }
+                        onChange={e => {
+                          if (e.target.value) {
+                            const [hours, minutes] = e.target.value.split(':');
+                            const hour = parseInt(hours, 10);
+                            const isPM = hour >= 12;
+                            const hour12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                            setNewTour({
+                              ...newTour,
+                              booking_close_time: `${hour12}:${minutes}`,
+                              booking_close_period: isPM ? 'PM' : 'AM',
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      />
                     </div>
                   </div>
                   </div>
