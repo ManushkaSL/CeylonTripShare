@@ -4,11 +4,15 @@ import 'package:trip_share_app/firebase_options.dart';
 import 'package:trip_share_app/screens/home_screen.dart';
 import 'package:trip_share_app/services/notification_service.dart';
 import 'package:trip_share_app/services/booking_deadline_service.dart';
+import 'package:trip_share_app/services/chat_cache_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize chat cache service
+  await ChatCacheService().init();
 
   runApp(const MyApp());
 }

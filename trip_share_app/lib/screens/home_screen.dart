@@ -30,23 +30,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  static final Tour _mockTour = Tour(
-    id: 'mock_tour_1',
-    name: 'Mock Tour - Ella Day Trip',
-    imageUrl:
-        'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=800',
-    startDate: DateTime.now().add(const Duration(days: 1, hours: 2)),
-    totalSeats: 20,
-    remainingSeats: 12,
-    price: 45,
-    description:
-        'Mock tour for testing card tap and detail screen navigation from Home.',
-    category: 'Test',
-    startLocation: 'Colombo Fort',
-    endLocation: 'Colombo Fort',
-    operatorName: 'TripShare Test Operator',
-  );
-
   List<Tour> _activeTours(List<Tour> tours) => tours
       .where(
         (t) =>
@@ -174,12 +157,9 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _tourService.streamTours(),
       builder: (context, snapshot) {
         final loadedTours = snapshot.data ?? const <Tour>[];
-        final tours = <Tour>[_mockTour, ...loadedTours];
-        debugPrint('📊 Tours loaded from database: ${tours.length}');
+        final tours = <Tour>[...loadedTours];
         final activeTours = _activeTours(tours);
         final passiveTours = _passiveTours(tours);
-        debugPrint('   - Active tours: ${activeTours.length}');
-        debugPrint('   - Idle tours: ${passiveTours.length}');
 
         return Column(
           children: [
@@ -236,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Padding(
                           padding: EdgeInsets.only(bottom: 12),
                           child: Text(
-                            'Database loading issue. Showing local mock tour.',
+                            'Failed to load tours. Please try again later.',
                             style: TextStyle(color: Colors.redAccent),
                           ),
                         ),
@@ -285,56 +265,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ],
                       const SizedBox(height: 24),
-                      if (loadedTours.isNotEmpty) ...[
-                        const _SectionHeader(title: '🐛 Debug Info'),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.amber.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Loaded Tours: ${loadedTours.length}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1B5E20),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              for (final tour in loadedTours)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        tour.name,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Total: ${tour.totalSeats} | Remaining: ${tour.remainingSeats} | Status: ${tour.status.name}',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   );
                 },

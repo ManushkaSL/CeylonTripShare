@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
@@ -160,11 +161,26 @@ class _JoinedTourCard extends StatelessWidget {
                   ),
                   child: SizedBox(
                     width: 110,
-                    child: Image.network(
-                      tour.imageUrl,
+                    child: CachedNetworkImage(
+                      imageUrl: tour.imageUrl,
                       fit: BoxFit.cover,
                       height: double.infinity,
-                      errorBuilder: (_, _, _) => Container(
+                      placeholder: (context, url) => Container(
+                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF1B5E20),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
                         color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
                         child: const Center(
                           child: Icon(

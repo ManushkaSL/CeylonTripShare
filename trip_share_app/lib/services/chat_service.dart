@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'package:trip_share_app/services/chat_cache_service.dart';
 
 class ChatMessage {
   final String id;
@@ -35,6 +37,16 @@ class ChatMessage {
     };
   }
 
+  Map<String, dynamic> toMapWithTourId(String tourId) {
+    return {
+      'tourId': tourId,
+      'senderId': senderId,
+      'senderName': senderName,
+      'text': text,
+      'timestamp': Timestamp.fromDate(timestamp),
+    };
+  }
+
   bool get isMe => senderId == _currentUserId;
   static String _currentUserId = '';
 
@@ -54,23 +66,82 @@ class ChatService {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final ChatCacheService _cacheService = ChatCacheService();
 
-  /// Stream of messages for a specific tour's chat
+  /// Stream of messages for a specific tour's chat with local caching
+  /// Shows cached messages INSTANTLY, then streams live updates from Firestore
   Stream<List<ChatMessage>> streamChatMessages(String tourId) {
-    return _firestore
-        .collection('tours')
-        .doc(tourId)
-        .collection('messages')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
-              .toList(growable: false);
-        });
+    final controller = StreamController<List<ChatMessage>>();
+    late StreamSubscription<QuerySnapshot> subscription;
+
+    () async {
+      try {
+        // 1️⃣ EMIT CACHED MESSAGES IMMEDIATELY
+        final cachedMessages = _cacheService.getMessagesForTour(tourId);
+        if (!controller.isClosed) {
+          controller.add(cachedMessages);
+          debugPrint(
+            '⚡ Emitted ${cachedMessages.length} cached messages instantly',
+          );
+        }
+
+        // 2️⃣ SUBSCRIBE TO LIVE FIRESTORE UPDATES
+        subscription = _firestore
+            .collection('messages')
+            .where('tourId', isEqualTo: tourId)
+            .orderBy('tourId')
+            .orderBy('timestamp', descending: false)
+            .snapshots()
+            .listen(
+              (snapshot) {
+                final messages = snapshot.docs
+                    .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
+                    .toList(growable: false);
+
+                // Save to cache whenever new data arrives
+                if (messages.isNotEmpty) {
+                  _cacheService.saveMessagesForTour(tourId, messages);
+                }
+
+                if (!controller.isClosed) {
+                  controller.add(messages);
+                  debugPrint(
+                    '🔄 Updated with ${messages.length} live messages',
+                  );
+                }
+              },
+              onError: (error) {
+                debugPrint('❌ Error streaming messages: $error');
+                if (!controller.isClosed) {
+                  // On error, try to emit cached messages again
+                  final cachedMessages = _cacheService.getMessagesForTour(
+                    tourId,
+                  );
+                  controller.add(cachedMessages);
+                }
+              },
+            );
+
+        // Cancel subscription when stream is closed
+        controller.onCancel = () {
+          subscription.cancel();
+          debugPrint('📴 Chat stream cancelled for tour $tourId');
+        };
+      } catch (e) {
+        debugPrint('❌ Error setting up message stream: $e');
+        // Emit cached messages on error
+        final cachedMessages = _cacheService.getMessagesForTour(tourId);
+        if (!controller.isClosed) {
+          controller.add(cachedMessages);
+        }
+      }
+    }();
+
+    return controller.stream;
   }
 
   /// Send a message to the tour's chat
+  /// Stores in root-level messages collection with tourId
   Future<void> sendMessage({
     required String tourId,
     required String userId,
@@ -78,9 +149,11 @@ class ChatService {
     required String messageText,
   }) async {
     try {
+      if (tourId.isEmpty || userId.isEmpty || messageText.trim().isEmpty) {
+        throw Exception('Invalid message data: missing required fields');
+      }
+
       await _firestore
-          .collection('tours')
-          .doc(tourId)
           .collection('messages')
           .add(
             ChatMessage(
@@ -89,10 +162,13 @@ class ChatService {
               senderName: senderName,
               text: messageText,
               timestamp: DateTime.now(),
-            ).toMap(),
+            ).toMapWithTourId(tourId),
           );
 
-      debugPrint('✅ Message sent to tour $tourId');
+      debugPrint('✅ Message sent to tour $tourId by $userId');
+    } on FirebaseException catch (e) {
+      debugPrint('❌ Firebase error: ${e.code} - ${e.message}');
+      rethrow;
     } catch (e) {
       debugPrint('❌ Error sending message: $e');
       rethrow;
@@ -103,35 +179,49 @@ class ChatService {
   Future<List<ChatMessage>> getChatMessages(String tourId) async {
     try {
       final snapshot = await _firestore
-          .collection('tours')
-          .doc(tourId)
           .collection('messages')
+          .where('tourId', isEqualTo: tourId)
+          .orderBy('tourId')
           .orderBy('timestamp')
           .get();
+
+      debugPrint('✅ Fetched ${snapshot.docs.length} messages for tour $tourId');
 
       return snapshot.docs
           .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
           .toList(growable: false);
+    } on FirebaseException catch (e) {
+      debugPrint('❌ Firebase error: ${e.code} - ${e.message}');
+      return [];
     } catch (e) {
       debugPrint('❌ Error fetching messages: $e');
       return [];
     }
   }
 
-  /// Delete a message (for moderation if needed)
+  /// Delete a message
   Future<void> deleteMessage(String tourId, String messageId) async {
     try {
-      await _firestore
-          .collection('tours')
-          .doc(tourId)
-          .collection('messages')
-          .doc(messageId)
-          .delete();
-
-      debugPrint('✅ Message deleted from tour $tourId');
+      await _firestore.collection('messages').doc(messageId).delete();
+      debugPrint('✅ Message deleted');
+    } on FirebaseException catch (e) {
+      debugPrint('❌ Firebase error: ${e.code} - ${e.message}');
+      rethrow;
     } catch (e) {
       debugPrint('❌ Error deleting message: $e');
       rethrow;
+    }
+  }
+
+  /// Verify tour exists
+  Future<bool> tourExists(String tourId) async {
+    try {
+      final doc = await _firestore.collection('tours').doc(tourId).get();
+      debugPrint('📍 Tour $tourId exists: ${doc.exists}');
+      return doc.exists;
+    } catch (e) {
+      debugPrint('❌ Error checking tour: $e');
+      return false;
     }
   }
 }

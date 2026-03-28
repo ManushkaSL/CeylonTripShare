@@ -812,8 +812,13 @@ export default function App() {
                           type="number"
                           min={0}
                           value={newTour.seat_count}
+                          onFocus={e => {
+                            if (e.target.value === '0') {
+                              e.target.value = '';
+                            }
+                          }}
                           onChange={e => {
-                            const seatCount = Number(e.target.value);
+                            const seatCount = Number(e.target.value || 0);
                             setNewTour({
                               ...newTour,
                               seat_count: seatCount,
@@ -834,7 +839,12 @@ export default function App() {
                           type="number"
                           min={0}
                           value={newTour.price}
-                          onChange={e => setNewTour({ ...newTour, price: Number(e.target.value) })}
+                          onFocus={e => {
+                            if (e.target.value === '0') {
+                              e.target.value = '';
+                            }
+                          }}
+                          onChange={e => setNewTour({ ...newTour, price: Number(e.target.value || 0) })}
                           className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. 250"
                         />

@@ -103,14 +103,8 @@ class BookingDeadlineService {
     try {
       debugPrint('✅ Deadline passed for tour: $tourName');
 
-      // Show in-app notification
-      _notificationService.showBanner(
-        '📱 Chat is now open for $tourName!',
-        backgroundColor: Colors.green,
-      );
-
-      // You can add push notification here later
-      // For now, we're only using in-app notifications
+      // Chat notification removed - using silent deadline passing
+      // You can add push notification here later if needed
     } catch (e) {
       debugPrint('❌ Error notifying deadline pass: $e');
     }

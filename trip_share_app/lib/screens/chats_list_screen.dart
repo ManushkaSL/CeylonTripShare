@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 
@@ -74,12 +75,18 @@ class _ChatsListBodyState extends State<ChatsListBody> {
 
   @override
   Widget build(BuildContext context) {
-    final chats = JoinedTourService().toursWithChats;
-    final pendingChats = JoinedTourService().joinedTours
-        .where((jt) => !jt.isChatAvailable)
-        .toList();
+    final allChats = JoinedTourService().joinedTours;
 
-    return (chats.isEmpty && pendingChats.isEmpty)
+    // Deduplicate chats by tour ID
+    final uniqueChats = <String, JoinedTour>{};
+    for (final chat in allChats) {
+      uniqueChats[chat.tour.id] = chat;
+    }
+
+    // Show all chats (both available and unavailable)
+    final chats = uniqueChats.values.toList();
+
+    return chats.isEmpty
         ? Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -106,124 +113,126 @@ class _ChatsListBodyState extends State<ChatsListBody> {
             physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
-              // Active chats
-              if (chats.isNotEmpty) ...[
-                const Text(
-                  'Active Chats',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
+              const Text(
+                'Chats',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
                 ),
-                const SizedBox(height: 10),
-                for (final jt in chats)
-                  _buildChatTile(context, jt, active: true),
-              ],
-              // Pending chats
-              if (pendingChats.isNotEmpty) ...[
-                if (chats.isNotEmpty) const SizedBox(height: 20),
-                const Text(
-                  'Upcoming',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Chat opens after the joining deadline',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 10),
-                for (final jt in pendingChats)
-                  _buildChatTile(context, jt, active: false),
-              ],
+              ),
+              const SizedBox(height: 10),
+              for (final jt in chats) _buildChatTile(context, jt),
             ],
           );
   }
 
-  Widget _buildChatTile(
-    BuildContext context,
-    JoinedTour jt, {
-    required bool active,
-  }) {
+  Widget _buildChatTile(BuildContext context, JoinedTour jt) {
     final tour = jt.tour;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
+    final isAvailable = jt.isChatAvailable;
+
+    return Opacity(
+      opacity: isAvailable ? 1.0 : 0.5,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          onTap: active
-              ? () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)),
-                  );
-                }
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Tour image
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    tour.imageUrl,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: isAvailable
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)),
+                    );
+                  }
+                : null,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Tour image
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: CachedNetworkImage(
+                      imageUrl: tour.imageUrl,
                       width: 50,
                       height: 50,
-                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
-                      child: const Icon(
-                        Icons.landscape,
-                        color: Color(0xFF1B5E20),
-                        size: 24,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        width: 50,
+                        height: 50,
+                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        width: 50,
+                        height: 50,
+                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                        child: const Icon(
+                          Icons.landscape,
+                          color: Color(0xFF1B5E20),
+                          size: 24,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tour.name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: active ? const Color(0xFF1B5E20) : Colors.grey,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                tour.name,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isAvailable
+                                      ? const Color(0xFF1B5E20)
+                                      : Colors.grey,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (!isAvailable)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  'Opens later',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        active
-                            ? '${tour.totalSeats - tour.remainingSeats} passengers'
-                            : 'Opens after joining deadline',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: active ? Colors.grey : Colors.grey.shade400,
+                        const SizedBox(height: 2),
+                        Text(
+                          '${tour.totalSeats - tour.remainingSeats} passengers',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isAvailable
+                                ? Colors.grey
+                                : Colors.grey.withValues(alpha: 0.6),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  active ? Icons.chat_bubble : Icons.lock_clock,
-                  size: 20,
-                  color: active
-                      ? const Color(0xFF1B5E20)
-                      : Colors.grey.shade300,
-                ),
-              ],
+                  Icon(
+                    Icons.chat_bubble,
+                    size: 20,
+                    color: isAvailable
+                        ? const Color(0xFF1B5E20)
+                        : Colors.grey.withValues(alpha: 0.5),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
