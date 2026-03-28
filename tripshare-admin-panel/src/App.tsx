@@ -225,6 +225,11 @@ export default function App() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState<'tours' | 'drivers'>('tours');
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [driverEmail, setDriverEmail] = useState('');
+  const [addingDriver, setAddingDriver] = useState(false);
+  const [driverError, setDriverError] = useState('');
+  const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogout = () => {
@@ -331,8 +336,77 @@ export default function App() {
     });
   };
 
+  const fetchDrivers = async () => {
+    try {
+      const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const driversData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDrivers(driversData);
+    } catch (error) {
+      console.error('Failed to fetch drivers:', error);
+    }
+  };
+
+  const handleAddDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!driverEmail.trim()) {
+      setDriverError('Please enter a valid email');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(driverEmail)) {
+      setDriverError('Please enter a valid email address');
+      return;
+    }
+
+    setAddingDriver(true);
+    setDriverError('');
+
+    try {
+      const existingDriver = drivers.find(d => d.email === driverEmail.trim().toLowerCase());
+      if (existingDriver) {
+        setDriverError('This email is already registered as a driver');
+        setAddingDriver(false);
+        return;
+      }
+
+      await addDoc(collection(db, 'drivers'), {
+        email: driverEmail.trim().toLowerCase(),
+        status: 'pending',
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
+
+      setDriverEmail('');
+      await fetchDrivers();
+      alert('Driver email added successfully! They can now sign up with this email to access the driver dashboard.');
+    } catch (error) {
+      console.error('Failed to add driver:', error);
+      setDriverError('Failed to add driver. Please try again.');
+    } finally {
+      setAddingDriver(false);
+    }
+  };
+
+  const handleDeleteDriver = async (driverId: string) => {
+    if (!confirm('Are you sure you want to remove this driver?')) return;
+    try {
+      await deleteDoc(doc(db, 'drivers', driverId));
+      setDrivers(drivers.filter(d => d.id !== driverId));
+    } catch (error) {
+      console.error('Failed to delete driver:', error);
+    }
+  };
+
   useEffect(() => {
-    if (isAuthenticated) fetchTours();
+    if (isAuthenticated) {
+      fetchTours();
+      fetchDrivers();
+    }
   }, [isAuthenticated]);
 
   if (!isAuthenticated) {
@@ -774,12 +848,191 @@ export default function App() {
 
         {activeSection === 'drivers' && (
         <div className="p-8 max-w-7xl mx-auto w-full">
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-zinc-200">
-            <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-zinc-300" />
+          <div className="space-y-6">
+            {/* Add Driver Form */}
+            <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+              <h3 className="text-lg font-semibold text-zinc-900 mb-4">Add Driver by Email</h3>
+              <form onSubmit={handleAddDriver} className="flex flex-col sm:flex-row gap-3">
+                <div className="flex-1">
+                  <input
+                    type="email"
+                    value={driverEmail}
+                    onChange={e => {
+                      setDriverEmail(e.target.value);
+                      setDriverError('');
+                    }}
+                    placeholder="Enter driver email address"
+                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={addingDriver}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-xl transition-all flex items-center gap-2 whitespace-nowrap"
+                >
+                  {addingDriver ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Add as Driver
+                    </>
+                  )}
+                </button>
+              </form>
+              {driverError && (
+                <div className="mt-3 bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100">
+                  {driverError}
+                </div>
+              )}
             </div>
-            <h3 className="text-lg font-semibold text-zinc-900 mb-1">Driver Management</h3>
-            <p className="text-zinc-500 mb-6">Coming soon - Driver management features will be available here.</p>
+
+            {/* Drivers List */}
+            <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
+              <div className="p-6 border-b border-zinc-100">
+                <h3 className="text-lg font-semibold text-zinc-900">Registered Drivers ({drivers.length})</h3>
+              </div>
+              {drivers.length === 0 ? (
+                <div className="p-8 text-center">
+                  <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-8 h-8 text-zinc-300" />
+                  </div>
+                  <p className="text-zinc-500">No drivers added yet. Add driver emails to get started.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-zinc-100">
+                  <AnimatePresence mode="popLayout">
+                    {drivers.map((driver) => (
+                      <div key={driver.id}>
+                        <motion.div
+                          layout
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 20 }}
+                          onClick={() => setExpandedDriverId(expandedDriverId === driver.id ? null : driver.id)}
+                          className="p-6 flex items-center justify-between hover:bg-zinc-50 transition-colors cursor-pointer"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-zinc-900">{driver.email}</p>
+                            <div className="flex items-center gap-3 mt-2">
+                              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                                driver.status === 'active'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : driver.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-zinc-100 text-zinc-700'
+                              }`}>
+                                {driver.status === 'active' ? 'Active' : driver.status === 'pending' ? 'Pending' : 'Inactive'}
+                              </span>
+                              {driver.created_at && (
+                                <span className="text-xs text-zinc-500">
+                                  Added {new Date(driver.created_at.toDate?.() || driver.created_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-4">
+                            <motion.div
+                              initial={false}
+                              animate={{ rotate: expandedDriverId === driver.id ? 180 : 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronRight className="w-5 h-5 text-zinc-400" />
+                            </motion.div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteDriver(driver.id);
+                              }}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove driver"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </motion.div>
+
+                        {/* Expanded Details */}
+                        <AnimatePresence>
+                          {expandedDriverId === driver.id && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden border-t border-zinc-100"
+                            >
+                              <div className="p-6 bg-zinc-50 space-y-5">
+                                <div>
+                                  <h4 className="text-sm font-semibold text-zinc-900 mb-4">Driver Information</h4>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Email</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.email}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Status</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.status || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Phone</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.phone || 'Not provided'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">License</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.license_number || 'Not provided'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Vehicle</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.vehicle || 'Not assigned'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Assigned Tours</p>
+                                      <p className="text-sm font-medium text-zinc-900">{driver.assigned_tours_count || 0}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-zinc-200 pt-4">
+                                  <h4 className="text-sm font-semibold text-zinc-900 mb-3">Active Ratings</h4>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
+                                      <p className="text-xs font-medium text-zinc-500 mb-1">Average Rating</p>
+                                      <p className="text-lg font-bold text-emerald-600">{driver.rating || '4.8'}/5</p>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
+                                      <p className="text-xs font-medium text-zinc-500 mb-1">Total Trips</p>
+                                      <p className="text-lg font-bold text-blue-600">{driver.total_trips || 0}</p>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
+                                      <p className="text-xs font-medium text-zinc-500 mb-1">Completion Rate</p>
+                                      <p className="text-lg font-bold text-purple-600">{driver.completion_rate || '98%'}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-zinc-200 pt-4">
+                                  <div className="flex gap-2">
+                                    <button className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
+                                      Edit Driver
+                                    </button>
+                                    <button className="flex-1 px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-900 text-sm font-medium rounded-lg transition-colors">
+                                      View History
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         )}

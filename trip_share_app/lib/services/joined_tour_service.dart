@@ -49,6 +49,30 @@ class JoinedTourService extends ChangeNotifier {
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
   List<Booking> get bookings => List.unmodifiable(_bookings);
 
+  /// Get the count of actual passengers (bookings) for a specific tour across ALL users
+  /// Queries Firestore to get the true passenger count
+  Future<int> getPassengerCountForTour(String tourId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('bookings')
+          .where('tourId', isEqualTo: tourId)
+          .get();
+
+      int totalPassengers = 0;
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final totalPersons = data['totalPersons'] as int? ?? 0;
+        totalPassengers += totalPersons;
+      }
+
+      debugPrint('✅ Total passengers for tour $tourId: $totalPassengers');
+      return totalPassengers;
+    } catch (e) {
+      debugPrint('⚠️ Error getting passenger count for tour $tourId: $e');
+      return 0;
+    }
+  }
+
   /// Monitor chat availability every 10 seconds
   /// This ensures the UI updates quickly when booking deadline is reached
   void _startChatAvailabilityMonitoring() {

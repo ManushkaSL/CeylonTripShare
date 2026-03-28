@@ -212,14 +212,22 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '${tour.totalSeats - tour.remainingSeats} passengers',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isAvailable
-                                ? Colors.grey
-                                : Colors.grey.withValues(alpha: 0.6),
+                        FutureBuilder<int>(
+                          future: JoinedTourService().getPassengerCountForTour(
+                            tour.id,
                           ),
+                          builder: (context, snapshot) {
+                            final count = snapshot.data ?? 0;
+                            return Text(
+                              '$count ${count == 1 ? 'passenger' : 'passengers'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isAvailable
+                                    ? Colors.grey
+                                    : Colors.grey.withValues(alpha: 0.6),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

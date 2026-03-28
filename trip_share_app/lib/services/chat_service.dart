@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:async';
 import 'package:trip_share_app/services/chat_cache_service.dart';
 
 class ChatMessage {
@@ -71,73 +70,60 @@ class ChatService {
   /// Stream of messages for a specific tour's chat with local caching
   /// Shows cached messages INSTANTLY, then streams live updates from Firestore
   Stream<List<ChatMessage>> streamChatMessages(String tourId) {
-    final controller = StreamController<List<ChatMessage>>();
-    late StreamSubscription<QuerySnapshot> subscription;
+    debugPrint('📡 Setting up chat stream for tour: $tourId');
 
-    () async {
-      try {
-        // 1️⃣ EMIT CACHED MESSAGES IMMEDIATELY
-        final cachedMessages = _cacheService.getMessagesForTour(tourId);
-        if (!controller.isClosed) {
-          controller.add(cachedMessages);
+    // 1️⃣ Create the Firestore live stream
+    final firestoreStream = _firestore
+        .collection('messages')
+        .where('tourId', isEqualTo: tourId)
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) {
+          final messages = snapshot.docs
+              .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
+              .toList(growable: false);
+
           debugPrint(
-            '⚡ Emitted ${cachedMessages.length} cached messages instantly',
+            '🔄 Stream received ${messages.length} messages for tour $tourId',
           );
-        }
 
-        // 2️⃣ SUBSCRIBE TO LIVE FIRESTORE UPDATES
-        subscription = _firestore
-            .collection('messages')
-            .where('tourId', isEqualTo: tourId)
-            .orderBy('tourId')
-            .orderBy('timestamp', descending: false)
-            .snapshots()
-            .listen(
-              (snapshot) {
-                final messages = snapshot.docs
-                    .map((doc) => ChatMessage.fromMap(doc.data(), doc.id))
-                    .toList(growable: false);
+          // Save to cache whenever new data arrives
+          if (messages.isNotEmpty) {
+            _cacheService.saveMessagesForTour(tourId, messages);
+          }
 
-                // Save to cache whenever new data arrives
-                if (messages.isNotEmpty) {
-                  _cacheService.saveMessagesForTour(tourId, messages);
-                }
+          return messages;
+        })
+        .handleError((error, stackTrace) {
+          // ⚠️ LOG THE FULL ERROR — this often contains the index creation URL
+          debugPrint('❌ ERROR streaming messages for tour $tourId: $error');
+          debugPrint('❌ Stack trace: $stackTrace');
+          debugPrint(
+            '💡 If you see a "FAILED_PRECONDITION" error, you need to create '
+            'a composite index in Firestore for the "messages" collection '
+            'with fields: tourId (Ascending) + timestamp (Ascending). '
+            'Check the error message above for a direct link to create it.',
+          );
+        });
 
-                if (!controller.isClosed) {
-                  controller.add(messages);
-                  debugPrint(
-                    '🔄 Updated with ${messages.length} live messages',
-                  );
-                }
-              },
-              onError: (error) {
-                debugPrint('❌ Error streaming messages: $error');
-                if (!controller.isClosed) {
-                  // On error, try to emit cached messages again
-                  final cachedMessages = _cacheService.getMessagesForTour(
-                    tourId,
-                  );
-                  controller.add(cachedMessages);
-                }
-              },
-            );
+    // 2️⃣ Emit cached messages first, then Firestore live updates
+    return _emitCachedThenLive(tourId, firestoreStream);
+  }
 
-        // Cancel subscription when stream is closed
-        controller.onCancel = () {
-          subscription.cancel();
-          debugPrint('📴 Chat stream cancelled for tour $tourId');
-        };
-      } catch (e) {
-        debugPrint('❌ Error setting up message stream: $e');
-        // Emit cached messages on error
-        final cachedMessages = _cacheService.getMessagesForTour(tourId);
-        if (!controller.isClosed) {
-          controller.add(cachedMessages);
-        }
-      }
-    }();
+  /// Helper: yields cached messages first, then live Firestore updates
+  Stream<List<ChatMessage>> _emitCachedThenLive(
+    String tourId,
+    Stream<List<ChatMessage>> liveStream,
+  ) async* {
+    // Emit cached messages immediately
+    final cachedMessages = _cacheService.getMessagesForTour(tourId);
+    yield cachedMessages;
+    debugPrint(
+      '⚡ Emitted ${cachedMessages.length} cached messages instantly for tour $tourId',
+    );
 
-    return controller.stream;
+    // Then yield all live Firestore updates
+    yield* liveStream;
   }
 
   /// Send a message to the tour's chat
@@ -153,19 +139,23 @@ class ChatService {
         throw Exception('Invalid message data: missing required fields');
       }
 
-      await _firestore
-          .collection('messages')
-          .add(
-            ChatMessage(
-              id: '',
-              senderId: userId,
-              senderName: senderName,
-              text: messageText,
-              timestamp: DateTime.now(),
-            ).toMapWithTourId(tourId),
-          );
+      debugPrint(
+        '📤 Sending message to tour: $tourId | From: $userId | Text: "$messageText"',
+      );
 
-      debugPrint('✅ Message sent to tour $tourId by $userId');
+      final messageData = ChatMessage(
+        id: '',
+        senderId: userId,
+        senderName: senderName,
+        text: messageText,
+        timestamp: DateTime.now(),
+      ).toMapWithTourId(tourId);
+
+      debugPrint('📋 Message data to save: $messageData');
+
+      await _firestore.collection('messages').add(messageData);
+
+      debugPrint('✅ Message successfully sent to tour $tourId');
     } on FirebaseException catch (e) {
       debugPrint('❌ Firebase error: ${e.code} - ${e.message}');
       rethrow;
@@ -181,7 +171,6 @@ class ChatService {
       final snapshot = await _firestore
           .collection('messages')
           .where('tourId', isEqualTo: tourId)
-          .orderBy('tourId')
           .orderBy('timestamp')
           .get();
 

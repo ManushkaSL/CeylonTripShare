@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._();
@@ -19,6 +20,7 @@ class AuthService extends ChangeNotifier {
     serverClientId:
         '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
   );
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoggedIn = false;
   String _userName = '';
@@ -43,6 +45,34 @@ class AuthService extends ChangeNotifier {
       _userName = '';
       _userEmail = '';
       _photoUrl = '';
+    }
+  }
+
+  /// Create or update user document in Firestore with default role "passenger"
+  Future<void> _createOrUpdateUserInFirestore(User user) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(user.uid);
+      final docSnapshot = await userDoc.get();
+
+      if (!docSnapshot.exists) {
+        // First time login - create user document with default role
+        await userDoc.set({
+          'uid': user.uid,
+          'email': user.email,
+          'name': user.displayName ?? user.email?.split('@').first ?? 'User',
+          'photoUrl': user.photoURL ?? '',
+          'role': 'passenger', // Default role
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastLogin': FieldValue.serverTimestamp(),
+        });
+        debugPrint('✅ New user created in Firestore with role: passenger');
+      } else {
+        // Existing user - just update lastLogin
+        await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+        debugPrint('✅ User login updated in Firestore');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error creating/updating user in Firestore: $e');
     }
   }
 
@@ -73,8 +103,14 @@ class AuthService extends ChangeNotifier {
       );
 
       debugPrint('Signing in to Firebase with Google credential...');
-      await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
       debugPrint('Firebase sign-in successful');
+
+      // Create or update user in Firestore with role
+      if (userCredential.user != null) {
+        await _createOrUpdateUserInFirestore(userCredential.user!);
+      }
+
       return null; // success
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase auth error: ${e.code} - ${e.message}');
@@ -91,7 +127,16 @@ class AuthService extends ChangeNotifier {
     required String password,
   }) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Create or update user in Firestore with role
+      if (userCredential.user != null) {
+        await _createOrUpdateUserInFirestore(userCredential.user!);
+      }
+
       return null;
     } on FirebaseAuthException catch (e) {
       return _authErrorMessage(e.code);
@@ -132,6 +177,12 @@ class AuthService extends ChangeNotifier {
       }
 
       debugPrint('Registration completed for: $email');
+
+      // Create user document in Firestore with role
+      if (credential.user != null) {
+        await _createOrUpdateUserInFirestore(credential.user!);
+      }
+
       return null;
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase registration error: ${e.code} - ${e.message}');

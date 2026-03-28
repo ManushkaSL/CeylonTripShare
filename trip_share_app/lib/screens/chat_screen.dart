@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/chat_service.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/notification_service.dart';
+import 'package:trip_share_app/screens/live_tracking_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Tour tour;
@@ -131,13 +133,40 @@ class _ChatScreenState extends State<ChatScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              '${widget.tour.totalSeats - widget.tour.remainingSeats} passengers',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            Builder(
+              builder: (context) {
+                return FutureBuilder<int>(
+                  future: JoinedTourService().getPassengerCountForTour(
+                    widget.tour.id,
+                  ),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data ?? 0;
+                    return Text(
+                      '$count ${count == 1 ? 'passenger' : 'passengers'}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    );
+                  },
+                );
+              },
             ),
           ],
         ),
-        actions: [],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.location_on, color: Color(0xFF1B5E20)),
+            tooltip: 'Track Driver',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => LiveTrackingScreen(
+                    tourId: widget.tour.id,
+                    tourName: widget.tour.name,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [

@@ -23,6 +23,17 @@ service cloud.firestore {
       allow update: if false; // Messages cannot be edited
     }
 
+    // ROOT-LEVEL BOOKINGS COLLECTION
+    // User booking records stored at root level for efficient querying
+    // (Also exists as subcollection under tours for nested queries)
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+                    request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && 
+                            resource.data.userId == request.auth.uid;
+    }
+
     // Tours collection - public read, guide creates/edits
     match /tours/{tourId} {
       allow read: if request.auth != null;
@@ -41,10 +52,23 @@ service cloud.firestore {
 
     // Joined tours (user booking records)
     match /joinedTours/{joinedTourId} {
-      allow read, create: if request.auth != null && 
+      allow read: if request.auth != null && 
+                           resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && 
                            request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
                             resource.data.userId == request.auth.uid;
+    }
+
+    // Driver live-location sharing
+    // Any authenticated user can read (passengers view driver location)
+    // Only the driver themselves can write their location
+    match /driver_locations/{tourId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && 
+                            request.resource.data.driverId == request.auth.uid;
+      allow delete: if request.auth != null && 
+                    resource.data.driverId == request.auth.uid;
     }
 
     // Deny all other access
