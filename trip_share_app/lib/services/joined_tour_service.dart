@@ -21,8 +21,18 @@ class JoinedTour {
   });
 
   bool get isChatAvailable {
-    if (tour.lastJoiningTime == null) return false;
-    return DateTime.now().isAfter(tour.lastJoiningTime!);
+    if (tour.lastJoiningTime == null) {
+      debugPrint(
+        '❌ Chat unavailable for "${tour.name}": lastJoiningTime is NULL',
+      );
+      return false;
+    }
+
+    final isAfter = DateTime.now().isAfter(tour.lastJoiningTime!);
+    debugPrint(
+      '🔔 [${tour.name}] Chat check: now=${DateTime.now()}, close=${tour.lastJoiningTime}, available=$isAfter',
+    );
+    return isAfter;
   }
 
   bool get isLiveLocationAvailable => journeyStatus == JourneyStatus.inProgress;
@@ -33,15 +43,33 @@ class JoinedTourService extends ChangeNotifier {
   factory JoinedTourService() => _instance;
   JoinedTourService._() {
     _initializeAuthListener();
+    _startChatAvailabilityMonitoring();
   }
 
   final List<JoinedTour> _joinedTours = [];
   final List<Booking> _bookings = [];
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
+  Timer? _chatAvailabilityTimer;
 
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
   List<Booking> get bookings => List.unmodifiable(_bookings);
+
+  /// Monitor chat availability every minute
+  /// This ensures the UI updates when booking deadline is reached
+  void _startChatAvailabilityMonitoring() {
+    _chatAvailabilityTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      // Trigger UI rebuild to check updated isChatAvailable status
+      notifyListeners();
+    });
+    debugPrint('⏱️ Chat availability monitoring started');
+  }
+
+  @override
+  void dispose() {
+    _chatAvailabilityTimer?.cancel();
+    super.dispose();
+  }
 
   /// Parse booking close date and time fields into DateTime
   DateTime? _parseBookingCloseDateTime(Map<String, dynamic> tourData) {
@@ -50,15 +78,21 @@ class JoinedTourService extends ChangeNotifier {
       final timeStr = tourData['booking_close_time'] as String?;
       final periodStr = tourData['booking_close_period'] as String?;
 
+      debugPrint('=== 📅 BOOKING CLOSE TIME DEBUG ===');
+      debugPrint('Raw Firestore data: date=$dateStr, time=$timeStr, period=$periodStr');
+
       if (dateStr == null || timeStr == null || periodStr == null) {
+        debugPrint('❌ Missing fields: date=$dateStr, time=$timeStr, period=$periodStr');
         return null;
       }
 
       // Parse date: "2026-03-20"
       final date = DateTime.parse(dateStr);
+      debugPrint('Parsed date: $date');
 
       // Parse time: "2" or "02" and period: "AM" or "PM"
       int hour = int.parse(timeStr.replaceAll(RegExp(r'\D'), ''));
+      debugPrint('Extracted hour (before conversion): $hour');
 
       // Convert 12-hour format to 24-hour
       if (periodStr.toUpperCase() == 'PM' && hour != 12) {
@@ -67,8 +101,18 @@ class JoinedTourService extends ChangeNotifier {
         hour = 0;
       }
 
+      debugPrint('Hour after conversion: $hour, period: $periodStr');
+
       // Combine into DateTime
       final closeDateTime = DateTime(date.year, date.month, date.day, hour, 0);
+      final now = DateTime.now();
+      final isAfter = now.isAfter(closeDateTime);
+
+      debugPrint('Booking close DateTime: $closeDateTime');
+      debugPrint('Current time: $now');
+      debugPrint('Now isAfter close time: $isAfter');
+      debugPrint('=== END DEBUG ===');
+
       return closeDateTime;
     } catch (e) {
       debugPrint('⚠️ Error parsing booking close time: $e');
@@ -134,9 +178,17 @@ class JoinedTourService extends ChangeNotifier {
               .get();
           if (tourDoc.exists) {
             final tourData = tourDoc.data() ?? {};
+            final tourName = tourData['name'] ?? data['tourName'] ?? tourId;
+            
+            debugPrint('🔍 Tour "$tourName" full data from Firestore:');
+            debugPrint('  booking_close_date: ${tourData['booking_close_date']}');
+            debugPrint('  booking_close_time: ${tourData['booking_close_time']}');
+            debugPrint('  booking_close_period: ${tourData['booking_close_period']}');
 
             // Parse booking close time from three fields
             final lastJoiningTime = _parseBookingCloseDateTime(tourData);
+            
+            debugPrint('✅ Final lastJoiningTime for "$tourName": $lastJoiningTime');
 
             tour = Tour(
               id: tourId,

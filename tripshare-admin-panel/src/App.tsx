@@ -496,17 +496,34 @@ export default function App() {
 
       const route = normalizeRouteValue(newTour.route);
       const payload = {
-        ...newTour,
+        // Basic Details
+        title: newTour.title || '',
+        category: newTour.category || '',
+        description: newTour.description || '',
         price: Number(newTour.price || 0),
         seat_count: Number(newTour.seat_count || 0),
         available_seats: Number(newTour.available_seats ?? newTour.seat_count ?? 0),
+        
+        // Schedule
+        start_location: newTour.start_location || '',
         start_day: newTour.start_day || '',
         start_time: mergeTimeWithPeriod(newTour.start_time, newTour.start_time_period),
+        start_time_period: newTour.start_time_period || 'AM',
+        
+        end_location: newTour.end_location || '',
         end_day: newTour.end_day || '',
         end_time: mergeTimeWithPeriod(newTour.end_time, newTour.end_time_period),
+        end_time_period: newTour.end_time_period || 'PM',
+        
         booking_close_date: newTour.booking_close_date || '',
         booking_close_time: mergeTimeWithPeriod(newTour.booking_close_time, newTour.booking_close_period),
+        booking_close_period: newTour.booking_close_period || 'PM',
+        
+        // Route & Extra Details
         route,
+        operator_name: newTour.operator_name || '',
+        whats_included: newTour.whats_included || '',
+        tour_features: newTour.tour_features || '',
       };
 
       if (isEditMode && editingTourId) {

@@ -122,9 +122,70 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                 ),
               ),
               const SizedBox(height: 10),
+              // Debug info for testing
+              _buildDebugInfo(chats),
+              const SizedBox(height: 12),
               for (final jt in chats) _buildChatTile(context, jt),
             ],
           );
+  }
+
+  Widget _buildDebugInfo(List<JoinedTour> chats) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.yellow.withValues(alpha: 0.2),
+        border: Border.all(color: Colors.orange, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🐛 DEBUG INFO',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final jt in chats)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tour: ${jt.tour.name}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    'lastJoiningTime: ${jt.tour.lastJoiningTime}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  Text(
+                    'Now: ${DateTime.now()}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  Text(
+                    'Available: ${jt.isChatAvailable}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: jt.isChatAvailable ? Colors.green : Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Divider(height: 8),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildChatTile(BuildContext context, JoinedTour jt) {
