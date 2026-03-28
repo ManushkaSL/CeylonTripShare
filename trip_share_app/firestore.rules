@@ -2,10 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Helper function to check if the user is an admin
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Users collection - each user has a profile
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
+      allow write: if request.auth.uid == userId || isAdmin();
     }
 
     // ROOT-LEVEL MESSAGES COLLECTION
@@ -19,7 +25,7 @@ service cloud.firestore {
                     request.resource.data.senderName is string &&
                     request.resource.data.timestamp is timestamp;
       allow delete: if request.auth != null && 
-                    resource.data.senderId == request.auth.uid;
+                    (resource.data.senderId == request.auth.uid || isAdmin());
       allow update: if false; // Messages cannot be edited
     }
 
@@ -31,34 +37,34 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                     request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
-                            resource.data.userId == request.auth.uid;
+                            (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Tours collection - public read, guide creates/edits
+    // Tours collection - public read, guide & admin creates/edits
     match /tours/{tourId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.guideId;
-      allow update: if request.auth != null && request.auth.uid == resource.data.guideId;
-      allow delete: if request.auth != null && request.auth.uid == resource.data.guideId;
+      allow read: if true; // Publicly visible so admin pages or public catalogs can read them easily
+      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
+      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
 
       // Bookings subcollection
-      match /bookings/{bookingId} {
+      match /bookings/{subBookingId} {
         allow read: if request.auth != null;
         allow create: if request.auth != null && 
                       request.resource.data.userId == request.auth.uid;
         allow update, delete: if request.auth != null && 
-                              resource.data.userId == request.auth.uid;
+                              (resource.data.userId == request.auth.uid || isAdmin());
       }
     }
 
     // Joined tours (user booking records)
     match /joinedTours/{joinedTourId} {
       allow read: if request.auth != null && 
-                           resource.data.userId == request.auth.uid;
+                           (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if request.auth != null && 
                            request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
-                            resource.data.userId == request.auth.uid;
+                            (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Driver live-location sharing
@@ -67,9 +73,9 @@ service cloud.firestore {
     match /driver_locations/{tourId} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && 
-                            request.resource.data.driverId == request.auth.uid;
+                            (request.resource.data.driverId == request.auth.uid || isAdmin());
       allow delete: if request.auth != null && 
-                    resource.data.driverId == request.auth.uid;
+                    (resource.data.driverId == request.auth.uid || isAdmin());
     }
 
     // Deny all other access
@@ -78,4 +84,3 @@ service cloud.firestore {
     }
   }
 }
-
