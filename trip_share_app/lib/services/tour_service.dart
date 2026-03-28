@@ -13,27 +13,50 @@ class TourService {
     try {
       final dateStr = map['booking_close_date'] as String?;
       final timeStr = map['booking_close_time'] as String?;
-      final periodStr = map['booking_close_period'] as String?;
 
-      if (dateStr == null || timeStr == null || periodStr == null) {
+      if (dateStr == null || timeStr == null) {
         return null;
       }
 
-      // Parse date: "2026-03-20"
+      // Parse date: "2026-03-28"
       final date = DateTime.parse(dateStr);
 
-      // Parse time: "2" or "02" and period: "AM" or "PM"
-      int hour = int.parse(timeStr.replaceAll(RegExp(r'\D'), ''));
+      // Parse time: "10:29 PM" or "10 PM" or "2 PM"
+      // Extract hour and minute
+      final timeParts = timeStr.trim().split(RegExp(r'[\s:]'));
+
+      int hour = int.tryParse(timeParts[0]) ?? 0;
+      int minute = 0;
+
+      // Check if there's minute info
+      if (timeParts.length > 1) {
+        // Check if second part is minute (numeric) or period (AM/PM)
+        final secondPart = timeParts[1];
+        if (int.tryParse(secondPart) != null) {
+          minute = int.parse(secondPart);
+          // Period would be in third part if present
+        }
+      }
 
       // Convert 12-hour format to 24-hour
-      if (periodStr.toUpperCase() == 'PM' && hour != 12) {
+      // Check if time contains "PM" in the original string
+      final isPM = timeStr.toUpperCase().contains('PM');
+      final isAM = timeStr.toUpperCase().contains('AM');
+
+      if (isPM && hour != 12) {
         hour += 12;
-      } else if (periodStr.toUpperCase() == 'AM' && hour == 12) {
+      } else if (isAM && hour == 12) {
         hour = 0;
       }
 
       // Combine into DateTime
-      final closeDateTime = DateTime(date.year, date.month, date.day, hour, 0);
+      final closeDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        hour,
+        minute,
+      );
       return closeDateTime;
     } catch (e) {
       debugPrint('⚠️ Error parsing booking close time: $e');
@@ -59,9 +82,6 @@ class TourService {
       _pick(map, ['imageUrl', 'image', 'image_url', 'thumbnail']),
     );
 
-    debugPrint('🔍 Parsing tour: ${map['name'] ?? 'Unknown'}');
-    debugPrint('   Raw map keys: ${map.keys.toList()}');
-
     final seatInfo = _pick(map, ['seatInfo', 'seat_info', 'capacityInfo']);
 
     var totalSeats = _intFrom(
@@ -76,8 +96,6 @@ class TourService {
         'max_seats',
       ]),
     );
-
-    debugPrint('   totalSeats found: $totalSeats');
 
     dynamic remainingSeatsField = _pick(map, [
       'remainingSeats',
@@ -159,22 +177,15 @@ class TourService {
 
     if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
       totalSeats = resolvedRemainingSeats;
-      debugPrint('   ⚠️ Inferred totalSeats from remaining: $totalSeats');
     }
 
     if (totalSeats <= 0) {
       totalSeats = 1;
-      debugPrint('   ⚠️ Defaulting totalSeats to 1');
     }
 
     if (resolvedRemainingSeats <= 0 && totalSeats > 0) {
       resolvedRemainingSeats = totalSeats;
-      debugPrint('   ⚠️ No remaining seats found, defaulting to totalSeats');
     }
-
-    debugPrint(
-      '   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats',
-    );
 
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 

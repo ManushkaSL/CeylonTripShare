@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
 import { db } from './firebase';
@@ -224,6 +224,7 @@ export default function App() {
   const [routeInput, setRouteInput] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [activeSection, setActiveSection] = useState<'tours' | 'drivers'>('tours');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogout = () => {
@@ -614,10 +615,28 @@ export default function App() {
           </h1>
         </div>
         <nav className="flex-1 p-4 space-y-1">
-          <a href="#" className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-lg">
+          <button
+            onClick={() => setActiveSection('tours')}
+            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
+              activeSection === 'tours'
+                ? 'text-emerald-600 bg-emerald-50'
+                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+            }`}
+          >
             <LayoutDashboard className="w-4 h-4" />
             Tours Management
-          </a>
+          </button>
+          <button
+            onClick={() => setActiveSection('drivers')}
+            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
+              activeSection === 'drivers'
+                ? 'text-emerald-600 bg-emerald-50'
+                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Driver Management
+          </button>
         </nav>
         <div className="p-4 border-t border-zinc-100">
           <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors w-full">
@@ -630,16 +649,21 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8 sticky top-0 z-10">
-          <h2 className="text-lg font-semibold text-zinc-900">Tours Management</h2>
-          <button
-            onClick={openCreateTourModal}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Tour
-          </button>
+          <h2 className="text-lg font-semibold text-zinc-900">
+            {activeSection === 'tours' ? 'Tours Management' : 'Driver Management'}
+          </h2>
+          {activeSection === 'tours' && (
+            <button
+              onClick={openCreateTourModal}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              Add New Tour
+            </button>
+          )}
         </header>
 
+        {activeSection === 'tours' && (
         <div className="p-8 max-w-7xl mx-auto w-full">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -746,6 +770,19 @@ export default function App() {
             </div>
           )}
         </div>
+        )}
+
+        {activeSection === 'drivers' && (
+        <div className="p-8 max-w-7xl mx-auto w-full">
+          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-zinc-200">
+            <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-zinc-300" />
+            </div>
+            <h3 className="text-lg font-semibold text-zinc-900 mb-1">Driver Management</h3>
+            <p className="text-zinc-500 mb-6">Coming soon - Driver management features will be available here.</p>
+          </div>
+        </div>
+        )}
       </main>
 
       {/* Add Tour Modal */}
