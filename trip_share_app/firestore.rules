@@ -5,7 +5,7 @@ service cloud.firestore {
     // Helper function to check if the user is an admin
     function isAdmin() {
       return request.auth != null && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+             exists(/databases/$(database)/documents/admin_users/$(request.auth.email));
     }
 
     // Users collection - each user has a profile
