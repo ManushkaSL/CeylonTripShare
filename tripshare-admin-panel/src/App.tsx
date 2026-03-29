@@ -233,9 +233,7 @@ export default function App() {
 
       // Query Firestore users collection to find the user by email
       try {
-        const usersQuery = query(collection(db, 'users'), 
-          orderBy('email')
-        );
+        const usersQuery = query(collection(db, 'users'));
         const querySnapshot = await getDocs(usersQuery);
         
         let userFound = false;
