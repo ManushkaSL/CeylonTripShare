@@ -215,17 +215,16 @@ export default function App() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
 
-      // After Firebase Auth succeeds, check Firestore for admin role
-      const userDocSnapshot = await getDocs(
-        query(collection(db, 'users'))
-      );
+      // After Firebase Auth succeeds, check admin_users collection
+      const adminDocRef = doc(db, 'admin_users', email.toLowerCase());
+      const adminDocSnapshot = await getDocs(query(collection(db, 'admin_users')));
       
       let isAdmin = false;
       let userId = '';
 
-      for (const docSnapshot of userDocSnapshot.docs) {
+      for (const docSnapshot of adminDocSnapshot.docs) {
         const userData = docSnapshot.data();
-        if (userData.email === email.toLowerCase() && userData.role === 'admin') {
+        if (userData.email?.toLowerCase() === email.toLowerCase()) {
           isAdmin = true;
           userId = docSnapshot.id;
           break;
