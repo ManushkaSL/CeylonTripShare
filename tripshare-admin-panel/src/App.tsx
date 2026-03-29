@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
 import { db } from './firebase';
 import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { supabase } from './supabase';
 
 const SUPABASE_BUCKET = 'images';
@@ -208,87 +209,55 @@ export default function App() {
     setLoginError('');
 
     try {
-      /**
-       * ROLE-BASED ACCESS CONTROL (RBAC)
-       * 
-       * This login function:
-       * 1. First checks test credentials (admin@gmail.com / admin123)
-       * 2. Then queries Firestore 'users' collection for the entered email
-       * 3. Verifies the password matches
-       * 4. CRITICAL: Checks if user's role is "admin"
-       * 5. Only grants access if role === "admin"
-       */
+      const auth = getAuth();
       
-      // Test credentials fallback (for development/testing)
-      if (email.toLowerCase() === 'admin@gmail.com' && password === 'admin123') {
-        setIsAuthenticated(true);
-        setUserRole('admin');
-        sessionStorage.setItem('admin_auth', 'true');
-        sessionStorage.setItem('admin_role', 'admin');
-        sessionStorage.setItem('admin_user_id', 'test-admin');
-        sessionStorage.setItem('admin_email', email);
+      // Authenticate with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+
+      // After Firebase Auth succeeds, check Firestore for admin role
+      const userDocSnapshot = await getDocs(
+        query(collection(db, 'users'))
+      );
+      
+      let isAdmin = false;
+      let userId = '';
+
+      for (const docSnapshot of userDocSnapshot.docs) {
+        const userData = docSnapshot.data();
+        if (userData.email === email.toLowerCase() && userData.role === 'admin') {
+          isAdmin = true;
+          userId = docSnapshot.id;
+          break;
+        }
+      }
+
+      if (!isAdmin) {
+        await signOut(auth);
+        setLoginError('Unauthorized: Only users with admin role can access this dashboard');
         setIsLoggingIn(false);
         return;
       }
 
-      // Query Firestore users collection to find the user by email
-      try {
-        const usersQuery = query(collection(db, 'users'));
-        const querySnapshot = await getDocs(usersQuery);
-        
-        let userFound = false;
-        let userRole = '';
-        let userId = '';
-
-        for (const docSnapshot of querySnapshot.docs) {
-          const userData = docSnapshot.data();
-          if (userData.email === email.toLowerCase()) {
-            userFound = true;
-            userRole = userData.role || '';
-            userId = docSnapshot.id;
-            
-            // Verify password (in production, use proper authentication like Firebase Auth)
-            if (userData.password === password) {
-              break;
-            } else {
-              setLoginError('Invalid email or password');
-              setIsLoggingIn(false);
-              return;
-            }
-          }
-        }
-
-        if (!userFound) {
-          setLoginError('Invalid email or password');
-          setIsLoggingIn(false);
-          return;
-        }
-
-        // Check if user's role is admin
-        if (userRole.toLowerCase() !== 'admin') {
-          setLoginError('Unauthorized: Only users with admin role can access this dashboard');
-          setIsLoggingIn(false);
-          return;
-        }
-
-        // Set authentication with user role
-        setIsAuthenticated(true);
-        setUserRole(userRole);
-        sessionStorage.setItem('admin_auth', 'true');
-        sessionStorage.setItem('admin_role', userRole);
-        sessionStorage.setItem('admin_user_id', userId);
-        sessionStorage.setItem('admin_email', email);
-      } catch (firestoreError) {
-        // If Firestore isn't set up, reject
-        console.error('Firestore error:', firestoreError);
-        setLoginError('Invalid email or password');
-        setIsLoggingIn(false);
-        return;
-      }
-
-    } catch (error) {
+      // Set authentication
+      setIsAuthenticated(true);
+      setUserRole('admin');
+      sessionStorage.setItem('admin_auth', 'true');
+      sessionStorage.setItem('admin_role', 'admin');
+      sessionStorage.setItem('admin_user_id', userId);
+      sessionStorage.setItem('admin_email', email);
+      setEmail('');
+      setPassword('');
+      
+    } catch (error: any) {
       console.error('Login error:', error);
-      setLoginError('An error occurred during login. Please try again.');
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setLoginError('Invalid email or password');
+      } else if (error.code === 'auth/too-many-requests') {
+        setLoginError('Too many failed login attempts. Please try again later.');
+      } else {
+        setLoginError('An error occurred during login. Please try again.');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -315,7 +284,14 @@ export default function App() {
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const auth = getAuth();
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+    
     setIsAuthenticated(false);
     setUserRole('');
     sessionStorage.removeItem('admin_auth');
@@ -325,6 +301,27 @@ export default function App() {
     setEmail('');
     setPassword('');
   };
+
+  // Monitor Firebase authentication state
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && sessionStorage.getItem('admin_auth') === 'true') {
+        // User is logged in and has admin session
+        setIsAuthenticated(true);
+      } else {
+        // User is not logged in or session expired
+        setIsAuthenticated(false);
+        setUserRole('');
+        sessionStorage.removeItem('admin_auth');
+        sessionStorage.removeItem('admin_role');
+        sessionStorage.removeItem('admin_user_id');
+        sessionStorage.removeItem('admin_email');
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const closeTourModal = () => {
     setIsAdding(false);
