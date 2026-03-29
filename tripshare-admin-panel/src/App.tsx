@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
 import { db } from './firebase';
 import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { supabase } from './supabase';
 
 const SUPABASE_BUCKET = 'images';
@@ -209,55 +208,62 @@ export default function App() {
     setLoginError('');
 
     try {
-      const auth = getAuth();
-      
-      // Authenticate with Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const firebaseUser = userCredential.user;
-
-      // After Firebase Auth succeeds, check admin_users collection
-      const adminDocRef = doc(db, 'admin_users', email.toLowerCase());
-      const adminDocSnapshot = await getDocs(query(collection(db, 'admin_users')));
-      
-      let isAdmin = false;
-      let userId = '';
-
-      for (const docSnapshot of adminDocSnapshot.docs) {
-        const userData = docSnapshot.data();
-        if (userData.email?.toLowerCase() === email.toLowerCase()) {
-          isAdmin = true;
-          userId = docSnapshot.id;
-          break;
-        }
-      }
-
-      if (!isAdmin) {
-        await signOut(auth);
-        setLoginError('Unauthorized: Only users with admin role can access this dashboard');
+      // Test credentials (for development)
+      if (email.toLowerCase() === 'admin@gmail.com' && password === 'admin123') {
+        setIsAuthenticated(true);
+        setUserRole('admin');
+        sessionStorage.setItem('admin_auth', 'true');
+        sessionStorage.setItem('admin_role', 'admin');
+        sessionStorage.setItem('admin_user_id', 'test-admin');
+        sessionStorage.setItem('admin_email', email);
+        setEmail('');
+        setPassword('');
         setIsLoggingIn(false);
         return;
       }
 
-      // Set authentication
-      setIsAuthenticated(true);
-      setUserRole('admin');
-      sessionStorage.setItem('admin_auth', 'true');
-      sessionStorage.setItem('admin_role', 'admin');
-      sessionStorage.setItem('admin_user_id', userId);
-      sessionStorage.setItem('admin_email', email);
-      setEmail('');
-      setPassword('');
-      
-    } catch (error: any) {
-      console.error('Login error:', error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      // For production: Query Firestore for admin users
+      try {
+        const adminQuery = query(collection(db, 'admin_users'), orderBy('email'));
+        const adminSnapshot = await getDocs(adminQuery);
+        
+        let userFound = false;
+        let userId = '';
+
+        for (const docSnapshot of adminSnapshot.docs) {
+          const userData = docSnapshot.data();
+          if (userData.email?.toLowerCase() === email.toLowerCase()) {
+            userFound = true;
+            userId = docSnapshot.id;
+            
+            // Verify password
+            if (userData.password === password) {
+              setIsAuthenticated(true);
+              setUserRole('admin');
+              sessionStorage.setItem('admin_auth', 'true');
+              sessionStorage.setItem('admin_role', 'admin');
+              sessionStorage.setItem('admin_user_id', userId);
+              sessionStorage.setItem('admin_email', email);
+              setEmail('');
+              setPassword('');
+              setIsLoggingIn(false);
+              return;
+            }
+            break;
+          }
+        }
+
+        // User not found or wrong password
         setLoginError('Invalid email or password');
-      } else if (error.code === 'auth/too-many-requests') {
-        setLoginError('Too many failed login attempts. Please try again later.');
-      } else {
-        setLoginError('An error occurred during login. Please try again.');
+        setIsLoggingIn(false);
+      } catch (firestoreError) {
+        console.error('Firestore error:', firestoreError);
+        setLoginError('Invalid email or password');
+        setIsLoggingIn(false);
       }
-    } finally {
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError('An error occurred during login. Please try again.');
       setIsLoggingIn(false);
     }
   };
@@ -283,14 +289,7 @@ export default function App() {
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogout = async () => {
-    try {
-      const auth = getAuth();
-      await signOut(auth);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-    
+  const handleLogout = () => {
     setIsAuthenticated(false);
     setUserRole('');
     sessionStorage.removeItem('admin_auth');
@@ -301,25 +300,14 @@ export default function App() {
     setPassword('');
   };
 
-  // Monitor Firebase authentication state
+  // Check authentication state on mount
   useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && sessionStorage.getItem('admin_auth') === 'true') {
-        // User is logged in and has admin session
-        setIsAuthenticated(true);
-      } else {
-        // User is not logged in or session expired
-        setIsAuthenticated(false);
-        setUserRole('');
-        sessionStorage.removeItem('admin_auth');
-        sessionStorage.removeItem('admin_role');
-        sessionStorage.removeItem('admin_user_id');
-        sessionStorage.removeItem('admin_email');
-      }
-    });
-
-    return () => unsubscribe();
+    const storedAuth = sessionStorage.getItem('admin_auth') === 'true';
+    const storedRole = sessionStorage.getItem('admin_role');
+    if (storedAuth && storedRole) {
+      setIsAuthenticated(true);
+      setUserRole(storedRole);
+    }
   }, []);
 
   const closeTourModal = () => {
