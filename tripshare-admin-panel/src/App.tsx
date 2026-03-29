@@ -196,18 +196,85 @@ export default function App() {
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('admin_auth') === 'true');
+  const [userRole, setUserRole] = useState(() => sessionStorage.getItem('admin_role') || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'admin@gmail.com' && password === 'admin123') {
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    try {
+      /**
+       * ROLE-BASED ACCESS CONTROL (RBAC)
+       * 
+       * This login function:
+       * 1. Queries the Firestore 'users' collection for the entered email
+       * 2. Verifies the password matches
+       * 3. CRITICAL: Checks if user's role is "admin"
+       * 4. Only grants access if role === "admin"
+       * 
+       * Users without admin role are rejected with:
+       * "Unauthorized: Only users with admin role can access this dashboard"
+       */
+      
+      // Query the users collection to find the user by email
+      const usersQuery = query(collection(db, 'users'), 
+        orderBy('email')
+      );
+      const querySnapshot = await getDocs(usersQuery);
+      
+      let userFound = false;
+      let userRole = '';
+      let userId = '';
+
+      for (const docSnapshot of querySnapshot.docs) {
+        const userData = docSnapshot.data();
+        if (userData.email === email.toLowerCase()) {
+          userFound = true;
+          userRole = userData.role || '';
+          userId = docSnapshot.id;
+          
+          // Verify password (in production, use proper authentication like Firebase Auth)
+          if (userData.password === password) {
+            break;
+          } else {
+            setLoginError('Invalid email or password');
+            setIsLoggingIn(false);
+            return;
+          }
+        }
+      }
+
+      if (!userFound) {
+        setLoginError('Invalid email or password');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Check if user's role is admin
+      if (userRole.toLowerCase() !== 'admin') {
+        setLoginError('Unauthorized: Only users with admin role can access this dashboard');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Set authentication with user role
       setIsAuthenticated(true);
+      setUserRole(userRole);
       sessionStorage.setItem('admin_auth', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('Invalid email or password');
+      sessionStorage.setItem('admin_role', userRole);
+      sessionStorage.setItem('admin_user_id', userId);
+      sessionStorage.setItem('admin_email', email);
+
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError('An error occurred during login. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -234,7 +301,13 @@ export default function App() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setUserRole('');
     sessionStorage.removeItem('admin_auth');
+    sessionStorage.removeItem('admin_role');
+    sessionStorage.removeItem('admin_user_id');
+    sessionStorage.removeItem('admin_email');
+    setEmail('');
+    setPassword('');
   };
 
   const closeTourModal = () => {
@@ -404,6 +477,12 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      // Verify user role is still admin
+      const storedRole = sessionStorage.getItem('admin_role');
+      if (storedRole?.toLowerCase() !== 'admin') {
+        handleLogout();
+        return;
+      }
       fetchTours();
       fetchDrivers();
     }
@@ -422,7 +501,11 @@ export default function App() {
               <LayoutDashboard className="w-8 h-8 text-emerald-600" />
             </div>
             <h1 className="text-2xl font-bold text-zinc-900">TripShare Admin</h1>
-            <p className="text-zinc-500 text-sm mt-1">Sign in to access the admin panel</p>
+            <p className="text-zinc-500 text-sm mt-1">Admin role required to access this panel</p>
+            <div className="flex items-center gap-2 px-3 py-2 mt-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <Lock className="w-4 h-4 text-blue-600" />
+              <span className="text-xs text-blue-700">Only users with <strong>admin</strong> role can access</span>
+            </div>
           </div>
 
           <form onSubmit={handleLogin} className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-8 space-y-5">
@@ -461,9 +544,17 @@ export default function App() {
             </div>
             <button
               type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+              disabled={isLoggingIn}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              Sign In
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
         </motion.div>
@@ -713,7 +804,16 @@ export default function App() {
           </button>
         </nav>
         <div className="p-4 border-t border-zinc-100">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors w-full">
+          <div className="px-4 py-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-200">
+            <p className="text-xs font-medium text-zinc-600 mb-1">Logged in as</p>
+            <p className="text-sm font-semibold text-zinc-900 truncate">{sessionStorage.getItem('admin_email') || email}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-emerald-600 rounded-full">
+                {userRole || 'ADMIN'}
+              </span>
+            </div>
+          </div>
+          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors w-full rounded-lg hover:bg-zinc-50">
             <LogOut className="w-4 h-4" />
             Sign Out
           </button>
@@ -723,9 +823,15 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8 sticky top-0 z-10">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            {activeSection === 'tours' ? 'Tours Management' : 'Driver Management'}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-zinc-900">
+              {activeSection === 'tours' ? 'Tours Management' : 'Driver Management'}
+            </h2>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+              <Lock className="w-3 h-3" />
+              Admin Access
+            </span>
+          </div>
           {activeSection === 'tours' && (
             <button
               onClick={openCreateTourModal}
@@ -1073,7 +1179,7 @@ export default function App() {
               <div className="p-7 overflow-y-auto bg-zinc-50/50">
                 <form onSubmit={handleAddTour} className="space-y-6">
                   {createError && (
-                    <div className="bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100 break-words">
+                    <div className="bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100 break-all">
                       {createError}
                     </div>
                   )}

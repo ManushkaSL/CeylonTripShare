@@ -55,17 +55,20 @@ class AuthService extends ChangeNotifier {
       final docSnapshot = await userDoc.get();
 
       if (!docSnapshot.exists) {
-        // First time login - create user document with default role
+        // First time login - create user document with role check
+        final String userRole = user.email == 'admin@gmail.com'
+            ? 'admin'
+            : 'passenger';
         await userDoc.set({
           'uid': user.uid,
           'email': user.email,
           'name': user.displayName ?? user.email?.split('@').first ?? 'User',
           'photoUrl': user.photoURL ?? '',
-          'role': 'passenger', // Default role
+          'role': userRole,
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': FieldValue.serverTimestamp(),
         });
-        debugPrint('✅ New user created in Firestore with role: passenger');
+        debugPrint('✅ New user created in Firestore with role: $userRole');
       } else {
         // Existing user - just update lastLogin
         await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
