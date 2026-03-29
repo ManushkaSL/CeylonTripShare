@@ -7,8 +7,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour } from './types';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase';
 
 const SUPABASE_BUCKET = 'images';
@@ -208,62 +209,19 @@ export default function App() {
     setLoginError('');
 
     try {
-      // Test credentials (for development)
-      if (email.toLowerCase() === 'admin@gmail.com' && password === 'admin123') {
-        setIsAuthenticated(true);
-        setUserRole('admin');
-        sessionStorage.setItem('admin_auth', 'true');
-        sessionStorage.setItem('admin_role', 'admin');
-        sessionStorage.setItem('admin_user_id', 'test-admin');
-        sessionStorage.setItem('admin_email', email);
-        setEmail('');
-        setPassword('');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // For production: Query Firestore for admin users
-      try {
-        const adminQuery = query(collection(db, 'admin_users'), orderBy('email'));
-        const adminSnapshot = await getDocs(adminQuery);
-        
-        let userFound = false;
-        let userId = '';
-
-        for (const docSnapshot of adminSnapshot.docs) {
-          const userData = docSnapshot.data();
-          if (userData.email?.toLowerCase() === email.toLowerCase()) {
-            userFound = true;
-            userId = docSnapshot.id;
-            
-            // Verify password
-            if (userData.password === password) {
-              setIsAuthenticated(true);
-              setUserRole('admin');
-              sessionStorage.setItem('admin_auth', 'true');
-              sessionStorage.setItem('admin_role', 'admin');
-              sessionStorage.setItem('admin_user_id', userId);
-              sessionStorage.setItem('admin_email', email);
-              setEmail('');
-              setPassword('');
-              setIsLoggingIn(false);
-              return;
-            }
-            break;
-          }
-        }
-
-        // User not found or wrong password
-        setLoginError('Invalid email or password');
-        setIsLoggingIn(false);
-      } catch (firestoreError) {
-        console.error('Firestore error:', firestoreError);
-        setLoginError('Invalid email or password');
-        setIsLoggingIn(false);
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setLoginError('An error occurred during login. Please try again.');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setIsAuthenticated(true);
+      setUserRole('admin');
+      sessionStorage.setItem('admin_user_id', userCredential.user.uid);
+      sessionStorage.setItem('admin_email', email);
+      setEmail('');
+      setPassword('');
+    } catch (error: any) {
+      const errorMessage = error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password'
+        ? 'Invalid email or password'
+        : error?.message || 'An error occurred during login. Please try again.';
+      setLoginError(errorMessage);
+    } finally {
       setIsLoggingIn(false);
     }
   };
@@ -289,25 +247,36 @@ export default function App() {
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setUserRole('');
-    sessionStorage.removeItem('admin_auth');
-    sessionStorage.removeItem('admin_role');
-    sessionStorage.removeItem('admin_user_id');
-    sessionStorage.removeItem('admin_email');
-    setEmail('');
-    setPassword('');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsAuthenticated(false);
+      setUserRole('');
+      sessionStorage.removeItem('admin_user_id');
+      sessionStorage.removeItem('admin_email');
+      setEmail('');
+      setPassword('');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   // Check authentication state on mount
   useEffect(() => {
-    const storedAuth = sessionStorage.getItem('admin_auth') === 'true';
-    const storedRole = sessionStorage.getItem('admin_role');
-    if (storedAuth && storedRole) {
-      setIsAuthenticated(true);
-      setUserRole(storedRole);
-    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+        setUserRole('admin');
+        sessionStorage.setItem('admin_user_id', user.uid);
+        sessionStorage.setItem('admin_email', user.email || '');
+      } else {
+        setIsAuthenticated(false);
+        setUserRole('');
+        sessionStorage.removeItem('admin_user_id');
+        sessionStorage.removeItem('admin_email');
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   const closeTourModal = () => {
@@ -477,12 +446,6 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Verify user role is still admin
-      const storedRole = sessionStorage.getItem('admin_role');
-      if (storedRole?.toLowerCase() !== 'admin') {
-        handleLogout();
-        return;
-      }
       fetchTours();
       fetchDrivers();
     }
@@ -690,6 +653,7 @@ export default function App() {
         operator_name: newTour.operator_name || '',
         whats_included: newTour.whats_included || '',
         tour_features: newTour.tour_features || '',
+        guideId: sessionStorage.getItem('admin_user_id') || '',
       };
 
       if (isEditMode && editingTourId) {
