@@ -78,9 +78,9 @@ service cloud.firestore {
                     (resource.data.driverId == request.auth.uid || isAdmin());
     }
 
-    // Admin users collection - readable by web/admin panel for login verification
+    // Admin users collection - readable by authenticated web/admin panel
     match /admin_users/{document=**} {
-      allow read: if true;  // Web client can read to verify admin
+      allow read: if request.auth != null;  // Authenticated users can read
       allow write: if false; // Protect against client writes
     }
 
