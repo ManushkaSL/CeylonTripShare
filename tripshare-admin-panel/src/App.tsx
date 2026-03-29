@@ -212,63 +212,81 @@ export default function App() {
        * ROLE-BASED ACCESS CONTROL (RBAC)
        * 
        * This login function:
-       * 1. Queries the Firestore 'users' collection for the entered email
-       * 2. Verifies the password matches
-       * 3. CRITICAL: Checks if user's role is "admin"
-       * 4. Only grants access if role === "admin"
-       * 
-       * Users without admin role are rejected with:
-       * "Unauthorized: Only users with admin role can access this dashboard"
+       * 1. First checks test credentials (admin@gmail.com / admin123)
+       * 2. Then queries Firestore 'users' collection for the entered email
+       * 3. Verifies the password matches
+       * 4. CRITICAL: Checks if user's role is "admin"
+       * 5. Only grants access if role === "admin"
        */
       
-      // Query the users collection to find the user by email
-      const usersQuery = query(collection(db, 'users'), 
-        orderBy('email')
-      );
-      const querySnapshot = await getDocs(usersQuery);
-      
-      let userFound = false;
-      let userRole = '';
-      let userId = '';
-
-      for (const docSnapshot of querySnapshot.docs) {
-        const userData = docSnapshot.data();
-        if (userData.email === email.toLowerCase()) {
-          userFound = true;
-          userRole = userData.role || '';
-          userId = docSnapshot.id;
-          
-          // Verify password (in production, use proper authentication like Firebase Auth)
-          if (userData.password === password) {
-            break;
-          } else {
-            setLoginError('Invalid email or password');
-            setIsLoggingIn(false);
-            return;
-          }
-        }
+      // Test credentials fallback (for development/testing)
+      if (email.toLowerCase() === 'admin@gmail.com' && password === 'admin123') {
+        setIsAuthenticated(true);
+        setUserRole('admin');
+        sessionStorage.setItem('admin_auth', 'true');
+        sessionStorage.setItem('admin_role', 'admin');
+        sessionStorage.setItem('admin_user_id', 'test-admin');
+        sessionStorage.setItem('admin_email', email);
+        setIsLoggingIn(false);
+        return;
       }
 
-      if (!userFound) {
+      // Query Firestore users collection to find the user by email
+      try {
+        const usersQuery = query(collection(db, 'users'), 
+          orderBy('email')
+        );
+        const querySnapshot = await getDocs(usersQuery);
+        
+        let userFound = false;
+        let userRole = '';
+        let userId = '';
+
+        for (const docSnapshot of querySnapshot.docs) {
+          const userData = docSnapshot.data();
+          if (userData.email === email.toLowerCase()) {
+            userFound = true;
+            userRole = userData.role || '';
+            userId = docSnapshot.id;
+            
+            // Verify password (in production, use proper authentication like Firebase Auth)
+            if (userData.password === password) {
+              break;
+            } else {
+              setLoginError('Invalid email or password');
+              setIsLoggingIn(false);
+              return;
+            }
+          }
+        }
+
+        if (!userFound) {
+          setLoginError('Invalid email or password');
+          setIsLoggingIn(false);
+          return;
+        }
+
+        // Check if user's role is admin
+        if (userRole.toLowerCase() !== 'admin') {
+          setLoginError('Unauthorized: Only users with admin role can access this dashboard');
+          setIsLoggingIn(false);
+          return;
+        }
+
+        // Set authentication with user role
+        setIsAuthenticated(true);
+        setUserRole(userRole);
+        sessionStorage.setItem('admin_auth', 'true');
+        sessionStorage.setItem('admin_role', userRole);
+        sessionStorage.setItem('admin_user_id', userId);
+        sessionStorage.setItem('admin_email', email);
+      } catch (firestoreError) {
+        // If Firestore isn't set up, reject
+        console.error('Firestore error:', firestoreError);
         setLoginError('Invalid email or password');
         setIsLoggingIn(false);
         return;
       }
-
-      // Check if user's role is admin
-      if (userRole.toLowerCase() !== 'admin') {
-        setLoginError('Unauthorized: Only users with admin role can access this dashboard');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // Set authentication with user role
-      setIsAuthenticated(true);
-      setUserRole(userRole);
-      sessionStorage.setItem('admin_auth', 'true');
-      sessionStorage.setItem('admin_role', userRole);
-      sessionStorage.setItem('admin_user_id', userId);
-      sessionStorage.setItem('admin_email', email);
 
     } catch (error) {
       console.error('Login error:', error);
