@@ -49,7 +49,11 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Create or update user document in Firestore with default role "passenger"
-  Future<void> _createOrUpdateUserInFirestore(User user) async {
+  Future<void> _createOrUpdateUserInFirestore(
+    User user, {
+    String phoneNumber = '',
+    String countryCode = '',
+  }) async {
     try {
       final userDoc = _firestore.collection('users').doc(user.uid);
       final docSnapshot = await userDoc.get();
@@ -64,14 +68,27 @@ class AuthService extends ChangeNotifier {
           'email': user.email,
           'name': user.displayName ?? user.email?.split('@').first ?? 'User',
           'photoUrl': user.photoURL ?? '',
+          'phoneNumber': phoneNumber,
+          'countryCode': countryCode,
           'role': userRole,
+          'joinedTourIds': [],
+          'startedTourIds': [],
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': FieldValue.serverTimestamp(),
         });
         debugPrint('✅ New user created in Firestore with role: $userRole');
       } else {
         // Existing user - just update lastLogin
-        await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+        // Only update phone if it was provided and is not empty
+        if (phoneNumber.isNotEmpty && countryCode.isNotEmpty) {
+          await userDoc.update({
+            'phoneNumber': phoneNumber,
+            'countryCode': countryCode,
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+        } else {
+          await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+        }
         debugPrint('✅ User login updated in Firestore');
       }
     } catch (e) {
@@ -152,6 +169,8 @@ class AuthService extends ChangeNotifier {
     required String username,
     required String email,
     required String password,
+    required String phoneNumber,
+    required String countryCode,
   }) async {
     try {
       debugPrint('Registering user: $email');
@@ -181,9 +200,13 @@ class AuthService extends ChangeNotifier {
 
       debugPrint('Registration completed for: $email');
 
-      // Create user document in Firestore with role
+      // Create user document in Firestore with phone info
       if (credential.user != null) {
-        await _createOrUpdateUserInFirestore(credential.user!);
+        await _createOrUpdateUserInFirestore(
+          credential.user!,
+          phoneNumber: phoneNumber,
+          countryCode: countryCode,
+        );
       }
 
       return null;

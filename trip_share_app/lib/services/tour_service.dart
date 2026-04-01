@@ -228,6 +228,12 @@ class TourService {
       tourFeatures: _toStringList(
         _pick(map, ['tourFeatures', 'features', 'highlights']),
       ),
+      firstBookedUserId: _stringFrom(
+        _pick(map, ['firstBookedUserId', 'first_booked_user_id']),
+      ),
+      bookedUserIds: _toStringList(
+        _pick(map, ['bookedUserIds', 'booked_user_ids', 'bookedUsers']),
+      ),
     );
   }
 

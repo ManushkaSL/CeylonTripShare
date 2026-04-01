@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users } from 'lucide-react';
+import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tour } from './types';
+import { Tour, Booking } from './types';
 import { db, auth } from './firebase';
 import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -239,12 +239,14 @@ export default function App() {
   const [routeInput, setRouteInput] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [activeSection, setActiveSection] = useState<'tours' | 'drivers'>('tours');
+  const [activeSection, setActiveSection] = useState<'tours' | 'drivers' | 'bookings'>('tours');
   const [drivers, setDrivers] = useState<any[]>([]);
   const [driverEmail, setDriverEmail] = useState('');
   const [addingDriver, setAddingDriver] = useState(false);
   const [driverError, setDriverError] = useState('');
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogout = async () => {
@@ -426,9 +428,12 @@ export default function App() {
       setDriverEmail('');
       await fetchDrivers();
       alert('Driver email added successfully! They can now sign up with this email to access the driver dashboard.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add driver:', error);
-      setDriverError('Failed to add driver. Please try again.');
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      const errorMsg = error.message || 'Failed to add driver. Please try again.';
+      setDriverError(errorMsg);
     } finally {
       setAddingDriver(false);
     }
@@ -444,10 +449,87 @@ export default function App() {
     }
   };
 
+  const fetchBookings = async () => {
+    setBookingsLoading(true);
+    try {
+      const q = query(collection(db, 'bookings'));
+      const querySnapshot = await getDocs(q);
+      const bookingsData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Booking data from Firestore:', data);
+        return {
+          id: doc.id,
+          ...data
+        } as Booking;
+      });
+      console.log('Fetched bookings:', bookingsData);
+      setBookings(bookingsData);
+    } catch (error: any) {
+      console.error('Failed to fetch bookings:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  const updateBookingStatus = async (bookingId: string, newStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+      await fetchBookings();
+    } catch (error) {
+      console.error('Failed to update booking status:', error);
+      alert('Failed to update booking status');
+    }
+  };
+
+  const deleteBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to delete this booking?')) return;
+    try {
+      const userId = sessionStorage.getItem('admin_user_id');
+      console.log('Attempting to delete booking:', bookingId);
+      console.log('Admin user ID:', userId);
+      await deleteDoc(doc(db, 'bookings', bookingId));
+      console.log('Booking deleted successfully');
+      await fetchBookings();
+    } catch (error: any) {
+      console.error('Full delete error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      alert(`Failed to delete booking: ${error.message}`);
+    }
+  };
+
+  const assignDriverToBooking = async (bookingId: string, driverId: string) => {
+    try {
+      const selectedDriver = drivers.find(d => d.id === driverId);
+      if (!selectedDriver) return;
+
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        driverId: driverId,
+        driverName: selectedDriver.name || selectedDriver.email,
+        driverEmail: selectedDriver.email,
+        updatedAt: serverTimestamp()
+      });
+      await fetchBookings();
+    } catch (error: any) {
+      console.error('Failed to assign driver:', error);
+      alert(`Failed to assign driver: ${error.message}`);
+    }
+  };
+
+  const getAssignedToursForDriver = (driverId: string) => {
+    return bookings.filter(b => b.driverId === driverId && b.status !== 'cancelled');
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchTours();
       fetchDrivers();
+      fetchBookings();
     }
   }, [isAuthenticated]);
 
@@ -736,7 +818,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex bg-zinc-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col hidden md:flex">
+      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col hidden md:flex sticky top-0 h-screen overflow-y-auto">
         <div className="p-6 border-b border-zinc-100">
           <h1 className="text-xl font-bold tracking-tight text-emerald-600 flex items-center gap-2">
             <LayoutDashboard className="w-6 h-6" />
@@ -754,6 +836,17 @@ export default function App() {
           >
             <LayoutDashboard className="w-4 h-4" />
             Tours Management
+          </button>
+          <button
+            onClick={() => setActiveSection('bookings')}
+            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
+              activeSection === 'bookings'
+                ? 'text-emerald-600 bg-emerald-50'
+                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Booking Management
           </button>
           <button
             onClick={() => setActiveSection('drivers')}
@@ -789,7 +882,7 @@ export default function App() {
         <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-zinc-900">
-              {activeSection === 'tours' ? 'Tours Management' : 'Driver Management'}
+              {activeSection === 'tours' ? 'Tours Management' : activeSection === 'bookings' ? 'Booking Management' : 'Driver Management'}
             </h2>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
               <Lock className="w-3 h-3" />
@@ -987,7 +1080,7 @@ export default function App() {
                         >
                           <div className="flex-1">
                             <p className="font-medium text-zinc-900">{driver.email}</p>
-                            <div className="flex items-center gap-3 mt-2">
+                          <div className="flex items-center gap-3 mt-2">
                               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
                                 driver.status === 'active'
                                   ? 'bg-emerald-100 text-emerald-700'
@@ -997,6 +1090,12 @@ export default function App() {
                               }`}>
                                 {driver.status === 'active' ? 'Active' : driver.status === 'pending' ? 'Pending' : 'Inactive'}
                               </span>
+                              {getAssignedToursForDriver(driver.id).length > 0 && (
+                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Assigned to {getAssignedToursForDriver(driver.id).length} tour(s)
+                                </span>
+                              )}
                               {driver.created_at && (
                                 <span className="text-xs text-zinc-500">
                                   Added {new Date(driver.created_at.toDate?.() || driver.created_at).toLocaleDateString()}
@@ -1060,7 +1159,7 @@ export default function App() {
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Assigned Tours</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.assigned_tours_count || 0}</p>
+                                      <p className="text-sm font-medium text-zinc-900">{getAssignedToursForDriver(driver.id).length}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -1083,6 +1182,32 @@ export default function App() {
                                   </div>
                                 </div>
 
+                                {getAssignedToursForDriver(driver.id).length > 0 && (
+                                  <div className="border-t border-zinc-200 pt-4">
+                                    <h4 className="text-sm font-semibold text-zinc-900 mb-3">Assigned Tours</h4>
+                                    <div className="space-y-2">
+                                      {getAssignedToursForDriver(driver.id).map(booking => (
+                                        <div key={booking.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <p className="text-sm font-semibold text-zinc-900">{booking.tourTitle || 'Tour Name'}</p>
+                                              <p className="text-xs text-zinc-600 mt-1">User: {booking.userName}</p>
+                                              <p className="text-xs text-zinc-600">Passengers: {booking.numberOfPeople}</p>
+                                            </div>
+                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded whitespace-nowrap ml-2 ${
+                                              booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                              booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                              'bg-red-100 text-red-700'
+                                            }`}>
+                                              {booking.status}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
                                 <div className="border-t border-zinc-200 pt-4">
                                   <div className="flex gap-2">
                                     <button className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
@@ -1100,6 +1225,132 @@ export default function App() {
                       </div>
                     ))}
                   </AnimatePresence>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {activeSection === 'bookings' && (
+        <div className="p-8 max-w-7xl mx-auto w-full">
+          <div className="space-y-6">
+            {/* Bookings Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+                <p className="text-sm font-medium text-zinc-500 mb-2">Total Bookings</p>
+                <p className="text-3xl font-bold text-zinc-900">{bookings.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+                <p className="text-sm font-medium text-zinc-500 mb-2">Confirmed</p>
+                <p className="text-3xl font-bold text-emerald-600">{bookings.filter(b => b.status === 'confirmed').length}</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+                <p className="text-sm font-medium text-zinc-500 mb-2">Pending</p>
+                <p className="text-3xl font-bold text-amber-600">{bookings.filter(b => b.status === 'pending').length}</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+                <p className="text-sm font-medium text-zinc-500 mb-2">Cancelled</p>
+                <p className="text-3xl font-bold text-red-600">{bookings.filter(b => b.status === 'cancelled').length}</p>
+              </div>
+            </div>
+
+            {/* Bookings Table */}
+            <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
+              <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-zinc-900">All Bookings</h3>
+                  <p className="text-sm text-zinc-500 mt-1">Manage and track all tour bookings</p>
+                </div>
+                <button
+                  onClick={fetchBookings}
+                  className="px-4 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                  disabled={bookingsLoading}
+                >
+                  {bookingsLoading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+
+              {bookingsLoading ? (
+                <div className="p-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+                  <p className="text-zinc-500">Loading bookings...</p>
+                </div>
+              ) : bookings.length === 0 ? (
+                <div className="p-12 text-center">
+                  <Calendar className="w-8 h-8 text-zinc-300 mx-auto mb-3" />
+                  <p className="text-zinc-500">No bookings found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-zinc-50 border-b border-zinc-100">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Booking ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">User</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Tour</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">People</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Price</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Driver</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {bookings.map(booking => (
+                        <tr key={booking.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="px-6 py-3 text-sm font-mono text-zinc-600">{booking.id.substring(0, 12)}...</td>
+                          <td className="px-6 py-3 text-sm">
+                            <div>
+                              <p className="font-medium text-zinc-900">{booking.userName || 'N/A'}</p>
+                              <p className="text-xs text-zinc-500">{booking.userEmail || 'N/A'}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-zinc-600">{booking.tourTitle || 'N/A'}</td>
+                          <td className="px-6 py-3 text-sm font-medium text-zinc-900">{booking.numberOfPeople || 0}</td>
+                          <td className="px-6 py-3 text-sm font-medium text-emerald-600">Rs. {booking.totalPrice?.toFixed(2) || '0.00'}</td>
+                          <td className="px-6 py-3 text-sm">
+                            <select
+                              value={booking.status}
+                              onChange={e => updateBookingStatus(booking.id, e.target.value)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 outline-none transition-colors ${
+                                booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-3 text-sm">
+                            <select
+                              value={booking.driverId || ''}
+                              onChange={e => assignDriverToBooking(booking.id, e.target.value)}
+                              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-zinc-200 outline-none focus:border-emerald-500 transition-colors"
+                            >
+                              <option value="">Not Assigned</option>
+                              {drivers.map(driver => (
+                                <option key={driver.id} value={driver.id}>
+                                  {driver.name || driver.email}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-6 py-3 text-sm">
+                            <button
+                              onClick={() => deleteBooking(booking.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

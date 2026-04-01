@@ -24,6 +24,8 @@ class Tour {
   final String operatorName;
   final List<String> whatsIncluded;
   final List<String> tourFeatures;
+  final String firstBookedUserId; // ID of the first user who booked this tour
+  final List<String> bookedUserIds; // List of all booked user IDs
 
   const Tour({
     required this.id,
@@ -44,6 +46,8 @@ class Tour {
     this.operatorName = '',
     this.whatsIncluded = const [],
     this.tourFeatures = const [],
+    this.firstBookedUserId = '',
+    this.bookedUserIds = const [],
   });
 
   /// Creates an empty tour instance (useful for placeholders)

@@ -29,3 +29,20 @@ export interface Tour {
   end_time_location?: string;
   created_at?: unknown;
 }
+
+export interface Booking {
+  id: string;
+  userId: string;
+  tourId: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  numberOfPeople: number;
+  totalPrice: number;
+  userEmail?: string;
+  userName?: string;
+  tourTitle?: string;
+  driverId?: string;
+  driverName?: string;
+  driverEmail?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}

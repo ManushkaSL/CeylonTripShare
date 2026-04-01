@@ -7,6 +7,11 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/tours/$(tourId)).data.guideId == request.auth.uid;
     }
 
+    // Helper: check if user is admin
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admin_users/$(request.auth.uid));
+    }
+
     // Helper: check if user has joined a tour (auto-generated ID, so query bookings)
     function hasJoinedTour(tourId) {
       return exists(/databases/$(database)/documents/bookings/$(request.auth.uid + "_" + tourId));
@@ -64,6 +69,20 @@ service cloud.firestore {
       }
     }
 
+    // Booking management
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+                    request.resource.data.userId == request.auth.uid &&
+                    request.resource.data.tourId is string &&
+                    request.resource.data.status is string;
+      allow update: if request.auth != null && 
+                    (resource.data.userId == request.auth.uid ||
+                     isGuide(resource.data.tourId) ||
+                     isAdmin());
+      allow delete: if request.auth != null;
+    }
+
     // Joined tours (auto-generated IDs)
     match /joinedTours/{joinedTourId} {
       allow read: if request.auth != null && 
@@ -72,6 +91,18 @@ service cloud.firestore {
                     request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
                             resource.data.userId == request.auth.uid;
+    }
+
+    // Admin users collection
+    match /admin_users/{adminId} {
+      allow read: if request.auth != null && request.auth.uid == adminId;
+      allow write: if false;
+    }
+
+    // Drivers collection
+    match /drivers/{driverId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
     }
 
     // Deny everything else

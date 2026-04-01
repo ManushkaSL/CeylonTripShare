@@ -14,6 +14,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _countryCodeController = TextEditingController(text: '+94');
+  final _phoneNumberController = TextEditingController();
 
   bool _isLoading = false;
   bool _hidePassword = true;
@@ -25,6 +27,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _countryCodeController.dispose();
+    _phoneNumberController.dispose();
     super.dispose();
   }
 
@@ -36,6 +40,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       username: _usernameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
+      phoneNumber: _phoneNumberController.text.trim(),
+      countryCode: _countryCodeController.text.trim(),
     );
 
     if (!mounted) return;
@@ -198,6 +204,58 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     }
                     return null;
                   },
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: _countryCodeController,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Country Code',
+                          hintText: '+XX',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Enter country code';
+                          }
+                          if (!value.startsWith('+')) {
+                            return 'Must start with +';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _phoneNumberController,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) =>
+                            _isLoading ? null : _register(),
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          hintText: 'XXXXXXXXX',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Enter phone number';
+                          }
+                          if (value.trim().length < 7) {
+                            return 'Enter a valid phone';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 SizedBox(
