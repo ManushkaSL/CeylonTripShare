@@ -39,14 +39,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   // Idle tours: no one has booked yet (remainingSeats == totalSeats)
-  List<Tour> _idleTours(List<Tour> tours) =>
-      tours.where((t) => t.remainingSeats == t.totalSeats).toList()
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+  List<Tour> _idleTours(List<Tour> tours) {
+    final idle = tours.where((t) => t.remainingSeats == t.totalSeats).toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    debugPrint('🔍 IDLE TOURS (${idle.length}):');
+    for (final t in idle) {
+      debugPrint('   - ${t.name}: remaining=${t.remainingSeats}, total=${t.totalSeats}');
+    }
+    return idle;
+  }
 
   // Active tours: someone has already booked (remainingSeats < totalSeats)
-  List<Tour> _activeTours(List<Tour> tours) =>
-      tours.where((t) => t.remainingSeats < t.totalSeats).toList()
-        ..sort((a, b) => b.startDate.compareTo(a.startDate));
+  List<Tour> _activeTours(List<Tour> tours) {
+    final active = tours.where((t) => t.remainingSeats < t.totalSeats).toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    debugPrint('🔍 ACTIVE TOURS (${active.length}):');
+    for (final t in active) {
+      debugPrint('   - ${t.name}: remaining=${t.remainingSeats}, total=${t.totalSeats}');
+    }
+    return active;
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -510,26 +510,97 @@ export default function App() {
 
   const updateBookingStatus = async (bookingId: string, newStatus: string) => {
     try {
+      // Get the booking from state
+      const booking = bookings.find(b => b.id === bookingId);
+      
+      if (!booking) {
+        alert('Booking not found');
+        return;
+      }
+
+      const tourId = booking.tourId;
+      const numberOfPeople = booking.numberOfPeople || 0;
+      const oldStatus = booking.status;
+
+      // Get current tour data
+      const tour = tours.find(t => t.id === tourId);
+
+      if (!tour) {
+        alert('Tour not found');
+        return;
+      }
+
+      let updatedAvailableSeats = tour.available_seats;
+
+      // Calculate seat changes based on status transitions
+      if (oldStatus !== 'cancelled' && newStatus === 'cancelled') {
+        // Booking is being cancelled - restore seats
+        updatedAvailableSeats = updatedAvailableSeats + numberOfPeople;
+        console.log(`Booking cancelled: restoring ${numberOfPeople} seats. New available: ${updatedAvailableSeats}`);
+      } else if (oldStatus === 'cancelled' && newStatus !== 'cancelled') {
+        // Booking is being restored - deduct seats
+        updatedAvailableSeats = updatedAvailableSeats - numberOfPeople;
+        console.log(`Booking restored: deducting ${numberOfPeople} seats. New available: ${updatedAvailableSeats}`);
+      }
+
+      // Ensure available seats don't go negative or exceed total
+      updatedAvailableSeats = Math.max(0, Math.min(updatedAvailableSeats, tour.seat_count));
+
+      // Update booking status
       await updateDoc(doc(db, 'bookings', bookingId), {
         status: newStatus,
         updatedAt: serverTimestamp()
       });
+
+      // Update tour available seats
+      await updateDoc(doc(db, 'tours', tourId), {
+        available_seats: updatedAvailableSeats,
+        updatedAt: serverTimestamp()
+      });
+
+      console.log('Booking status updated and seats adjusted');
       await fetchBookings();
-    } catch (error) {
+      await fetchTours();
+    } catch (error: any) {
       console.error('Failed to update booking status:', error);
-      alert('Failed to update booking status');
+      alert('Failed to update booking status: ' + error.message);
     }
   };
 
   const deleteBooking = async (bookingId: string) => {
     if (!confirm('Are you sure you want to delete this booking?')) return;
     try {
-      const userId = sessionStorage.getItem('admin_user_id');
-      console.log('Attempting to delete booking:', bookingId);
-      console.log('Admin user ID:', userId);
+      // Get the booking from state
+      const booking = bookings.find(b => b.id === bookingId);
+      
+      if (booking && booking.tourId && booking.status !== 'cancelled') {
+        // Only restore seats if booking wasn't already cancelled
+        const numberOfPeople = booking.numberOfPeople || 0;
+        const tourId = booking.tourId;
+
+        // Get current tour data
+        const tour = tours.find(t => t.id === tourId);
+
+        if (tour) {
+          const updatedAvailableSeats = Math.min(
+            tour.available_seats + numberOfPeople,
+            tour.seat_count
+          );
+
+          // Update tour available seats
+          await updateDoc(doc(db, 'tours', tourId), {
+            available_seats: updatedAvailableSeats
+          });
+
+          console.log(`Booking deleted: restored ${numberOfPeople} seats`);
+        }
+      }
+
+      // Delete the booking
       await deleteDoc(doc(db, 'bookings', bookingId));
       console.log('Booking deleted successfully');
       await fetchBookings();
+      await fetchTours();
     } catch (error: any) {
       console.error('Full delete error:', error);
       console.error('Error code:', error.code);
@@ -655,10 +726,16 @@ export default function App() {
 
   const fetchTours = async () => {
     try {
-      const q = query(collection(db, 'tours'), orderBy('created_at', 'desc'));
+      console.log('Fetching tours...');
+      // Remove orderBy to avoid index issues - just fetch all tours
+      const q = query(collection(db, 'tours'));
       const snapshot = await getDocs(q);
+      console.log('Tours snapshot size:', snapshot.size);
+      console.log('Tours empty:', snapshot.empty);
+      
       const data = snapshot.docs.map((docSnapshot) => {
         const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string; route?: string[] | string; available_seats?: number };
+        console.log('Processing tour:', docSnapshot.id, tour);
         const images = Array.isArray(tour.images)
           ? tour.images
           : typeof tour.images === 'string'
@@ -688,9 +765,13 @@ export default function App() {
           images,
         } as Tour;
       });
+      console.log('Processed tours:', data.length, data);
       setTours(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch tours:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      alert(`Failed to fetch tours: ${error.message}`);
     } finally {
       setLoading(false);
     }
