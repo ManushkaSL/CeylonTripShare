@@ -167,7 +167,7 @@ class TourService {
       'remaining',
     ]);
 
-    debugPrint('   remainingSeatsField: $remainingSeatsField');
+    debugPrint('   ❌ DEBUG: ${map['name']}: remainingSeatsField=$remainingSeatsField (raw value: ${map['remainingSeats']})');
 
     dynamic bookedSeatsField = _pick(map, [
       'bookedSeats',
@@ -182,7 +182,7 @@ class TourService {
       'participants_count',
     ]);
 
-    debugPrint('   bookedSeatsField: $bookedSeatsField');
+    debugPrint('   ❌ DEBUG: ${map['name']}: bookedSeatsField=$bookedSeatsField');
 
     if (seatInfo is Map) {
       if (totalSeats <= 0) {

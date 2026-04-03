@@ -308,11 +308,27 @@ class JoinedTourService extends ChangeNotifier {
         final tourRef = _firestore.collection('tours').doc(tour.id);
         debugPrint('🔄 Attempting to update tour ${tour.id}...');
         
-        await tourRef.update({
-          'remainingSeats': FieldValue.increment(-totalPersons),
-        });
+        // First, get the current tour document to check if remainingSeats field exists
+        final currentTour = await tourRef.get();
+        final currentData = currentTour.data();
+        final currentRemaining = currentData?['remainingSeats'] as int?;
         
-        debugPrint('✅ Updated tour ${tour.id} remainingSeats decreased by $totalPersons');
+        debugPrint('   Current remainingSeats in Firestore: $currentRemaining');
+        debugPrint('   Decrementing by: $totalPersons');
+        
+        if (currentRemaining == null) {
+          // Field doesn't exist - set it to totalSeats - totalPersons
+          final newRemaining = tour.totalSeats - totalPersons;
+          debugPrint('   remainingSeats field missing - setting to: $newRemaining');
+          await tourRef.update({
+            'remainingSeats': newRemaining,
+          });
+        } else {
+          // Field exists - use increment
+          await tourRef.update({
+            'remainingSeats': FieldValue.increment(-totalPersons),
+          });
+        }
         
         // Verify the update by reading the updated document
         final updatedTour = await tourRef.get();
