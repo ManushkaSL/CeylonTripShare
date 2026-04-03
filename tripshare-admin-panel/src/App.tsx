@@ -8,7 +8,7 @@ import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, L
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour, Booking } from './types';
 import { db, auth } from './firebase';
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase';
 
@@ -210,9 +210,18 @@ export default function App() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+      
+      // Create/update user record in Firestore with admin role
+      await setDoc(doc(db, 'users', uid), {
+        email: email,
+        role: 'admin',
+        lastLogin: serverTimestamp()
+      }, { merge: true });
+
       setIsAuthenticated(true);
       setUserRole('admin');
-      sessionStorage.setItem('admin_user_id', userCredential.user.uid);
+      sessionStorage.setItem('admin_user_id', uid);
       sessionStorage.setItem('admin_email', email);
       setEmail('');
       setPassword('');
@@ -452,22 +461,48 @@ export default function App() {
   const fetchBookings = async () => {
     setBookingsLoading(true);
     try {
-      const q = query(collection(db, 'bookings'));
-      const querySnapshot = await getDocs(q);
-      const bookingsData = querySnapshot.docs.map(doc => {
+      console.log('Fetching bookings from collection: bookings');
+      
+      // Simple query without any ordering to avoid index issues
+      const bookingsRef = collection(db, 'bookings');
+      const querySnapshot = await getDocs(bookingsRef);
+      
+      console.log('Raw query snapshot:', querySnapshot);
+      console.log('Number of documents:', querySnapshot.size);
+      console.log('Empty:', querySnapshot.empty);
+      
+      const bookingsData = querySnapshot.docs.map((doc) => {
         const data = doc.data();
-        console.log('Booking data from Firestore:', data);
+        console.log('Raw booking document:', { id: doc.id, data });
+        
+        // Map the fields to match the Booking interface
         return {
           id: doc.id,
-          ...data
+          userId: data.userId || '',
+          tourId: data.tourId || '',
+          status: data.status || 'pending',
+          numberOfPeople: data.totalPersons || data.numberOfPeople || 0,
+          totalPrice: data.totalPrice || 0,
+          userEmail: data.userEmail || '',
+          userName: data.userName || '',
+          tourTitle: data.tourName || data.tourTitle || '',
+          driverId: data.driverId,
+          driverName: data.driverName,
+          driverEmail: data.driverEmail,
+          createdAt: data.createdAt || data.bookedAt,
+          updatedAt: data.updatedAt
         } as Booking;
       });
-      console.log('Fetched bookings:', bookingsData);
+
+      console.log('Processed bookings:', bookingsData);
+      console.log('Total bookings:', bookingsData.length);
       setBookings(bookingsData);
     } catch (error: any) {
       console.error('Failed to fetch bookings:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
+      console.error('Stack trace:', error.stack);
+      alert(`Error fetching bookings: ${error.message}`);
     } finally {
       setBookingsLoading(false);
     }
@@ -508,14 +543,25 @@ export default function App() {
       const selectedDriver = drivers.find(d => d.id === driverId);
       if (!selectedDriver) return;
 
+      console.log('Attempting to assign driver...');
+      console.log('Booking ID:', bookingId);
+      console.log('Driver ID:', driverId);
+      console.log('Current user ID:', sessionStorage.getItem('admin_user_id'));
+      console.log('Current user email:', sessionStorage.getItem('admin_email'));
+
       await updateDoc(doc(db, 'bookings', bookingId), {
         driverId: driverId,
         driverName: selectedDriver.name || selectedDriver.email,
         driverEmail: selectedDriver.email,
         updatedAt: serverTimestamp()
       });
+      
+      console.log('Driver assigned successfully');
       await fetchBookings();
     } catch (error: any) {
+      console.error('Full error object:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
       console.error('Failed to assign driver:', error);
       alert(`Failed to assign driver: ${error.message}`);
     }

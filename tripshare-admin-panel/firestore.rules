@@ -1,34 +1,43 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper: check if user is guide of a tour
-    function isGuide(tourId) {
-      return get(/databases/$(database)/documents/tours/$(tourId)).data.guideId == request.auth.uid;
-    }
-
-    // Helper: check if user is admin
+    
+    // Helper function to check if the user is an admin
+    // This matches your app's definition - checking role field in users collection
     function isAdmin() {
-      return exists(/databases/$(database)/documents/admin_users/$(request.auth.uid));
+      return request.auth != null && 
+             (
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'
+             );
     }
 
-    // Helper: check if user has joined a tour (auto-generated ID, so query bookings)
-    function hasJoinedTour(tourId) {
-      return exists(/databases/$(database)/documents/bookings/$(request.auth.uid + "_" + tourId));
+    // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
+    match /tours/{tourId} {
+      allow read; // Public access - everyone can read tours
+      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
+      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+
+      // Bookings subcollection
+      match /bookings/{subBookingId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && 
+                      request.resource.data.userId == request.auth.uid;
+        allow update, delete: if request.auth != null && 
+                              (resource.data.userId == request.auth.uid || isAdmin());
+      }
     }
 
-    // Users collection
+    // Users collection - each user has a profile
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
+      allow write: if request.auth.uid == userId || isAdmin();
     }
 
-    // Messages — only guide or tour participants can read
+    // ROOT-LEVEL MESSAGES COLLECTION
     match /messages/{messageId} {
-      allow read: if request.auth != null && (
-                    isGuide(resource.data.tourId) ||
-                    hasJoinedTour(resource.data.tourId)
-                  );
+      allow read: if request.auth != null;
       allow create: if request.auth != null && 
                     request.resource.data.senderId == request.auth.uid &&
                     request.resource.data.tourId is string &&
@@ -36,78 +45,56 @@ service cloud.firestore {
                     request.resource.data.senderName is string &&
                     request.resource.data.timestamp is timestamp;
       allow delete: if request.auth != null && 
-                    resource.data.senderId == request.auth.uid;
+                    (resource.data.senderId == request.auth.uid || isAdmin());
       allow update: if false;
     }
 
-    // Root-level bookings
+    // ROOT-LEVEL BOOKINGS COLLECTION
     match /bookings/{bookingId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
                     request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
-                            resource.data.userId == request.auth.uid;
+                            (isAdmin() ||
+                             resource.data.userId == request.auth.uid || 
+                             resource.data.driverId == request.auth.uid);
     }
 
-    // Tours collection
-    match /tours/{tourId} {
-      allow read: if request.auth != null;
-      // Admin/guide creates — guideId must match their uid
-      allow create: if request.auth != null && 
-                    request.resource.data.guideId == request.auth.uid;
-      // Only the guide can update/delete their own tour
-      allow update, delete: if request.auth != null && 
-                            resource.data.guideId == request.auth.uid;
-
-      // Bookings subcollection
-      match /bookings/{bookingId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null && 
-                      request.resource.data.userId == request.auth.uid;
-        allow update, delete: if request.auth != null && 
-                              resource.data.userId == request.auth.uid;
-      }
-    }
-
-    // Booking management
-    match /bookings/{bookingId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && 
-                    request.resource.data.userId == request.auth.uid &&
-                    request.resource.data.tourId is string &&
-                    request.resource.data.status is string;
-      allow update: if request.auth != null && 
-                    (resource.data.userId == request.auth.uid ||
-                     isGuide(resource.data.tourId) ||
-                     isAdmin());
-      allow delete: if request.auth != null;
-    }
-
-    // Joined tours (auto-generated IDs)
+    // Joined tours (user booking records)
     match /joinedTours/{joinedTourId} {
       allow read: if request.auth != null && 
-                  resource.data.userId == request.auth.uid;
+                           (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if request.auth != null && 
-                    request.resource.data.userId == request.auth.uid;
+                           request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && 
-                            resource.data.userId == request.auth.uid;
+                            (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // Admin users collection
-    match /admin_users/{adminId} {
-      allow read: if request.auth != null && request.auth.uid == adminId;
+    // Driver live-location sharing
+    match /driver_locations/{tourId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && 
+                            (request.resource.data.driverId == request.auth.uid || isAdmin());
+      allow delete: if request.auth != null && 
+                    (resource.data.driverId == request.auth.uid || isAdmin());
+    }
+
+    // Admin users collection (reference only)
+    match /admin_users/{document=**} {
+      allow read: if request.auth != null;
       allow write: if false;
     }
 
-    // Drivers collection
+    // Drivers collection - for admin panel driver management
     match /drivers/{driverId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow create, update, delete: if request.auth != null && isAdmin();
     }
 
-    // Deny everything else
+    // Admin bypass - allow admins to read/write everything
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }
+

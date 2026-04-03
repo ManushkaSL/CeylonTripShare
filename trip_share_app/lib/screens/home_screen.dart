@@ -156,6 +156,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<List<Tour>>(
       stream: _tourService.streamTours(),
       builder: (context, snapshot) {
+        // Log stream states for debugging
+        if (snapshot.hasError) {
+          debugPrint('🔴 StreamBuilder error: ${snapshot.error}');
+          debugPrint('🔴 Error type: ${snapshot.error.runtimeType}');
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          debugPrint('⏳ StreamBuilder: waiting for data');
+        }
+        if (snapshot.connectionState == ConnectionState.active) {
+          debugPrint(
+            '✅ StreamBuilder: active with ${(snapshot.data ?? []).length} tours',
+          );
+        }
+
         final loadedTours = snapshot.data ?? const <Tour>[];
         final tours = <Tour>[...loadedTours];
         final activeTours = _activeTours(tours);
@@ -213,17 +227,88 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                     children: [
                       if (snapshot.hasError)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            'Failed to load tours. Please try again later.',
-                            style: TextStyle(color: Colors.redAccent),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red, width: 1),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Failed to load tours',
+                                  style: TextStyle(
+                                    color: Colors.redAccent,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  snapshot.error.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       if (snapshot.connectionState == ConnectionState.waiting)
                         const Padding(
                           padding: EdgeInsets.only(bottom: 12),
-                          child: LinearProgressIndicator(minHeight: 3),
+                          child: Column(
+                            children: [
+                              LinearProgressIndicator(minHeight: 3),
+                              SizedBox(height: 8),
+                              Text(
+                                'Loading tours...',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (snapshot.data != null &&
+                          snapshot.data!.isEmpty &&
+                          snapshot.connectionState == ConnectionState.done)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.travel_explore,
+                                  size: 64,
+                                  color: Colors.grey.withValues(alpha: 0.3),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'No tours available',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Check back later for new tours',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       if (activeTours.isNotEmpty) ...[
                         const _SectionHeader(title: 'Active Tours'),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/location_service.dart';
+import 'package:trip_share_app/screens/chat_screen.dart';
+import 'package:trip_share_app/models/tour.dart';
 
 /// Driver dashboard accessible from Profile → "Driver Dashboard".
 /// Shows tours the driver is assigned to (guideId == current user)
@@ -76,10 +78,70 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Stop sharing on the current tour first.',
-            ),
+            content: Text('Stop sharing on the current tour first.'),
             backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openChat(String tourId) async {
+    try {
+      debugPrint('💬 Opening chat for tour: $tourId');
+
+      // Fetch the tour from Firestore
+      final tourDoc = await _firestore.collection('tours').doc(tourId).get();
+      debugPrint('📡 Tour document exists: ${tourDoc.exists}');
+
+      if (!tourDoc.exists) {
+        debugPrint('❌ Tour document not found');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tour not found'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final data = tourDoc.data() as Map<String, dynamic>;
+      debugPrint('✅ Tour data loaded: ${data['name']}');
+
+      final tour = Tour(
+        id: tourDoc.id,
+        name: data['name'] ?? 'Unnamed Tour',
+        imageUrl: data['imageUrl'] ?? '',
+        startDate:
+            (data['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        totalSeats: data['totalSeats'] ?? 0,
+        remainingSeats: data['remainingSeats'] ?? 0,
+        price: (data['price'] ?? 0).toDouble(),
+        description: data['description'] ?? '',
+        photos: List<String>.from(data['photos'] ?? []),
+        category: data['category'] ?? '',
+        startLocation: data['startLocation'] ?? '',
+        endLocation: data['endLocation'] ?? '',
+        endTime: data['endTime'] ?? '',
+      );
+
+      if (mounted) {
+        debugPrint('🚀 Navigating to ChatScreen');
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)));
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error opening chat: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening chat: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -88,7 +150,8 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userId = _auth.userId;
+    final userEmail = _auth.userEmail;
+    final isRootScreen = Navigator.of(context).canPop() == false;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -101,10 +164,15 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
             child: AppBar(
               backgroundColor: Colors.white.withValues(alpha: 0.6),
               elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Color(0xFF1B5E20)),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+              leading: isRootScreen
+                  ? null
+                  : IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Color(0xFF1B5E20),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
               title: const Text(
                 'Driver Dashboard',
                 style: TextStyle(
@@ -113,6 +181,51 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   fontSize: 20,
                 ),
               ),
+              actions: isRootScreen
+                  ? [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.logout,
+                          color: Color(0xFF1B5E20),
+                        ),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              title: const Text('Log Out'),
+                              content: const Text(
+                                'Are you sure you want to log out?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    await _auth.logout();
+                                    if (context.mounted) {
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
+                                  child: const Text(
+                                    'Log Out',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ]
+                  : null,
             ),
           ),
         ),
@@ -126,9 +239,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           _buildStatusBanner(),
           const SizedBox(height: 16),
           // Tour list
-          Expanded(
-            child: _buildToursList(userId),
-          ),
+          Expanded(child: _buildToursList(userEmail)),
         ],
       ),
     );
@@ -219,17 +330,18 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildToursList(String userId) {
+  Widget _buildToursList(String userEmail) {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
-          .collection('tours')
-          .where('guideId', isEqualTo: userId)
+          .collection('bookings')
+          .where('driverEmail', isEqualTo: userEmail)
+          .orderBy('tourDate', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
             child: Text(
-              'Error loading tours: ${snapshot.error}',
+              'Error loading assigned tours: ${snapshot.error}',
               style: const TextStyle(color: Colors.red),
             ),
           );
@@ -237,9 +349,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFF1B5E20),
-            ),
+            child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
           );
         }
 
@@ -259,7 +369,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'No tours assigned',
+                    'No assigned tours',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -268,7 +378,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Tours where you are the guide will appear here.',
+                    'Assigned bookings will appear here.',
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
@@ -284,17 +394,23 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
-            final tourId = docs[index].id;
-            final tourName = data['name'] ?? 'Unnamed Tour';
-            final imageUrl = data['imageUrl'] ?? data['image'] ?? '';
-            final startDate = data['startDate'] as String? ?? '';
-            final isSharingThis = _isSharing && _sharingTourId == tourId;
+            final bookingId = docs[index].id;
+            final tourName = data['tourName'] ?? 'Unnamed Tour';
+            final tourDate = data['tourDate'] as String? ?? '';
+            final totalPersons = data['totalPersons'] ?? 0;
+            final pickupLocation = data['pickupLocation'] ?? '';
+            final userId = data['userId'] ?? '';
+            final tourId = data['tourId'] ?? '';
+            final isSharingThis = _isSharing && _sharingTourId == bookingId;
 
-            return _buildTourCard(
+            return _buildBookingCard(
+              bookingId: bookingId,
               tourId: tourId,
               tourName: tourName,
-              imageUrl: imageUrl,
-              startDate: startDate,
+              tourDate: tourDate,
+              totalPersons: totalPersons,
+              pickupLocation: pickupLocation,
+              userId: userId,
               isSharingThis: isSharingThis,
             );
           },
@@ -303,141 +419,140 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildTourCard({
+  Widget _buildBookingCard({
+    required String bookingId,
     required String tourId,
     required String tourName,
-    required String imageUrl,
-    required String startDate,
+    required String tourDate,
+    required int totalPersons,
+    required String pickupLocation,
+    required String userId,
     required bool isSharingThis,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: isSharingThis
-              ? Border.all(color: const Color(0xFF1B5E20), width: 2)
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              // Tour image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => _tourPlaceholder(),
-                      )
-                    : _tourPlaceholder(),
-              ),
-              const SizedBox(width: 14),
-              // Tour info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tourName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF333333),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tourName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B5E20),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (startDate.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        startDate,
-                        style: TextStyle(
+                        tourDate,
+                        style: const TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          color: Colors.grey,
                         ),
                       ),
                     ],
-                    if (isSharingThis) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF4CAF50),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'LIVE',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF4CAF50),
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.people, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  '$totalPersons passengers',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(width: 12),
+                Icon(Icons.location_on, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    pickupLocation,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _toggleSharing(bookingId, tourName),
+                    icon: Icon(
+                      isSharingThis ? Icons.my_location : Icons.location_off,
+                      size: 18,
+                    ),
+                    label: Text(
+                      isSharingThis ? 'Sharing' : 'Share Location',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              // Share button
-              GestureDetector(
-                onTap: () => _toggleSharing(tourId, tourName),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isSharingThis
-                        ? Colors.red.withValues(alpha: 0.1)
-                        : const Color(0xFF1B5E20).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isSharingThis ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                    color: isSharingThis
-                        ? Colors.red
-                        : const Color(0xFF1B5E20),
-                    size: 28,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSharingThis
+                          ? const Color(0xFF1B5E20)
+                          : Colors.grey.withValues(alpha: 0.15),
+                      foregroundColor: isSharingThis
+                          ? Colors.white
+                          : const Color(0xFF1B5E20),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: isSharingThis ? 2 : 0,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openChat(tourId),
+                    icon: const Icon(Icons.message, size: 18),
+                    label: const Text(
+                      'Chat',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(
+                        0xFF1B5E20,
+                      ).withValues(alpha: 0.15),
+                      foregroundColor: const Color(0xFF1B5E20),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _tourPlaceholder() {
-    return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Icon(
-        Icons.directions_bus,
-        color: Color(0xFF1B5E20),
-        size: 28,
       ),
     );
   }

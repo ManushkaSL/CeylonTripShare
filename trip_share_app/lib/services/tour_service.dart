@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:trip_share_app/models/tour.dart';
 
 class TourService {
@@ -65,15 +66,69 @@ class TourService {
   }
 
   Stream<List<Tour>> streamTours() {
-    return _firestore.collection('tours').snapshots().map((snapshot) {
-      final tours = snapshot.docs
-          .map((doc) => _tourFromMap(doc.data(), doc.id))
-          .toList(growable: false);
+    debugPrint('📡 Starting tour stream... Firestore instance: $_firestore');
 
-      final sortedTours = [...tours]
-        ..sort((a, b) => a.startDate.compareTo(b.startDate));
-      return sortedTours;
-    });
+    try {
+      final stream = _firestore.collection('tours').snapshots();
+      debugPrint('📡 Collection reference created successfully');
+
+      return stream
+          .map((snapshot) {
+            try {
+              debugPrint(
+                '📥 Received snapshot with ${snapshot.docs.length} tour documents',
+              );
+              debugPrint(
+                '📥 Snapshot metadata - source: ${snapshot.metadata.hasPendingWrites ? "pending" : "server"}',
+              );
+
+              if (snapshot.docs.isEmpty) {
+                debugPrint('⚠️ Tours collection is empty!');
+                return const <Tour>[];
+              }
+
+              final tours = snapshot.docs
+                  .map((doc) {
+                    try {
+                      return _tourFromMap(doc.data(), doc.id);
+                    } catch (e) {
+                      debugPrint('⚠️ Error parsing tour ${doc.id}: $e');
+                      return null;
+                    }
+                  })
+                  .whereType<Tour>()
+                  .toList(growable: false);
+
+              debugPrint(
+                '✅ Successfully loaded ${tours.length} tours out of ${snapshot.docs.length} documents',
+              );
+
+              final sortedTours = [...tours]
+                ..sort((a, b) => a.startDate.compareTo(b.startDate));
+              return sortedTours;
+            } catch (e, st) {
+              debugPrint('❌ Error mapping tour data: $e');
+              debugPrint('📍 Stack trace: $st');
+              throw e;
+            }
+          })
+          .handleError((error, stackTrace) {
+            debugPrint('❌ ==== STREAM ERROR ====');
+            debugPrint('❌ Error: $error');
+            debugPrint('❌ Error type: ${error.runtimeType}');
+            if (error is FirebaseException) {
+              debugPrint('🔥 Firebase error code: ${error.code}');
+              debugPrint('🔥 Firebase error message: ${error.message}');
+            }
+            debugPrint('❌ Stack trace: $stackTrace');
+            debugPrint('❌ ==== END STREAM ERROR ====');
+            throw error;
+          });
+    } catch (e, st) {
+      debugPrint('❌ Fatal error creating stream: $e');
+      debugPrint('📍 Stack trace: $st');
+      throw e;
+    }
   }
 
   Tour _tourFromMap(Map<String, dynamic> map, String docId) {

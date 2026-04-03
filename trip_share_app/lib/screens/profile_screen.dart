@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
-import 'package:trip_share_app/screens/driver_dashboard_screen.dart';
 
 /// Body-only widget for embedding in HomeScreen nav tabs
 class ProfileBody extends StatefulWidget {
@@ -172,17 +171,6 @@ class _ProfileBodyState extends State<ProfileBody> {
         ),
         const SizedBox(height: 28),
         // Menu items
-        _buildMenuItem(
-          icon: Icons.directions_bus,
-          title: 'Driver Dashboard',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const DriverDashboardScreen(),
-              ),
-            );
-          },
-        ),
         _buildMenuItem(
           icon: Icons.person_outline,
           title: 'Edit Profile',

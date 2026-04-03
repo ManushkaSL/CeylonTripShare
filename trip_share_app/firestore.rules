@@ -3,9 +3,26 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // Helper function to check if the user is an admin
+    // Simple check: if user has role 'admin' in their user document
     function isAdmin() {
       return request.auth != null && 
-             exists(/databases/$(database)/documents/admin_users/$(request.auth.email));
+             request.auth.email == 'admin@gmail.com';
+    }
+
+    // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
+    match /tours/{tourId} {
+      allow read; // Public access - everyone can read tours
+      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
+      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+
+      // Bookings subcollection
+      match /bookings/{subBookingId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && 
+                      request.resource.data.userId == request.auth.uid;
+        allow update, delete: if request.auth != null;
+      }
     }
 
     // Users collection - each user has a profile
@@ -15,7 +32,6 @@ service cloud.firestore {
     }
 
     // ROOT-LEVEL MESSAGES COLLECTION
-    // Messages from all tours in one place, filtered by tourId in queries
     match /messages/{messageId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
@@ -26,50 +42,26 @@ service cloud.firestore {
                     request.resource.data.timestamp is timestamp;
       allow delete: if request.auth != null && 
                     (resource.data.senderId == request.auth.uid || isAdmin());
-      allow update: if false; // Messages cannot be edited
+      allow update: if false;
     }
 
     // ROOT-LEVEL BOOKINGS COLLECTION
-    // User booking records stored at root level for efficient querying
-    // (Also exists as subcollection under tours for nested queries)
     match /bookings/{bookingId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
                     request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && 
-                            (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // Tours collection - public read, guide & admin creates/edits
-    match /tours/{tourId} {
-      allow read: if true; // Publicly visible so admin pages or public catalogs can read them easily
-      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
-      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
-      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
-
-      // Bookings subcollection
-      match /bookings/{subBookingId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null && 
-                      request.resource.data.userId == request.auth.uid;
-        allow update, delete: if request.auth != null && 
-                              (resource.data.userId == request.auth.uid || isAdmin());
-      }
+      allow update, delete: if request.auth != null;
     }
 
     // Joined tours (user booking records)
     match /joinedTours/{joinedTourId} {
-      allow read: if request.auth != null && 
-                           (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if request.auth != null;
       allow create: if request.auth != null && 
                            request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && 
-                            (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null;
     }
 
     // Driver live-location sharing
-    // Any authenticated user can read (passengers view driver location)
-    // Only the driver themselves can write their location
     match /driver_locations/{tourId} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null && 
@@ -78,15 +70,22 @@ service cloud.firestore {
                     (resource.data.driverId == request.auth.uid || isAdmin());
     }
 
-    // Admin users collection - readable by authenticated web/admin panel
+    // Admin users collection
     match /admin_users/{document=**} {
-      allow read: if request.auth != null;  // Authenticated users can read
-      allow write: if false; // Protect against client writes
+      allow read: if request.auth != null;
+      allow write: if false;
     }
 
-    // Deny all other access
+    // Drivers collection
+    match /drivers/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Admin bypass - allow admins to read/write everything
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }
+

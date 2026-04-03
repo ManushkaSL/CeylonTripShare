@@ -26,6 +26,8 @@ class AuthService extends ChangeNotifier {
   String _userName = '';
   String _userEmail = '';
   String _photoUrl = '';
+  bool _isDriver = false;
+  bool _isCheckingDriver = false;
 
   bool get isLoggedIn => _isLoggedIn;
   String get userName => _userName;
@@ -33,6 +35,8 @@ class AuthService extends ChangeNotifier {
   String get photoUrl => _photoUrl;
   String get userId => _auth.currentUser?.uid ?? '';
   User? get currentUser => _auth.currentUser;
+  bool get isDriver => _isDriver;
+  bool get isCheckingDriver => _isCheckingDriver;
 
   void _updateFromUser(User? user) {
     if (user != null) {
@@ -40,11 +44,50 @@ class AuthService extends ChangeNotifier {
       _userName = user.displayName ?? user.email?.split('@').first ?? '';
       _userEmail = user.email ?? '';
       _photoUrl = user.photoURL ?? '';
+      // Check driver status asynchronously - set flag to true during check
+      _isCheckingDriver = true;
+      notifyListeners();
+      _checkIfDriver(user.email);
     } else {
       _isLoggedIn = false;
       _userName = '';
       _userEmail = '';
       _photoUrl = '';
+      _isDriver = false;
+      _isCheckingDriver = false;
+    }
+  }
+
+  /// Check if user email exists in drivers collection
+  Future<void> _checkIfDriver(String? userEmail) async {
+    if (userEmail == null || userEmail.isEmpty) {
+      _isDriver = false;
+      _isCheckingDriver = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      debugPrint('🔍 Checking driver status for: $userEmail');
+      final driversCollection = _firestore.collection('drivers');
+      final querySnapshot = await driversCollection
+          .where('email', isEqualTo: userEmail)
+          .limit(1)
+          .get();
+
+      final isDriver = querySnapshot.docs.isNotEmpty;
+
+      if (_isDriver != isDriver) {
+        _isDriver = isDriver;
+        debugPrint('✅ Driver status updated: $_isDriver');
+      }
+      _isCheckingDriver = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('⚠️ Error checking driver status: $e');
+      _isCheckingDriver = false;
+      _isDriver = false;
+      notifyListeners();
     }
   }
 
@@ -58,11 +101,24 @@ class AuthService extends ChangeNotifier {
       final userDoc = _firestore.collection('users').doc(user.uid);
       final docSnapshot = await userDoc.get();
 
+      // Determine role based on: admin list first, then driver collection, then default passenger
+      String userRole = 'passenger';
+      if (user.email == 'admin@gmail.com') {
+        userRole = 'admin';
+      } else {
+        // Check if user is a driver
+        final driverQuery = await _firestore
+            .collection('drivers')
+            .where('email', isEqualTo: user.email)
+            .limit(1)
+            .get();
+        if (driverQuery.docs.isNotEmpty) {
+          userRole = 'driver';
+        }
+      }
+
       if (!docSnapshot.exists) {
-        // First time login - create user document with role check
-        final String userRole = user.email == 'admin@gmail.com'
-            ? 'admin'
-            : 'passenger';
+        // First time login - create user document with determined role
         await userDoc.set({
           'uid': user.uid,
           'email': user.email,
@@ -78,18 +134,21 @@ class AuthService extends ChangeNotifier {
         });
         debugPrint('✅ New user created in Firestore with role: $userRole');
       } else {
-        // Existing user - just update lastLogin
-        // Only update phone if it was provided and is not empty
+        // Existing user - update lastLogin and sync role if it changed
         if (phoneNumber.isNotEmpty && countryCode.isNotEmpty) {
           await userDoc.update({
             'phoneNumber': phoneNumber,
             'countryCode': countryCode,
+            'role': userRole,
             'lastLogin': FieldValue.serverTimestamp(),
           });
         } else {
-          await userDoc.update({'lastLogin': FieldValue.serverTimestamp()});
+          await userDoc.update({
+            'role': userRole,
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
         }
-        debugPrint('✅ User login updated in Firestore');
+        debugPrint('✅ User login updated in Firestore with role: $userRole');
       }
     } catch (e) {
       debugPrint('⚠️ Error creating/updating user in Firestore: $e');
