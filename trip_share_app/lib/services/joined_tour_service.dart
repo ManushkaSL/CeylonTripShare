@@ -308,9 +308,28 @@ class JoinedTourService extends ChangeNotifier {
         final tourRef = _firestore.collection('tours').doc(tour.id);
         debugPrint('🔄 Attempting tour update...');
         
+        // IMPORTANT: Fetch the real tour data from Firestore to get accurate remainingSeats
+        // Don't use tour.remainingSeats from the UI object - it might be parsed incorrectly
+        final realTour = await tourRef.get();
+        final realTourData = realTour.data();
+        
+        if (realTourData == null) {
+          throw Exception('Tour not found in Firestore: ${tour.id}');
+        }
+        
+        final firestoreRemainingSeats = realTourData['remainingSeats'] as int?;
+        final firestoreTotalSeats = realTourData['totalSeats'] as int?;
+        
+        debugPrint('   📥 Real from Firestore: remainingSeats=$firestoreRemainingSeats, totalSeats=$firestoreTotalSeats');
+        debugPrint('   📱 From UI object: remainingSeats=${tour.remainingSeats}, totalSeats=${tour.totalSeats}');
+        
+        // Use Firestore values or fall back to tour object
+        final actualRemaining = firestoreRemainingSeats ?? tour.remainingSeats;
+        final actualTotal = firestoreTotalSeats ?? tour.totalSeats;
+        
         // Calculate new remaining seats
-        final newRemaining = (tour.remainingSeats - totalPersons).clamp(0, tour.totalSeats);
-        debugPrint('   Calculation: ${tour.remainingSeats} - $totalPersons = $newRemaining (clamped 0-${tour.totalSeats})');
+        final newRemaining = (actualRemaining - totalPersons).clamp(0, actualTotal);
+        debugPrint('   Calculation: $actualRemaining - $totalPersons = $newRemaining (clamped 0-$actualTotal)');
         
         // Set the exact value to avoid issues with FieldValue.increment
         await tourRef.update({

@@ -270,7 +270,7 @@ class TourService {
         ? 0
         : parsedRemainingSeats;
 
-    debugPrint('   📊 After <0 check: resolvedRemainingSeats=$resolvedRemainingSeats');
+    debugPrint('   📊 After <0 check: resolvedRemainingSeats=$resolvedRemainingSeats, totalSeats=$totalSeats');
 
     if (totalSeats > 0 && resolvedRemainingSeats > totalSeats) {
       debugPrint('   ⚠️ remainingSeats ($resolvedRemainingSeats) > totalSeats ($totalSeats) - capping to totalSeats');
@@ -278,13 +278,19 @@ class TourService {
     }
 
     if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
-      debugPrint('   ℹ️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats');
+      debugPrint('   ⚠️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats');
       totalSeats = resolvedRemainingSeats;
     }
 
     if (totalSeats <= 0) {
-      debugPrint('   ℹ️ totalSeats still 0 - setting to 1');
+      debugPrint('   ⚠️ totalSeats still 0 - setting to 1');
       totalSeats = 1;
+    }
+    
+    // FIX: If remainingSeats field was missing or 0, but totalSeats is set, default to totalSeats
+    if (remainingSeatsField == null && resolvedRemainingSeats == 0 && totalSeats > 0) {
+      debugPrint('   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats - defaulting remainingSeats to totalSeats');
+      resolvedRemainingSeats = totalSeats;
     }
 
     debugPrint('   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats');
