@@ -8,6 +8,41 @@ class TourService {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  
+  // Cache for immediate updates
+  final Map<String, Tour> _tourCache = {};
+  
+  /// Update a tour in cache and trigger refresh
+  void updateTourInCache(String tourId, int newRemainingSeats) {
+    if (_tourCache.containsKey(tourId)) {
+      final oldTour = _tourCache[tourId]!;
+      // Create updated tour with new remaining seats
+      final updatedTour = Tour(
+        id: oldTour.id,
+        name: oldTour.name,
+        imageUrl: oldTour.imageUrl,
+        startDate: oldTour.startDate,
+        totalSeats: oldTour.totalSeats,
+        remainingSeats: newRemainingSeats,
+        price: oldTour.price,
+        description: oldTour.description,
+        photos: oldTour.photos,
+        category: oldTour.category,
+        startLocation: oldTour.startLocation,
+        lastJoiningTime: oldTour.lastJoiningTime,
+        endTime: oldTour.endTime,
+        endLocation: oldTour.endLocation,
+        route: oldTour.route,
+        operatorName: oldTour.operatorName,
+        whatsIncluded: oldTour.whatsIncluded,
+        tourFeatures: oldTour.tourFeatures,
+        firstBookedUserId: oldTour.firstBookedUserId,
+        bookedUserIds: oldTour.bookedUserIds,
+      );
+      _tourCache[tourId] = updatedTour;
+      debugPrint('✅ Updated tour cache: $tourId remainingSeats=$newRemainingSeats');
+    }
+  }
 
   /// Parse booking close date and time fields into DateTime
   DateTime? _parseBookingCloseDateTime(Map<String, dynamic> map) {
@@ -99,6 +134,11 @@ class TourService {
                   .whereType<Tour>()
                   .toList(growable: false);
 
+              // Populate cache for immediate updates after bookings
+              for (final tour in tours) {
+                _tourCache[tour.id] = tour;
+              }
+
               debugPrint(
                 '✅ Successfully loaded ${tours.length} tours out of ${snapshot.docs.length} documents',
               );
@@ -184,6 +224,7 @@ class TourService {
 
     debugPrint('   ❌ DEBUG: ${map['name']}: bookedSeatsField=$bookedSeatsField');
     debugPrint('   ❌ DEBUG: ${map['name']}: FULL MAP remainingSeats check: ${map.containsKey('remainingSeats')} = ${map['remainingSeats']}');
+    debugPrint('   ❌ DEBUG: ${map['name']}: All keys in map: ${map.keys.toList()}');
 
     if (seatInfo is Map) {
       if (totalSeats <= 0) {

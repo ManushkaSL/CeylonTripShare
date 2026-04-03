@@ -320,10 +320,11 @@ class JoinedTourService extends ChangeNotifier {
         debugPrint('✅ Set remainingSeats to: $newRemaining');
         
         // Verify the update by reading the updated document
-        await Future.delayed(const Duration(milliseconds: 500)); // Wait for Firestore to sync
+        await Future.delayed(const Duration(milliseconds: 300)); // Wait for Firestore to sync
         final updatedTour = await tourRef.get();
-        final verifiedRemaining = updatedTour.data()?['remainingSeats'] ?? 'N/A';
-        debugPrint('✅ VERIFIED from Firestore: remainingSeats=$verifiedRemaining');
+        final verifiedRemaining = updatedTour.data()?['remainingSeats'];
+        debugPrint('✅ VERIFIED from Firestore: remainingSeats=$verifiedRemaining (type: ${verifiedRemaining.runtimeType})');
+        debugPrint('📝 Raw Firestore doc: ${updatedTour.data()}');
         
       } catch (updateError) {
         debugPrint(
