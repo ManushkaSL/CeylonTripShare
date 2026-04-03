@@ -301,39 +301,30 @@ class JoinedTourService extends ChangeNotifier {
           .set(booking.toMap());
 
       debugPrint('✅ Booking saved: $bookingId');
-      debugPrint('📊 Before update - Tour ${tour.id}: remainingSeats=${tour.remainingSeats}, totalPersons=$totalPersons');
+      debugPrint('📊 Before update - Tour ${tour.id}: remainingSeats=${tour.remainingSeats}, totalSeats=${tour.totalSeats}, totalPersons=$totalPersons');
 
       // Update tour's remainingSeats (decrement by totalPersons)
       try {
         final tourRef = _firestore.collection('tours').doc(tour.id);
-        debugPrint('🔄 Attempting to update tour ${tour.id}...');
+        debugPrint('🔄 Attempting tour update...');
         
-        // First, get the current tour document to check if remainingSeats field exists
-        final currentTour = await tourRef.get();
-        final currentData = currentTour.data();
-        final currentRemaining = currentData?['remainingSeats'] as int?;
+        // Calculate new remaining seats
+        final newRemaining = (tour.remainingSeats - totalPersons).clamp(0, tour.totalSeats);
+        debugPrint('   Calculation: ${tour.remainingSeats} - $totalPersons = $newRemaining (clamped 0-${tour.totalSeats})');
         
-        debugPrint('   Current remainingSeats in Firestore: $currentRemaining');
-        debugPrint('   Decrementing by: $totalPersons');
+        // Set the exact value to avoid issues with FieldValue.increment
+        await tourRef.update({
+          'remainingSeats': newRemaining,
+        });
         
-        if (currentRemaining == null) {
-          // Field doesn't exist - set it to totalSeats - totalPersons
-          final newRemaining = tour.totalSeats - totalPersons;
-          debugPrint('   remainingSeats field missing - setting to: $newRemaining');
-          await tourRef.update({
-            'remainingSeats': newRemaining,
-          });
-        } else {
-          // Field exists - use increment
-          await tourRef.update({
-            'remainingSeats': FieldValue.increment(-totalPersons),
-          });
-        }
+        debugPrint('✅ Set remainingSeats to: $newRemaining');
         
         // Verify the update by reading the updated document
+        await Future.delayed(const Duration(milliseconds: 500)); // Wait for Firestore to sync
         final updatedTour = await tourRef.get();
-        final newRemaining = updatedTour.data()?['remainingSeats'] ?? 'N/A';
-        debugPrint('✅ Verified: Tour ${tour.id} new remainingSeats=$newRemaining');
+        final verifiedRemaining = updatedTour.data()?['remainingSeats'] ?? 'N/A';
+        debugPrint('✅ VERIFIED from Firestore: remainingSeats=$verifiedRemaining');
+        
       } catch (updateError) {
         debugPrint(
           '❌ Error updating tour remainingSeats for ${tour.id}: $updateError',

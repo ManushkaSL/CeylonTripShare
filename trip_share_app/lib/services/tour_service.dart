@@ -183,6 +183,7 @@ class TourService {
     ]);
 
     debugPrint('   ❌ DEBUG: ${map['name']}: bookedSeatsField=$bookedSeatsField');
+    debugPrint('   ❌ DEBUG: ${map['name']}: FULL MAP remainingSeats check: ${map.containsKey('remainingSeats')} = ${map['remainingSeats']}');
 
     if (seatInfo is Map) {
       if (totalSeats <= 0) {
@@ -222,24 +223,30 @@ class TourService {
         ? _intFrom(remainingSeatsField)
         : (totalSeats > 0 ? totalSeats - bookedSeats : totalSeats);
 
+    debugPrint('   📊 Parsed: remainingSeatsField=$remainingSeatsField, parsedRemainingSeats=$parsedRemainingSeats');
+
     var resolvedRemainingSeats = parsedRemainingSeats < 0
         ? 0
         : parsedRemainingSeats;
 
+    debugPrint('   📊 After <0 check: resolvedRemainingSeats=$resolvedRemainingSeats');
+
     if (totalSeats > 0 && resolvedRemainingSeats > totalSeats) {
+      debugPrint('   ⚠️ remainingSeats ($resolvedRemainingSeats) > totalSeats ($totalSeats) - capping to totalSeats');
       resolvedRemainingSeats = totalSeats;
     }
 
     if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
+      debugPrint('   ℹ️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats');
       totalSeats = resolvedRemainingSeats;
     }
 
     if (totalSeats <= 0) {
+      debugPrint('   ℹ️ totalSeats still 0 - setting to 1');
       totalSeats = 1;
     }
 
-    // Don't reset remainingSeats if it's already been decremented to 0
-    // This logic was causing fully booked tours to incorrectly show remaining seats
+    debugPrint('   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats');
 
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
