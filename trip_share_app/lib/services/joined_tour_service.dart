@@ -21,12 +21,8 @@ class JoinedTour {
   });
 
   bool get isChatAvailable {
-    if (tour.lastJoiningTime == null) {
-      return false;
-    }
-
-    final isAfter = DateTime.now().isAfter(tour.lastJoiningTime!);
-    return isAfter;
+    // Chat is always available once the tour is booked
+    return true;
   }
 
   bool get isLiveLocationAvailable => journeyStatus == JourneyStatus.inProgress;

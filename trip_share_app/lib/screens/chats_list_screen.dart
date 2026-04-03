@@ -129,118 +129,87 @@ class _ChatsListBodyState extends State<ChatsListBody> {
 
   Widget _buildChatTile(BuildContext context, JoinedTour jt) {
     final tour = jt.tour;
-    final isAvailable = jt.isChatAvailable;
 
-    return Opacity(
-      opacity: isAvailable ? 1.0 : 0.5,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Material(
-          color: Colors.white,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: isAvailable
-                ? () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)),
-                    );
-                  }
-                : null,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  // Tour image
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: CachedNetworkImage(
-                      imageUrl: tour.imageUrl,
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)));
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: CachedNetworkImage(
+                    imageUrl: tour.imageUrl,
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
                       width: 50,
                       height: 50,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        width: 50,
-                        height: 50,
-                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 50,
+                      height: 50,
+                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      child: const Icon(
+                        Icons.landscape,
+                        color: Color(0xFF1B5E20),
+                        size: 24,
                       ),
-                      errorWidget: (context, url, error) => Container(
-                        width: 50,
-                        height: 50,
-                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
-                        child: const Icon(
-                          Icons.landscape,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tour.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                           color: Color(0xFF1B5E20),
-                          size: 24,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                tour.name,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: isAvailable
-                                      ? const Color(0xFF1B5E20)
-                                      : Colors.grey,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                      const SizedBox(height: 2),
+                      FutureBuilder<int>(
+                        future: JoinedTourService().getPassengerCountForTour(
+                          tour.id,
+                        ),
+                        builder: (context, snapshot) {
+                          final count = snapshot.data ?? 0;
+                          return Text(
+                            '$count ${count == 1 ? 'passenger' : 'passengers'}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
                             ),
-                            if (!isAvailable)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  'Opens later',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        FutureBuilder<int>(
-                          future: JoinedTourService().getPassengerCountForTour(
-                            tour.id,
-                          ),
-                          builder: (context, snapshot) {
-                            final count = snapshot.data ?? 0;
-                            return Text(
-                              '$count ${count == 1 ? 'passenger' : 'passengers'}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isAvailable
-                                    ? Colors.grey
-                                    : Colors.grey.withValues(alpha: 0.6),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  Icon(
-                    Icons.chat_bubble,
-                    size: 20,
-                    color: isAvailable
-                        ? const Color(0xFF1B5E20)
-                        : Colors.grey.withValues(alpha: 0.5),
-                  ),
-                ],
-              ),
+                ),
+                const Icon(
+                  Icons.chat_bubble,
+                  size: 20,
+                  color: Color(0xFF1B5E20),
+                ),
+              ],
             ),
           ),
         ),

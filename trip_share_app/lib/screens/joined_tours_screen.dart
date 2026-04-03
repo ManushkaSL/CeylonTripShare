@@ -354,39 +354,25 @@ class _JoinedTourCard extends StatelessWidget {
                               child: SizedBox(
                                 height: 30,
                                 child: ElevatedButton.icon(
-                                  onPressed: joinedTour.isChatAvailable
-                                      ? () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  ChatScreen(tour: tour),
-                                            ),
-                                          );
-                                        }
-                                      : null,
-                                  icon: Icon(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ChatScreen(tour: tour),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(
                                     Icons.chat_bubble_outline,
                                     size: 13,
-                                    color: joinedTour.isChatAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
+                                    color: Colors.white,
                                   ),
-                                  label: Text(
-                                    joinedTour.isChatAvailable
-                                        ? 'Chat'
-                                        : 'Chat Soon',
-                                    style: const TextStyle(fontSize: 10),
+                                  label: const Text(
+                                    'Chat',
+                                    style: TextStyle(fontSize: 10),
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: joinedTour.isChatAvailable
-                                        ? const Color(0xFF1B5E20)
-                                        : Colors.grey.shade300,
-                                    foregroundColor: joinedTour.isChatAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    disabledBackgroundColor:
-                                        Colors.grey.shade200,
-                                    disabledForegroundColor: Colors.grey,
+                                    backgroundColor: const Color(0xFF1B5E20),
+                                    foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
