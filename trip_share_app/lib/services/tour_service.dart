@@ -8,10 +8,10 @@ class TourService {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  
+
   // Cache for immediate updates
   final Map<String, Tour> _tourCache = {};
-  
+
   /// Update a tour in cache and trigger refresh
   void updateTourInCache(String tourId, int newRemainingSeats) {
     if (_tourCache.containsKey(tourId)) {
@@ -40,7 +40,9 @@ class TourService {
         bookedUserIds: oldTour.bookedUserIds,
       );
       _tourCache[tourId] = updatedTour;
-      debugPrint('✅ Updated tour cache: $tourId remainingSeats=$newRemainingSeats');
+      debugPrint(
+        '✅ Updated tour cache: $tourId remainingSeats=$newRemainingSeats',
+      );
     }
   }
 
@@ -207,7 +209,9 @@ class TourService {
       'remaining',
     ]);
 
-    debugPrint('   ❌ DEBUG: ${map['name']}: remainingSeatsField=$remainingSeatsField (raw value: ${map['remainingSeats']})');
+    debugPrint(
+      '   ❌ DEBUG: ${map['name']}: remainingSeatsField=$remainingSeatsField (raw value: ${map['remainingSeats']})',
+    );
 
     dynamic bookedSeatsField = _pick(map, [
       'bookedSeats',
@@ -222,9 +226,15 @@ class TourService {
       'participants_count',
     ]);
 
-    debugPrint('   ❌ DEBUG: ${map['name']}: bookedSeatsField=$bookedSeatsField');
-    debugPrint('   ❌ DEBUG: ${map['name']}: FULL MAP remainingSeats check: ${map.containsKey('remainingSeats')} = ${map['remainingSeats']}');
-    debugPrint('   ❌ DEBUG: ${map['name']}: All keys in map: ${map.keys.toList()}');
+    debugPrint(
+      '   ❌ DEBUG: ${map['name']}: bookedSeatsField=$bookedSeatsField',
+    );
+    debugPrint(
+      '   ❌ DEBUG: ${map['name']}: FULL MAP remainingSeats check: ${map.containsKey('remainingSeats')} = ${map['remainingSeats']}',
+    );
+    debugPrint(
+      '   ❌ DEBUG: ${map['name']}: All keys in map: ${map.keys.toList()}',
+    );
 
     if (seatInfo is Map) {
       if (totalSeats <= 0) {
@@ -264,21 +274,29 @@ class TourService {
         ? _intFrom(remainingSeatsField)
         : (totalSeats > 0 ? totalSeats - bookedSeats : totalSeats);
 
-    debugPrint('   📊 Parsed: remainingSeatsField=$remainingSeatsField, parsedRemainingSeats=$parsedRemainingSeats');
+    debugPrint(
+      '   📊 Parsed: remainingSeatsField=$remainingSeatsField, parsedRemainingSeats=$parsedRemainingSeats',
+    );
 
     var resolvedRemainingSeats = parsedRemainingSeats < 0
         ? 0
         : parsedRemainingSeats;
 
-    debugPrint('   📊 After <0 check: resolvedRemainingSeats=$resolvedRemainingSeats, totalSeats=$totalSeats');
+    debugPrint(
+      '   📊 After <0 check: resolvedRemainingSeats=$resolvedRemainingSeats, totalSeats=$totalSeats',
+    );
 
     if (totalSeats > 0 && resolvedRemainingSeats > totalSeats) {
-      debugPrint('   ⚠️ remainingSeats ($resolvedRemainingSeats) > totalSeats ($totalSeats) - capping to totalSeats');
+      debugPrint(
+        '   ⚠️ remainingSeats ($resolvedRemainingSeats) > totalSeats ($totalSeats) - capping to totalSeats',
+      );
       resolvedRemainingSeats = totalSeats;
     }
 
     if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
-      debugPrint('   ⚠️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats');
+      debugPrint(
+        '   ⚠️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats',
+      );
       totalSeats = resolvedRemainingSeats;
     }
 
@@ -286,14 +304,20 @@ class TourService {
       debugPrint('   ⚠️ totalSeats still 0 - setting to 1');
       totalSeats = 1;
     }
-    
+
     // FIX: If remainingSeats field was missing or 0, but totalSeats is set, default to totalSeats
-    if (remainingSeatsField == null && resolvedRemainingSeats == 0 && totalSeats > 0) {
-      debugPrint('   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats - defaulting remainingSeats to totalSeats');
+    if (remainingSeatsField == null &&
+        resolvedRemainingSeats == 0 &&
+        totalSeats > 0) {
+      debugPrint(
+        '   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats - defaulting remainingSeats to totalSeats',
+      );
       resolvedRemainingSeats = totalSeats;
     }
 
-    debugPrint('   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats');
+    debugPrint(
+      '   ✅ Final: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats',
+    );
 
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
@@ -303,7 +327,9 @@ class TourService {
       _pick(map, ['lastJoiningTime', 'last_joining_time', 'lastJoinTime']),
     );
 
-    debugPrint('🎫 Tour $name: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats');
+    debugPrint(
+      '🎫 Tour $name: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats',
+    );
 
     return Tour(
       id: docId,

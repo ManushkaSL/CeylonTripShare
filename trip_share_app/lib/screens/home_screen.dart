@@ -21,10 +21,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   final TourService _tourService = TourService();
 
+  late final Stream<List<Tour>> _toursStream;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _toursStream = _tourService.streamTours();
     // Bookings load automatically when user authenticates
     // This ensures they load even if auth was cached
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -40,23 +43,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // Idle tours: no one has booked yet (remainingSeats == totalSeats)
   List<Tour> _idleTours(List<Tour> tours) {
-    final idle = tours.where((t) => t.remainingSeats == t.totalSeats).toList()
+    final idle = tours.where((t) {
+      final isIdle = t.remainingSeats == t.totalSeats;
+      return isIdle;
+    }).toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    debugPrint('🔍 IDLE TOURS (${idle.length}):');
-    for (final t in idle) {
-      debugPrint('   - ${t.name}: remaining=${t.remainingSeats}, total=${t.totalSeats}');
-    }
+    debugPrint('✅ IDLE TOURS (${idle.length}): ${idle.map((t) => '${t.name} (${t.remainingSeats}/${t.totalSeats})').join(', ')}');
     return idle;
   }
 
   // Active tours: someone has already booked (remainingSeats < totalSeats)
   List<Tour> _activeTours(List<Tour> tours) {
-    final active = tours.where((t) => t.remainingSeats < t.totalSeats).toList()
+    final active = tours.where((t) {
+      final isActive = t.remainingSeats < t.totalSeats;
+      return isActive;
+    }).toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
-    debugPrint('🔍 ACTIVE TOURS (${active.length}):');
-    for (final t in active) {
-      debugPrint('   - ${t.name}: remaining=${t.remainingSeats}, total=${t.totalSeats}');
-    }
+    debugPrint('✅ ACTIVE TOURS (${active.length}): ${active.map((t) => '${t.name} (${t.remainingSeats}/${t.totalSeats})').join(', ')}');
     return active;
   }
 
@@ -174,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildHomeContent() {
     return StreamBuilder<List<Tour>>(
-      stream: _tourService.streamTours(),
+      stream: _toursStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           debugPrint('🔴 StreamBuilder error: ${snapshot.error}');
@@ -358,7 +361,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final tour = tours[index];
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: TourCard(tour: tour, isIdle: isIdle),
+          child: TourCard(
+            key: ValueKey('${tour.id}-${tour.remainingSeats}'),
+            tour: tour,
+            isIdle: isIdle,
+          ),
         );
       },
     );

@@ -76,8 +76,12 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
-    debugPrint('📝 BOOKING: adults=$_adults, kids6to12=$_kids6to12, kidsUnder6=$_kidsUnder6, totalPersons=$_totalPersons');
-    debugPrint('   Tour ${widget.tour.name}: remainingSeats=${widget.tour.remainingSeats}, totalSeats=${widget.tour.totalSeats}');
+    debugPrint(
+      '📝 BOOKING: adults=$_adults, kids6to12=$_kids6to12, kidsUnder6=$_kidsUnder6, totalPersons=$_totalPersons',
+    );
+    debugPrint(
+      '   Tour ${widget.tour.name}: remainingSeats=${widget.tour.remainingSeats}, totalSeats=${widget.tour.totalSeats}',
+    );
 
     // Save to Firestore with booking details
     await JoinedTourService().joinTour(
@@ -89,6 +93,9 @@ class _BookingScreenState extends State<BookingScreen> {
       totalPrice: _totalPrice,
       cardHolderName: _cardHolderController.text,
     );
+
+    // Wait for Firestore to sync the tour update before showing confirmation
+    await Future.delayed(const Duration(milliseconds: 500));
 
     showDialog(
       context: context,
