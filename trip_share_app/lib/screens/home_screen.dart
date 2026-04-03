@@ -16,13 +16,15 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _selectedIndex = 0;
+  late TabController _tabController;
   final TourService _tourService = TourService();
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     // Bookings load automatically when user authenticates
     // This ensures they load even if auth was cached
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -30,15 +32,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  List<Tour> _activeTours(List<Tour> tours) => tours
-      .where(
-        (t) =>
-            t.status == TourStatus.active || t.status == TourStatus.fullBooked,
-      )
-      .toList();
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
-  List<Tour> _passiveTours(List<Tour> tours) =>
-      tours.where((t) => t.status == TourStatus.idle).toList();
+  // Idle tours: no one has booked yet (remainingSeats == totalSeats)
+  List<Tour> _idleTours(List<Tour> tours) =>
+      tours.where((t) => t.remainingSeats == t.totalSeats).toList()
+        ..sort((a, b) => a.startDate.compareTo(b.startDate));
+
+  // Active tours: someone has already booked (remainingSeats < totalSeats)
+  List<Tour> _activeTours(List<Tour> tours) =>
+      tours.where((t) => t.remainingSeats < t.totalSeats).toList()
+        ..sort((a, b) => b.startDate.compareTo(a.startDate));
 
   @override
   Widget build(BuildContext context) {
@@ -156,13 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<List<Tour>>(
       stream: _tourService.streamTours(),
       builder: (context, snapshot) {
-        // Log stream states for debugging
         if (snapshot.hasError) {
           debugPrint('🔴 StreamBuilder error: ${snapshot.error}');
-          debugPrint('🔴 Error type: ${snapshot.error.runtimeType}');
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          debugPrint('⏳ StreamBuilder: waiting for data');
         }
         if (snapshot.connectionState == ConnectionState.active) {
           debugPrint(
@@ -172,8 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final loadedTours = snapshot.data ?? const <Tour>[];
         final tours = <Tour>[...loadedTours];
+        final idleTours = _idleTours(tours);
         final activeTours = _activeTours(tours);
-        final passiveTours = _passiveTours(tours);
 
         return Column(
           children: [
@@ -219,143 +222,131 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicator: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: const Color(0xFF1B5E20),
+                  ),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: const [
+                    Tab(child: Text('Idle Tours')),
+                    Tab(child: Text('Active Tours')),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Expanded(
-              child: Builder(
-                builder: (context) {
-                  return ListView(
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                    children: [
-                      if (snapshot.hasError)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red, width: 1),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Failed to load tours',
-                                  style: TextStyle(
-                                    color: Colors.redAccent,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  snapshot.error.toString(),
-                                  style: const TextStyle(
-                                    color: Colors.redAccent,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (snapshot.connectionState == ConnectionState.waiting)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            children: [
-                              LinearProgressIndicator(minHeight: 3),
-                              SizedBox(height: 8),
-                              Text(
-                                'Loading tours...',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (snapshot.data != null &&
-                          snapshot.data!.isEmpty &&
-                          snapshot.connectionState == ConnectionState.done)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.travel_explore,
-                                  size: 64,
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'No tours available',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Check back later for new tours',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (activeTours.isNotEmpty) ...[
-                        const _SectionHeader(title: 'Active Tours'),
-                        const SizedBox(height: 10),
-                        for (int i = 0; i < activeTours.length; i++) ...[
-                          TourCard(
-                            tour: activeTours[i],
-                            onCardTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      TourDetailScreen(tour: activeTours[i]),
-                                ),
-                              );
-                            },
-                          ),
-                          if (i < activeTours.length - 1)
-                            const SizedBox(height: 12),
-                        ],
-                        const SizedBox(height: 24),
-                      ],
-                      if (passiveTours.isNotEmpty) ...[
-                        const _SectionHeader(title: 'Upcoming Tours'),
-                        const SizedBox(height: 10),
-                        for (int i = 0; i < passiveTours.length; i++) ...[
-                          TourCard(
-                            tour: passiveTours[i],
-                            onCardTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      TourDetailScreen(tour: passiveTours[i]),
-                                ),
-                              );
-                            },
-                          ),
-                          if (i < passiveTours.length - 1)
-                            const SizedBox(height: 12),
-                        ],
-                      ],
-                      const SizedBox(height: 24),
-                    ],
-                  );
-                },
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildToursView(context, snapshot, idleTours, true),
+                  _buildToursView(context, snapshot, activeTours, false),
+                ],
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildToursView(
+    BuildContext context,
+    AsyncSnapshot<List<Tour>> snapshot,
+    List<Tour> tours,
+    bool isIdle,
+  ) {
+    if (snapshot.hasError) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.red, width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Failed to load tours',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                snapshot.error.toString(),
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+      );
+    }
+
+    if (tours.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isIdle ? Icons.new_label : Icons.trending_up,
+              size: 64,
+              color: Colors.grey.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isIdle ? 'No idle tours available' : 'No active tours yet',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isIdle
+                  ? 'Check back soon for new tours'
+                  : 'Be the first to join a tour!',
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+      itemCount: tours.length,
+      itemBuilder: (context, index) {
+        final tour = tours[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TourCard(tour: tour, isIdle: isIdle),
         );
       },
     );

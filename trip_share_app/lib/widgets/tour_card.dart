@@ -11,8 +11,14 @@ import 'package:trip_share_app/screens/tour_detail_screen.dart';
 class TourCard extends StatelessWidget {
   final Tour tour;
   final VoidCallback? onCardTap;
+  final bool isIdle;
 
-  const TourCard({super.key, required this.tour, this.onCardTap});
+  const TourCard({
+    super.key,
+    required this.tour,
+    this.onCardTap,
+    this.isIdle = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -224,9 +230,7 @@ class TourCard extends StatelessWidget {
                                       padding: EdgeInsets.zero,
                                     ),
                                     child: Text(
-                                      status == TourStatus.idle
-                                          ? 'Start'
-                                          : 'Join',
+                                      isIdle ? 'Start' : 'Join',
                                       style: const TextStyle(fontSize: 11),
                                     ),
                                   ),

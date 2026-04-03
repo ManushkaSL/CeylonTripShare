@@ -300,6 +300,33 @@ class JoinedTourService extends ChangeNotifier {
           .doc(bookingId)
           .set(booking.toMap());
 
+      debugPrint('✅ Booking saved: $bookingId');
+      debugPrint('📊 Before update - Tour ${tour.id}: remainingSeats=${tour.remainingSeats}, totalPersons=$totalPersons');
+
+      // Update tour's remainingSeats (decrement by totalPersons)
+      try {
+        final tourRef = _firestore.collection('tours').doc(tour.id);
+        debugPrint('🔄 Attempting to update tour ${tour.id}...');
+        
+        await tourRef.update({
+          'remainingSeats': FieldValue.increment(-totalPersons),
+        });
+        
+        debugPrint('✅ Updated tour ${tour.id} remainingSeats decreased by $totalPersons');
+        
+        // Verify the update by reading the updated document
+        final updatedTour = await tourRef.get();
+        final newRemaining = updatedTour.data()?['remainingSeats'] ?? 'N/A';
+        debugPrint('✅ Verified: Tour ${tour.id} new remainingSeats=$newRemaining');
+      } catch (updateError) {
+        debugPrint(
+          '❌ Error updating tour remainingSeats for ${tour.id}: $updateError',
+        );
+        throw Exception(
+          'Failed to update tour seats: $updateError',
+        );
+      }
+
       // Add to in-memory storage
       _joinedTours.add(
         JoinedTour(tour: tour, joinedAt: DateTime.now(), persons: totalPersons),
@@ -309,7 +336,7 @@ class JoinedTourService extends ChangeNotifier {
       _bookings.add(booking);
 
       notifyListeners();
-      debugPrint('✅ Booking saved successfully: $bookingId');
+      debugPrint('✅ Booking completed successfully: $bookingId');
     } catch (e) {
       debugPrint('❌ Error saving booking: $e');
     }

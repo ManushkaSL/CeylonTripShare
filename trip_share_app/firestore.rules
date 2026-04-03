@@ -13,8 +13,8 @@ service cloud.firestore {
     match /tours/{tourId} {
       allow read; // Public access - everyone can read tours
       allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
-      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
-      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+      allow update: if request.auth != null; // Any authenticated user can update (for seat count during bookings)
+      allow delete: if request.auth != null && isAdmin();
 
       // Bookings subcollection
       match /bookings/{subBookingId} {

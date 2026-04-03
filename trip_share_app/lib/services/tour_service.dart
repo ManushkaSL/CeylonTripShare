@@ -238,9 +238,8 @@ class TourService {
       totalSeats = 1;
     }
 
-    if (resolvedRemainingSeats <= 0 && totalSeats > 0) {
-      resolvedRemainingSeats = totalSeats;
-    }
+    // Don't reset remainingSeats if it's already been decremented to 0
+    // This logic was causing fully booked tours to incorrectly show remaining seats
 
     final name = _stringFrom(_pick(map, ['name', 'title', 'tourName']));
 
@@ -249,6 +248,8 @@ class TourService {
     lastJoiningTime ??= _dateTimeFrom(
       _pick(map, ['lastJoiningTime', 'last_joining_time', 'lastJoinTime']),
     );
+
+    debugPrint('🎫 Tour $name: totalSeats=$totalSeats, remainingSeats=$resolvedRemainingSeats');
 
     return Tour(
       id: docId,

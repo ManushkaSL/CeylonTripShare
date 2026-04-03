@@ -76,6 +76,9 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
+    debugPrint('📝 BOOKING: adults=$_adults, kids6to12=$_kids6to12, kidsUnder6=$_kidsUnder6, totalPersons=$_totalPersons');
+    debugPrint('   Tour ${widget.tour.name}: remainingSeats=${widget.tour.remainingSeats}, totalSeats=${widget.tour.totalSeats}');
+
     // Save to Firestore with booking details
     await JoinedTourService().joinTour(
       tour: widget.tour,
