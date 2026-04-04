@@ -151,7 +151,8 @@ class AuthService extends ChangeNotifier {
         debugPrint('✅ User login updated in Firestore with role: $userRole');
       }
     } catch (e) {
-      debugPrint('⚠️ Error creating/updating user in Firestore: $e');
+      debugPrint('❌ Critical error creating/updating user in Firestore: $e');
+      rethrow; // Re-throw so registration properly fails
     }
   }
 
@@ -261,11 +262,19 @@ class AuthService extends ChangeNotifier {
 
       // Create user document in Firestore with phone info
       if (credential.user != null) {
-        await _createOrUpdateUserInFirestore(
-          credential.user!,
-          phoneNumber: phoneNumber,
-          countryCode: countryCode,
-        );
+        try {
+          await _createOrUpdateUserInFirestore(
+            credential.user!,
+            phoneNumber: phoneNumber,
+            countryCode: countryCode,
+          );
+        } catch (firestoreError) {
+          debugPrint(
+            '❌ Failed to create user profile in Firestore: $firestoreError',
+          );
+          // Re-throw with user-friendly message
+          throw Exception('Failed to create user profile. Please try again.');
+        }
       }
 
       return null;

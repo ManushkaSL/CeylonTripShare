@@ -4,7 +4,6 @@ import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/tour_card.dart';
-import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/screens/joined_tours_screen.dart';
 import 'package:trip_share_app/screens/chats_list_screen.dart';
 import 'package:trip_share_app/screens/profile_screen.dart';
@@ -43,23 +42,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // Idle tours: no one has booked yet (remainingSeats == totalSeats)
   List<Tour> _idleTours(List<Tour> tours) {
-    final idle = tours.where((t) {
-      final isIdle = t.remainingSeats == t.totalSeats;
-      return isIdle;
-    }).toList()
+    final idle = tours.where((t) => t.remainingSeats == t.totalSeats).toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    debugPrint('✅ IDLE TOURS (${idle.length}): ${idle.map((t) => '${t.name} (${t.remainingSeats}/${t.totalSeats})').join(', ')}');
+    debugPrint('✅ IDLE TOURS (${idle.length})');
     return idle;
   }
 
   // Active tours: someone has already booked (remainingSeats < totalSeats)
   List<Tour> _activeTours(List<Tour> tours) {
-    final active = tours.where((t) {
-      final isActive = t.remainingSeats < t.totalSeats;
-      return isActive;
-    }).toList()
+    final active = tours.where((t) => t.remainingSeats < t.totalSeats).toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
-    debugPrint('✅ ACTIVE TOURS (${active.length}): ${active.map((t) => '${t.name} (${t.remainingSeats}/${t.totalSeats})').join(', ')}');
+    debugPrint('✅ ACTIVE TOURS (${active.length})');
     return active;
   }
 
@@ -267,8 +260,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildToursView(context, snapshot, idleTours, true),
-                  _buildToursView(context, snapshot, activeTours, false),
+                  _buildToursView(context, snapshot, idleTours),
+                  _buildToursView(context, snapshot, activeTours),
                 ],
               ),
             ),
@@ -282,7 +275,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     BuildContext context,
     AsyncSnapshot<List<Tour>> snapshot,
     List<Tour> tours,
-    bool isIdle,
   ) {
     if (snapshot.hasError) {
       return Center(
@@ -328,25 +320,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isIdle ? Icons.new_label : Icons.trending_up,
+              Icons.travel_explore,
               size: 64,
               color: Colors.grey.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 12),
-            Text(
-              isIdle ? 'No idle tours available' : 'No active tours yet',
-              style: const TextStyle(
+            const Text(
+              'No tours available',
+              style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              isIdle
-                  ? 'Check back soon for new tours'
-                  : 'Be the first to join a tour!',
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            const Text(
+              'Check back soon for new adventures!',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ],
         ),
@@ -364,7 +354,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: TourCard(
             key: ValueKey('${tour.id}-${tour.remainingSeats}'),
             tour: tour,
-            isIdle: isIdle,
           ),
         );
       },
@@ -397,23 +386,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFF333333),
       ),
     );
   }

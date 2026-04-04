@@ -11,18 +11,11 @@ import 'package:trip_share_app/screens/tour_detail_screen.dart';
 class TourCard extends StatelessWidget {
   final Tour tour;
   final VoidCallback? onCardTap;
-  final bool isIdle;
 
-  const TourCard({
-    super.key,
-    required this.tour,
-    this.onCardTap,
-    this.isIdle = false,
-  });
+  const TourCard({super.key, required this.tour, this.onCardTap});
 
   @override
   Widget build(BuildContext context) {
-    final status = tour.status;
     final isFull = !tour.canBook;
     void openTourDetails() {
       if (onCardTap != null) {
@@ -41,21 +34,23 @@ class TourCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: 190,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+          child: Stack(
+            children: [
+              Container(
+                height: 190,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Row(
+                child: Row(
               children: [
                 // Thumbnail
                 ClipRRect(
@@ -196,6 +191,9 @@ class TourCard extends StatelessWidget {
                             color: Color(0xFF1B5E20),
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        // Status Badge
+                        _buildStatusBadge(tour.status),
                         const Spacer(),
                         // Buttons row
                         Row(
@@ -230,7 +228,9 @@ class TourCard extends StatelessWidget {
                                       padding: EdgeInsets.zero,
                                     ),
                                     child: Text(
-                                      isIdle ? 'Start' : 'Join',
+                                      tour.status == TourStatus.idle
+                                          ? 'Start'
+                                          : 'Join',
                                       style: const TextStyle(fontSize: 11),
                                     ),
                                   ),
@@ -299,7 +299,34 @@ class TourCard extends StatelessWidget {
                 ),
               ],
             ),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(TourStatus status) {
+    final (String label, Color bgColor, Color fgColor) = switch (status) {
+      TourStatus.fullBooked => ('Fully Booked', const Color(0xFFFFEBEE), const Color(0xFFC62828)),
+      TourStatus.idle => ('Idle', const Color(0xFFFFF8E1), const Color(0xFFF57F17)),
+      TourStatus.active => ('Active', const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fgColor, width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: fgColor,
         ),
       ),
     );

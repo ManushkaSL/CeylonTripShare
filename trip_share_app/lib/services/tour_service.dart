@@ -180,6 +180,7 @@ class TourService {
     );
 
     final seatInfo = _pick(map, ['seatInfo', 'seat_info', 'capacityInfo']);
+    final details = _pick(map, ['details', 'metadata', 'tourDetails']);
 
     var totalSeats = _intFrom(
       _pick(map, [
@@ -194,13 +195,16 @@ class TourService {
       ]),
     );
 
+    // Track if totalSeats was explicitly set in Firestore
+    final hadExplicitTotalSeats = totalSeats > 0;
+
     dynamic remainingSeatsField = _pick(map, [
+      'available_seats', // Prioritize Firestore field name first
+      'availableSeats',
       'remainingSeats',
       'remaining_seats',
       'remainingSeat',
       'remaining_seat',
-      'availableSeats',
-      'available_seats',
       'availableSeat',
       'available_seat',
       'seatsAvailable',
@@ -210,7 +214,7 @@ class TourService {
     ]);
 
     debugPrint(
-      '   ❌ DEBUG: ${map['name']}: remainingSeatsField=$remainingSeatsField (raw value: ${map['remainingSeats']})',
+      '   ❌ DEBUG: ${map['name']}: remainingSeatsField=$remainingSeatsField | available_seats from map: ${map['available_seats']}',
     );
 
     dynamic bookedSeatsField = _pick(map, [
@@ -266,6 +270,40 @@ class TourService {
       ]);
     }
 
+    // Check details/metadata for seat information if not found yet
+    if (details is Map) {
+      if (totalSeats <= 0) {
+        totalSeats = _intFrom(
+          _pick(details, [
+            'totalSeats',
+            'total_seats',
+            'total',
+            'capacity',
+            'maxSeats',
+            'max_seats',
+          ]),
+        );
+      }
+
+      remainingSeatsField ??= _pick(details, [
+        'availableSeats',
+        'available_seats',
+        'availableSeatCount',
+        'available_seat_count',
+        'remaining',
+        'remainingSeats',
+        'remaining_seats',
+        'available',
+      ]);
+
+      bookedSeatsField ??= _pick(details, [
+        'bookedSeats',
+        'booked_seats',
+        'bookedCount',
+        'booked_count',
+      ]);
+    }
+
     final bookedSeats = bookedSeatsField != null
         ? _intFrom(bookedSeatsField)
         : 0;
@@ -293,11 +331,16 @@ class TourService {
       resolvedRemainingSeats = totalSeats;
     }
 
-    if (totalSeats <= 0 && resolvedRemainingSeats > 0) {
+    // IMPORTANT FIX: If totalSeats was not explicitly set in Firestore but available_seats exists,
+    // use available_seats as the INITIAL total capacity (it should never change after this)
+    if (!hadExplicitTotalSeats && resolvedRemainingSeats > 0) {
       debugPrint(
-        '   ⚠️ totalSeats is 0 but remainingSeats > 0 - setting totalSeats=$resolvedRemainingSeats',
+        '   🔧 INIT: totalSeats not in Firestore but available_seats=$resolvedRemainingSeats - setting totalSeats=$resolvedRemainingSeats',
       );
       totalSeats = resolvedRemainingSeats;
+
+      // Write totalSeats back to Firestore so it persists and this only happens once
+      _writeInitialTotalSeatsToFirestore(docId, totalSeats);
     }
 
     if (totalSeats <= 0) {
@@ -305,12 +348,12 @@ class TourService {
       totalSeats = 1;
     }
 
-    // FIX: If remainingSeats field was missing or 0, but totalSeats is set, default to totalSeats
-    if (remainingSeatsField == null &&
-        resolvedRemainingSeats == 0 &&
+    // FIX: If remainingSeats was missing or 0, but totalSeats is set and no one has actually booked, default to totalSeats
+    if ((remainingSeatsField == null || resolvedRemainingSeats == 0) &&
+        bookedSeats == 0 &&
         totalSeats > 0) {
       debugPrint(
-        '   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats - defaulting remainingSeats to totalSeats',
+        '   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats and no bookings - defaulting remainingSeats to totalSeats',
       );
       resolvedRemainingSeats = totalSeats;
     }
@@ -386,6 +429,25 @@ class TourService {
         )
         .where((stop) => stop.location.isNotEmpty || stop.time.isNotEmpty)
         .toList(growable: false);
+  }
+
+  /// Write initial totalSeats to Firestore if it was missing
+  /// This ensures the capacity is set only once from available_seats
+  void _writeInitialTotalSeatsToFirestore(String tourId, int totalSeats) {
+    FirebaseFirestore.instance
+        .collection('tours')
+        .doc(tourId)
+        .update({'totalSeats': totalSeats})
+        .then((_) {
+          debugPrint(
+            '✅ Wrote initial totalSeats=$totalSeats to Firestore for tour $tourId',
+          );
+        })
+        .catchError((e) {
+          debugPrint(
+            '⚠️ Could not write totalSeats to Firestore (non-critical): $e',
+          );
+        });
   }
 
   dynamic _pick(Map map, List<String> keys) {

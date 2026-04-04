@@ -380,20 +380,20 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
         ],
       ),
       // Bottom Join/Start button
-      bottomNavigationBar: tour.canBook
-          ? Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: tour.canBook
+            ? Row(
                 children: [
                   // Price summary
                   Expanded(
@@ -439,21 +439,8 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     ),
                   ),
                 ],
-              ),
-            )
-          : Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Center(
+              )
+            : Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -488,7 +475,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   ),
                 ),
               ),
-            ),
+      ),
     );
   }
 

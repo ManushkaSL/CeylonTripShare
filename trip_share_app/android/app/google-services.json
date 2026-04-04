@@ -12,7 +12,20 @@
           "package_name": "com.example.trip_share_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "230136178640-efmdi5asodgq5da3fsntdulghq2lamla.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.trip_share_app",
+            "certificate_hash": "639fb4853ab7dc85ea2c2d3300e2faf34ba9a1e2"
+          }
+        },
+        {
+          "client_id": "230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCU76ZdlAQiag6lPNOt2hRoVPjEacAkfuk"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "230136178640-8a9oecnq48f52nlnn74mmb2sn550rgib.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.tripShareApp"
+              }
+            }
+          ]
         }
       }
     }
