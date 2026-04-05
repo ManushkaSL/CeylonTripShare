@@ -30,6 +30,13 @@ export interface Tour {
   created_at?: unknown;
 }
 
+export interface PassengerInfo {
+  userId: string;
+  name: string;
+  email: string;
+  phone: string;
+}
+
 export interface Booking {
   id: string;
   userId: string;
@@ -39,10 +46,12 @@ export interface Booking {
   totalPrice: number;
   userEmail?: string;
   userName?: string;
+  userPhone?: string;
   tourTitle?: string;
   driverId?: string;
   driverName?: string;
   driverEmail?: string;
+  passengers?: PassengerInfo[];
   createdAt?: unknown;
   updatedAt?: unknown;
 }

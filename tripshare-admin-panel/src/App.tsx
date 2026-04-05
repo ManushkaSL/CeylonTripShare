@@ -8,7 +8,7 @@ import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, L
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour, Booking } from './types';
 import { db, auth } from './firebase';
-import { addDoc, collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, getDoc, orderBy, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase';
 
@@ -151,14 +151,14 @@ function TourImageCarousel({ images, title }: { images: string[]; title: string 
             onClick={(e) => { e.stopPropagation(); setIdx((prev) => (prev - 1 + images.length) % images.length); }}
             className="absolute z-20 left-2 top-1/2 -translate-y-1/2 p-1 bg-white/80 backdrop-blur-sm rounded-full shadow hover:bg-white transition-colors pointer-events-auto"
           >
-            <ChevronLeft className="w-4 h-4 text-zinc-700" />
+            <ChevronLeft className="w-4 h-4 text-stone-700" />
           </button>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setIdx((prev) => (prev + 1) % images.length); }}
             className="absolute z-20 right-2 top-1/2 -translate-y-1/2 p-1 bg-white/80 backdrop-blur-sm rounded-full shadow hover:bg-white transition-colors pointer-events-auto"
           >
-            <ChevronRight className="w-4 h-4 text-zinc-700" />
+            <ChevronRight className="w-4 h-4 text-stone-700" />
           </button>
           <div className="absolute z-20 bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
             {images.map((_, i) => (
@@ -256,6 +256,8 @@ export default function App() {
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+  const [expandedTourId, setExpandedTourId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogout = async () => {
@@ -471,28 +473,57 @@ export default function App() {
       console.log('Number of documents:', querySnapshot.size);
       console.log('Empty:', querySnapshot.empty);
       
-      const bookingsData = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        console.log('Raw booking document:', { id: doc.id, data });
-        
-        // Map the fields to match the Booking interface
-        return {
-          id: doc.id,
-          userId: data.userId || '',
-          tourId: data.tourId || '',
-          status: data.status || 'pending',
-          numberOfPeople: data.totalPersons || data.numberOfPeople || 0,
-          totalPrice: data.totalPrice || 0,
-          userEmail: data.userEmail || '',
-          userName: data.userName || '',
-          tourTitle: data.tourName || data.tourTitle || '',
-          driverId: data.driverId,
-          driverName: data.driverName,
-          driverEmail: data.driverEmail,
-          createdAt: data.createdAt || data.bookedAt,
-          updatedAt: data.updatedAt
-        } as Booking;
-      });
+      const bookingsData = await Promise.all(
+        querySnapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data();
+          console.log('Raw booking document:', { id: docSnap.id, data });
+          
+          // Fetch user data from users collection if userId exists
+          let userName = data.name || '';
+          let userEmail = data.userEmail || '';
+          let userPhone = data.phone || '';
+          
+          if (data.userId) {
+            try {
+              // Fetch the specific user document by ID
+              const userDocRef = doc(db, 'users', data.userId);
+              const userDocSnap = await getDoc(userDocRef);
+              
+              if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                userName = userData.displayName || userData.name || userData.fullName || userName;
+                userEmail = userData.email || userEmail;
+                userPhone = userData.phone || userData.phoneNumber || userData.mobile || userPhone;
+                console.log('Found user data:', { userId: data.userId, name: userName, email: userEmail, phone: userPhone });
+              } else {
+                console.log('User not found for userId:', data.userId);
+              }
+            } catch (err) {
+              console.error('Error fetching user data:', err);
+            }
+          }
+          
+          // Map the fields to match the Booking interface
+          return {
+            id: docSnap.id,
+            userId: data.userId || '',
+            tourId: data.tourId || '',
+            status: data.status || 'pending',
+            numberOfPeople: data.totalPersons || data.numberOfPeople || 0,
+            totalPrice: data.totalPrice || 0,
+            userEmail: userEmail,
+            userName: userName,
+            userPhone: userPhone,
+            tourTitle: data.tourName || data.tourTitle || '',
+            driverId: data.driverId,
+            driverName: data.driverName,
+            driverEmail: data.driverEmail,
+            passengers: data.passengers || [],
+            createdAt: data.createdAt || data.bookedAt,
+            updatedAt: data.updatedAt
+          } as Booking;
+        })
+      );
 
       console.log('Processed bookings:', bookingsData);
       console.log('Total bookings:', bookingsData.length);
@@ -506,6 +537,24 @@ export default function App() {
     } finally {
       setBookingsLoading(false);
     }
+  };
+
+  // Group bookings by tour
+  const groupBookingsByTour = () => {
+    const grouped: { [tourId: string]: { tourTitle: string; bookings: Booking[] } } = {};
+    
+    bookings.forEach((booking) => {
+      const tourId = booking.tourId;
+      if (!grouped[tourId]) {
+        grouped[tourId] = {
+          tourTitle: booking.tourTitle || 'Untitled Tour',
+          bookings: []
+        };
+      }
+      grouped[tourId].bookings.push(booking);
+    });
+    
+    return grouped;
   };
 
   const updateBookingStatus = async (bookingId: string, newStatus: string) => {
@@ -609,6 +658,45 @@ export default function App() {
     }
   };
 
+  const deleteAllBookingsForTour = async (tourId: string) => {
+    if (!confirm('Are you sure you want to delete ALL bookings for this tour? This cannot be undone.')) return;
+    try {
+      const tourBookings = bookings.filter(b => b.tourId === tourId);
+      
+      // Calculate total seats to restore
+      let totalSeatsToRestore = 0;
+      
+      // Delete each booking and calculate seat restoration
+      for (const booking of tourBookings) {
+        if (booking.status !== 'cancelled') {
+          totalSeatsToRestore += booking.numberOfPeople || 0;
+        }
+        await deleteDoc(doc(db, 'bookings', booking.id));
+      }
+      
+      // Restore seats to tour if needed
+      if (totalSeatsToRestore > 0) {
+        const tour = tours.find(t => t.id === tourId);
+        if (tour) {
+          const updatedAvailableSeats = Math.min(
+            tour.available_seats + totalSeatsToRestore,
+            tour.seat_count
+          );
+          await updateDoc(doc(db, 'tours', tourId), {
+            available_seats: updatedAvailableSeats
+          });
+        }
+      }
+      
+      console.log(`All ${tourBookings.length} bookings deleted for tour`);
+      await fetchBookings();
+      await fetchTours();
+    } catch (error: any) {
+      console.error('Error deleting all bookings:', error);
+      alert(`Failed to delete all bookings: ${error.message}`);
+    }
+  };
+
   const assignDriverToBooking = async (bookingId: string, driverId: string) => {
     try {
       const selectedDriver = drivers.find(d => d.id === driverId);
@@ -652,7 +740,7 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 p-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -660,46 +748,46 @@ export default function App() {
         >
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <LayoutDashboard className="w-8 h-8 text-emerald-600" />
+              <LayoutDashboard className="w-8 h-8 text-orange-600" />
             </div>
-            <h1 className="text-2xl font-bold text-zinc-900">TripShare Admin</h1>
-            <p className="text-zinc-500 text-sm mt-1">Admin role required to access this panel</p>
+            <h1 className="text-2xl font-bold text-stone-900">TripShare Admin</h1>
+            <p className="text-stone-700 text-sm mt-1">Admin role required to access this panel</p>
             <div className="flex items-center gap-2 px-3 py-2 mt-3 bg-blue-50 border border-blue-200 rounded-lg">
               <Lock className="w-4 h-4 text-blue-600" />
               <span className="text-xs text-blue-700">Only users with <strong>admin</strong> role can access</span>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-8 space-y-5">
+          <form onSubmit={handleLogin} className="rounded-2xl border border-stone-200 shadow-sm p-8 space-y-5" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
             {loginError && (
               <div className="bg-red-50 text-red-600 text-sm font-medium px-4 py-3 rounded-xl border border-red-100">
                 {loginError}
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Email</label>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input
                   required
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                   placeholder="admin@gmail.com"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Password</label>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input
                   required
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                   placeholder="••••••••"
                 />
               </div>
@@ -943,11 +1031,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex bg-zinc-50">
+    <div className="min-h-screen flex bg-stone-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col hidden md:flex sticky top-0 h-screen overflow-y-auto">
-        <div className="p-6 border-b border-zinc-100">
-          <h1 className="text-xl font-bold tracking-tight text-emerald-600 flex items-center gap-2">
+      <aside className="w-64 bg-white border-r border-stone-200 flex flex-col hidden md:flex sticky top-0 h-screen overflow-y-auto">
+        <div className="p-6 border-b border-stone-100">
+          <h1 className="text-xl font-bold tracking-tight text-orange-600 flex items-center gap-2">
             <LayoutDashboard className="w-6 h-6" />
             TripShare Admin
           </h1>
@@ -957,8 +1045,8 @@ export default function App() {
             onClick={() => setActiveSection('tours')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'tours'
-                ? 'text-emerald-600 bg-emerald-50'
-                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+                ? 'text-orange-600 bg-orange-50'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
@@ -968,8 +1056,8 @@ export default function App() {
             onClick={() => setActiveSection('bookings')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'bookings'
-                ? 'text-emerald-600 bg-emerald-50'
-                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+                ? 'text-orange-600 bg-orange-50'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
             <Calendar className="w-4 h-4" />
@@ -979,17 +1067,17 @@ export default function App() {
             onClick={() => setActiveSection('drivers')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'drivers'
-                ? 'text-emerald-600 bg-emerald-50'
-                : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+                ? 'text-orange-600 bg-orange-50'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
             <Users className="w-4 h-4" />
             Driver Management
           </button>
         </nav>
-        <div className="p-4 border-t border-zinc-100">
+        <div className="p-4 border-t border-stone-100">
           <div className="px-4 py-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-200">
-            <p className="text-xs font-medium text-zinc-600 mb-1">Logged in as</p>
+            <p className="text-xs font-medium text-stone-700 mb-1">Logged in as</p>
             <p className="text-sm font-semibold text-zinc-900 truncate">{sessionStorage.getItem('admin_email') || email}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-emerald-600 rounded-full">
@@ -997,7 +1085,7 @@ export default function App() {
               </span>
             </div>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors w-full rounded-lg hover:bg-zinc-50">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-stone-600 hover:text-zinc-900 transition-colors w-full rounded-lg hover:bg-stone-50">
             <LogOut className="w-4 h-4" />
             Sign Out
           </button>
@@ -1006,7 +1094,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-8 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-zinc-900">
               {activeSection === 'tours' ? 'Tours Management' : activeSection === 'bookings' ? 'Booking Management' : 'Driver Management'}
@@ -1032,7 +1120,7 @@ export default function App() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-              <p className="text-zinc-500 font-medium">Loading tours...</p>
+              <p className="text-stone-600 font-medium">Loading tours...</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -1044,9 +1132,9 @@ export default function App() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group"
+                    className="rounded-2xl border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}
                   >
-                    <div className="aspect-video relative overflow-hidden bg-zinc-100">
+                    <div className="aspect-video relative overflow-hidden bg-stone-100">
                       {(() => {
                         const imgs: string[] = Array.isArray(tour.images)
                           ? tour.images
@@ -1057,7 +1145,7 @@ export default function App() {
                           return <TourImageCarousel images={imgs} title={tour.title} />;
                         }
                         return (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-400">
+                          <div className="w-full h-full flex items-center justify-center text-stone-400">
                             <ImageIcon className="w-12 h-12" />
                           </div>
                         );
@@ -1066,7 +1154,7 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleEditTour(tour)}
-                            className="p-2 bg-white/90 backdrop-blur-sm text-zinc-700 rounded-full hover:bg-zinc-100 transition-colors shadow-sm"
+                            className="p-2 bg-white/90 backdrop-blur-sm text-stone-800 rounded-full hover:bg-stone-100 transition-colors shadow-sm"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -1090,17 +1178,17 @@ export default function App() {
                         )}
                       </div>
                       <h3 className="text-lg font-bold text-zinc-900 mb-2 line-clamp-1">{tour.title}</h3>
-                      <p className="text-zinc-500 text-sm line-clamp-2 mb-3">{tour.description}</p>
+                      <p className="text-stone-600 text-sm line-clamp-2 mb-3">{tour.description}</p>
                       {tour.operator_name && (
-                        <p className="text-xs text-zinc-400 mb-3">by <span className="font-medium text-zinc-600">{tour.operator_name}</span></p>
+                        <p className="text-xs text-stone-400 mb-3">by <span className="font-medium text-stone-700">{tour.operator_name}</span></p>
                       )}
                       <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                        <p className="text-xs font-medium text-zinc-600">Total Seats: <span className="font-semibold text-zinc-800">{Number(tour.seat_count || 0)}</span></p>
+                        <p className="text-xs font-medium text-stone-700">Total Seats: <span className="font-semibold text-stone-900">{Number(tour.seat_count || 0)}</span></p>
                         <p className="text-sm font-bold text-emerald-700">Available Seats: {Number(tour.available_seats ?? tour.seat_count ?? 0)}</p>
                       </div>
-                      <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
+                      <div className="flex items-center justify-between pt-4 border-t border-stone-100">
                         <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-1.5 text-zinc-600 text-sm">
+                          <div className="flex items-center gap-1.5 text-stone-700 text-sm">
                             <Clock className="w-4 h-4" />
                             {tour.start_time ? `${tour.start_time} ${tour.start_time_period || 'AM'}` : 'N/A'}
                           </div>
@@ -1118,12 +1206,12 @@ export default function App() {
           )}
 
           {!loading && tours.length === 0 && !isAdding && (
-            <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-zinc-200">
-              <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <LayoutDashboard className="w-8 h-8 text-zinc-300" />
+            <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-stone-200">
+              <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <LayoutDashboard className="w-8 h-8 text-stone-300" />
               </div>
               <h3 className="text-lg font-semibold text-zinc-900 mb-1">No tours found</h3>
-              <p className="text-zinc-500 mb-6">Get started by creating your first tour package.</p>
+              <p className="text-stone-600 mb-6">Get started by creating your first tour package.</p>
               <button
                 onClick={openCreateTourModal}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all inline-flex items-center gap-2"
@@ -1140,7 +1228,7 @@ export default function App() {
         <div className="p-8 max-w-7xl mx-auto w-full">
           <div className="space-y-6">
             {/* Add Driver Form */}
-            <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+            <div className="rounded-2xl border border-stone-200 p-6" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
               <h3 className="text-lg font-semibold text-zinc-900 mb-4">Add Driver by Email</h3>
               <form onSubmit={handleAddDriver} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
@@ -1152,7 +1240,7 @@ export default function App() {
                       setDriverError('');
                     }}
                     placeholder="Enter driver email address"
-                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                    className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                   />
                 </div>
                 <button
@@ -1181,16 +1269,19 @@ export default function App() {
             </div>
 
             {/* Drivers List */}
-            <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
-              <div className="p-6 border-b border-zinc-100">
+            <div className="rounded-2xl border border-stone-200 overflow-hidden transition-transform duration-300 hover:scale-105 active:scale-95" style={{ 
+              backgroundColor: 'rgba(237, 224, 196, 0.92)',
+              boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
+            }}>
+              <div className="p-6 border-b border-stone-100">
                 <h3 className="text-lg font-semibold text-zinc-900">Registered Drivers ({drivers.length})</h3>
               </div>
               {drivers.length === 0 ? (
                 <div className="p-8 text-center">
-                  <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-zinc-300" />
+                  <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-8 h-8 text-stone-300" />
                   </div>
-                  <p className="text-zinc-500">No drivers added yet. Add driver emails to get started.</p>
+                  <p className="text-stone-600">No drivers added yet. Add driver emails to get started.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-zinc-100">
@@ -1203,7 +1294,7 @@ export default function App() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 20 }}
                           onClick={() => setExpandedDriverId(expandedDriverId === driver.id ? null : driver.id)}
-                          className="p-6 flex items-center justify-between hover:bg-zinc-50 transition-colors cursor-pointer"
+                          className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer"
                         >
                           <div className="flex-1">
                             <p className="font-medium text-zinc-900">{driver.email}</p>
@@ -1213,7 +1304,7 @@ export default function App() {
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : driver.status === 'pending'
                                     ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-zinc-100 text-zinc-700'
+                                    : 'bg-stone-100 text-stone-800'
                               }`}>
                                 {driver.status === 'active' ? 'Active' : driver.status === 'pending' ? 'Pending' : 'Inactive'}
                               </span>
@@ -1224,7 +1315,7 @@ export default function App() {
                                 </span>
                               )}
                               {driver.created_at && (
-                                <span className="text-xs text-zinc-500">
+                                <span className="text-xs text-stone-600">
                                   Added {new Date(driver.created_at.toDate?.() || driver.created_at).toLocaleDateString()}
                                 </span>
                               )}
@@ -1236,7 +1327,7 @@ export default function App() {
                               animate={{ rotate: expandedDriverId === driver.id ? 180 : 0 }}
                               transition={{ duration: 0.2 }}
                             >
-                              <ChevronRight className="w-5 h-5 text-zinc-400" />
+                              <ChevronRight className="w-5 h-5 text-stone-400" />
                             </motion.div>
                             <button
                               onClick={(e) => {
@@ -1258,59 +1349,59 @@ export default function App() {
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
-                              className="overflow-hidden border-t border-zinc-100"
+                              className="overflow-hidden border-t border-stone-100"
                             >
-                              <div className="p-6 bg-zinc-50 space-y-5">
+                              <div className="p-6 bg-stone-50 space-y-5">
                                 <div>
                                   <h4 className="text-sm font-semibold text-zinc-900 mb-4">Driver Information</h4>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Email</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Email</p>
                                       <p className="text-sm font-medium text-zinc-900">{driver.email}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Status</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Status</p>
                                       <p className="text-sm font-medium text-zinc-900">{driver.status || 'N/A'}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Phone</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Phone</p>
                                       <p className="text-sm font-medium text-zinc-900">{driver.phone || 'Not provided'}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">License</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">License</p>
                                       <p className="text-sm font-medium text-zinc-900">{driver.license_number || 'Not provided'}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Vehicle</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Vehicle</p>
                                       <p className="text-sm font-medium text-zinc-900">{driver.vehicle || 'Not assigned'}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1">Assigned Tours</p>
+                                      <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Assigned Tours</p>
                                       <p className="text-sm font-medium text-zinc-900">{getAssignedToursForDriver(driver.id).length}</p>
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="border-t border-zinc-200 pt-4">
+                                <div className="border-t border-stone-200 pt-4">
                                   <h4 className="text-sm font-semibold text-zinc-900 mb-3">Active Ratings</h4>
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
-                                      <p className="text-xs font-medium text-zinc-500 mb-1">Average Rating</p>
+                                    <div className="bg-white rounded-lg p-3 border border-stone-200">
+                                      <p className="text-xs font-medium text-stone-600 mb-1">Average Rating</p>
                                       <p className="text-lg font-bold text-emerald-600">{driver.rating || '4.8'}/5</p>
                                     </div>
-                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
-                                      <p className="text-xs font-medium text-zinc-500 mb-1">Total Trips</p>
+                                    <div className="bg-white rounded-lg p-3 border border-stone-200">
+                                      <p className="text-xs font-medium text-stone-600 mb-1">Total Trips</p>
                                       <p className="text-lg font-bold text-blue-600">{driver.total_trips || 0}</p>
                                     </div>
-                                    <div className="bg-white rounded-lg p-3 border border-zinc-200">
-                                      <p className="text-xs font-medium text-zinc-500 mb-1">Completion Rate</p>
+                                    <div className="bg-white rounded-lg p-3 border border-stone-200">
+                                      <p className="text-xs font-medium text-stone-600 mb-1">Completion Rate</p>
                                       <p className="text-lg font-bold text-purple-600">{driver.completion_rate || '98%'}</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 {getAssignedToursForDriver(driver.id).length > 0 && (
-                                  <div className="border-t border-zinc-200 pt-4">
+                                  <div className="border-t border-stone-200 pt-4">
                                     <h4 className="text-sm font-semibold text-zinc-900 mb-3">Assigned Tours</h4>
                                     <div className="space-y-2">
                                       {getAssignedToursForDriver(driver.id).map(booking => (
@@ -1318,8 +1409,8 @@ export default function App() {
                                           <div className="flex items-start justify-between">
                                             <div className="flex-1">
                                               <p className="text-sm font-semibold text-zinc-900">{booking.tourTitle || 'Tour Name'}</p>
-                                              <p className="text-xs text-zinc-600 mt-1">User: {booking.userName}</p>
-                                              <p className="text-xs text-zinc-600">Passengers: {booking.numberOfPeople}</p>
+                                              <p className="text-xs text-stone-700 mt-1">User: {booking.userName}</p>
+                                              <p className="text-xs text-stone-700">Passengers: {booking.numberOfPeople}</p>
                                             </div>
                                             <span className={`text-xs font-semibold px-2 py-0.5 rounded whitespace-nowrap ml-2 ${
                                               booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
@@ -1335,7 +1426,7 @@ export default function App() {
                                   </div>
                                 )}
 
-                                <div className="border-t border-zinc-200 pt-4">
+                                <div className="border-t border-stone-200 pt-4">
                                   <div className="flex gap-2">
                                     <button className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
                                       Edit Driver
@@ -1362,32 +1453,15 @@ export default function App() {
         {activeSection === 'bookings' && (
         <div className="p-8 max-w-7xl mx-auto w-full">
           <div className="space-y-6">
-            {/* Bookings Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
-                <p className="text-sm font-medium text-zinc-500 mb-2">Total Bookings</p>
-                <p className="text-3xl font-bold text-zinc-900">{bookings.length}</p>
-              </div>
-              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
-                <p className="text-sm font-medium text-zinc-500 mb-2">Confirmed</p>
-                <p className="text-3xl font-bold text-emerald-600">{bookings.filter(b => b.status === 'confirmed').length}</p>
-              </div>
-              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
-                <p className="text-sm font-medium text-zinc-500 mb-2">Pending</p>
-                <p className="text-3xl font-bold text-amber-600">{bookings.filter(b => b.status === 'pending').length}</p>
-              </div>
-              <div className="bg-white rounded-2xl border border-zinc-200 p-6">
-                <p className="text-sm font-medium text-zinc-500 mb-2">Cancelled</p>
-                <p className="text-3xl font-bold text-red-600">{bookings.filter(b => b.status === 'cancelled').length}</p>
-              </div>
-            </div>
-
-            {/* Bookings Table */}
-            <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
-              <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+            {/* Bookings List */}
+            <div className="rounded-2xl border border-stone-200 overflow-hidden transition-transform duration-300 hover:scale-105 active:scale-95" style={{ 
+              backgroundColor: 'rgba(237, 224, 196, 0.92)',
+              boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
+            }}>
+              <div className="p-6 border-b border-stone-100 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-zinc-900">All Bookings</h3>
-                  <p className="text-sm text-zinc-500 mt-1">Manage and track all tour bookings</p>
+                  <p className="text-sm text-stone-600 mt-1">Manage and track all tour bookings</p>
                 </div>
                 <button
                   onClick={fetchBookings}
@@ -1401,83 +1475,148 @@ export default function App() {
               {bookingsLoading ? (
                 <div className="p-12 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
-                  <p className="text-zinc-500">Loading bookings...</p>
+                  <p className="text-stone-600">Loading bookings...</p>
                 </div>
               ) : bookings.length === 0 ? (
                 <div className="p-12 text-center">
-                  <Calendar className="w-8 h-8 text-zinc-300 mx-auto mb-3" />
-                  <p className="text-zinc-500">No bookings found</p>
+                  <Calendar className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+                  <p className="text-stone-600">No bookings found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-zinc-50 border-b border-zinc-100">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Booking ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">User</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Tour</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">People</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Price</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Driver</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-zinc-700 uppercase tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                      {bookings.map(booking => (
-                        <tr key={booking.id} className="hover:bg-zinc-50 transition-colors">
-                          <td className="px-6 py-3 text-sm font-mono text-zinc-600">{booking.id.substring(0, 12)}...</td>
-                          <td className="px-6 py-3 text-sm">
-                            <div>
-                              <p className="font-medium text-zinc-900">{booking.userName || 'N/A'}</p>
-                              <p className="text-xs text-zinc-500">{booking.userEmail || 'N/A'}</p>
+                <div className="divide-y divide-zinc-100">
+                  <AnimatePresence mode="popLayout">
+                    {Object.entries(groupBookingsByTour()).map(([tourId, tourData]) => {
+                      const allPassengers = tourData.bookings.flatMap(b => {
+                        const names: string[] = [];
+                        if (b.userName) names.push(b.userName);
+                        if (b.passengers && b.passengers.length > 0) {
+                          names.push(...b.passengers.map(p => p.name));
+                        }
+                        return names;
+                      });
+                      
+                      const totalPeople = tourData.bookings.reduce((sum, b) => sum + (b.numberOfPeople || 0), 0);
+                      const totalPrice = tourData.bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+                      
+                      return (
+                        <div key={tourId}>
+                          <motion.div
+                            layout
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            onClick={() => setExpandedTourId(expandedTourId === tourId ? null : tourId)}
+                            className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                              <div>
+                                <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Tour Name</p>
+                                <p className="font-medium text-zinc-900 truncate">{tourData.tourTitle || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Booked By</p>
+                                <p className="font-medium text-zinc-900 text-sm line-clamp-2">{allPassengers.join(', ') || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Passengers</p>
+                                <p className="font-medium text-zinc-900">{totalPeople}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Revenue</p>
+                                <p className="font-bold text-emerald-600">Rs. {totalPrice?.toFixed(2) || '0.00'}</p>
+                              </div>
                             </div>
-                          </td>
-                          <td className="px-6 py-3 text-sm text-zinc-600">{booking.tourTitle || 'N/A'}</td>
-                          <td className="px-6 py-3 text-sm font-medium text-zinc-900">{booking.numberOfPeople || 0}</td>
-                          <td className="px-6 py-3 text-sm font-medium text-emerald-600">Rs. {booking.totalPrice?.toFixed(2) || '0.00'}</td>
-                          <td className="px-6 py-3 text-sm">
-                            <select
-                              value={booking.status}
-                              onChange={e => updateBookingStatus(booking.id, e.target.value)}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium border-0 outline-none transition-colors ${
-                                booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                'bg-red-100 text-red-700'
-                              }`}
-                            >
-                              <option value="pending">Pending</option>
-                              <option value="confirmed">Confirmed</option>
-                              <option value="cancelled">Cancelled</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-3 text-sm">
-                            <select
-                              value={booking.driverId || ''}
-                              onChange={e => assignDriverToBooking(booking.id, e.target.value)}
-                              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-zinc-200 outline-none focus:border-emerald-500 transition-colors"
-                            >
-                              <option value="">Not Assigned</option>
-                              {drivers.map(driver => (
-                                <option key={driver.id} value={driver.id}>
-                                  {driver.name || driver.email}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-6 py-3 text-sm">
-                            <button
-                              onClick={() => deleteBooking(booking.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            <div className="flex items-center gap-2 ml-4">
+                              <motion.div
+                                initial={false}
+                                animate={{ rotate: expandedTourId === tourId ? 180 : 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <ChevronRight className="w-5 h-5 text-stone-400" />
+                              </motion.div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteAllBookingsForTour(tourId);
+                                }}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete all bookings for this tour"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </motion.div>
+
+                          {/* Expanded Details */}
+                          <AnimatePresence>
+                            {expandedTourId === tourId && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden border-t border-stone-100"
+                              >
+                                <div className="p-6 bg-stone-50 space-y-5">
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-zinc-900 mb-4">People Who Booked This Tour</h4>
+                                    <div className="space-y-3">
+                                      {tourData.bookings.map((booking, idx) => (
+                                        <div key={booking.id} className="bg-white rounded-lg p-4 border border-stone-200">
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-3">
+                                            <div>
+                                              <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Booking ID</p>
+                                              <p className="text-sm font-mono font-medium text-zinc-900">{booking.id}</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Name</p>
+                                              <p className="text-sm font-medium text-zinc-900">{booking.userName || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Email</p>
+                                              <p className="text-sm font-medium text-zinc-900">{booking.userEmail || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Phone</p>
+                                              <p className="text-sm font-medium text-zinc-900">+94 {booking.userPhone || 'N/A'}</p>
+                                            </div>
+                                            <div className="flex items-end">
+                                              <button
+                                                onClick={() => deleteBooking(booking.id)}
+                                                className="w-full px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1"
+                                                title="Delete booking"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                                Delete
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          {/* Passenger details */}
+                                          {booking.passengers && booking.passengers.length > 0 && (
+                                            <div className="border-t border-stone-200 pt-3 mt-3">
+                                              <p className="text-xs font-semibold text-stone-800 mb-2">Passengers:</p>
+                                              <div className="space-y-2">
+                                                {booking.passengers.map((passenger, pIdx) => (
+                                                  <div key={pIdx} className="text-xs bg-stone-100 rounded px-3 py-2">
+                                                    <p className="font-medium">{passenger.name}</p>
+                                                    <p className="text-stone-700">{passenger.email} • +94 {passenger.phone}</p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
@@ -1495,30 +1634,36 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={closeTourModal}
-              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/50 backdrop-blur-lg"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-4xl bg-white rounded-3xl border border-zinc-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              className="relative w-full max-w-4xl rounded-3xl border border-stone-200 overflow-hidden max-h-[92vh] flex flex-col"
+              style={{ 
+                backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
+              }}
             >
-              <div className="p-7 border-b border-zinc-100 bg-white sticky top-0 z-10">
+              <div className="p-7 border-b border-stone-100 sticky top-0 z-10" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-2xl font-bold text-zinc-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
-                    <p className="text-sm text-zinc-500 mt-1">Fill in the details below to publish this tour.</p>
+                    <p className="text-sm text-stone-600 mt-1">Fill in the details below to publish this tour.</p>
                   </div>
                   <button
                     onClick={closeTourModal}
-                    className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+                    className="p-2 hover:bg-stone-100 rounded-full transition-colors"
                   >
-                    <Plus className="w-6 h-6 rotate-45 text-zinc-400" />
+                    <Plus className="w-6 h-6 rotate-45 text-stone-400" />
                   </button>
                 </div>
               </div>
 
-              <div className="p-7 overflow-y-auto bg-zinc-50/50">
+              <div className="p-7 overflow-y-auto" style={{ backgroundColor: 'rgba(237, 224, 196, 0.15)' }}>
                 <form onSubmit={handleAddTour} className="space-y-6">
                   {createError && (
                     <div className="bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100 break-all">
@@ -1530,38 +1675,41 @@ export default function App() {
                       {createStep}
                     </div>
                   )}
-                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
-                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Basic Details</p>
+                  <div className="border border-stone-200 rounded-2xl p-5 space-y-4 transition-all duration-200 hover:shadow-lg" style={{ 
+                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Basic Details</p>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Name</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour Name</label>
                       <input
                         required
                         type="text"
                         value={newTour.title}
                         onChange={e => setNewTour({ ...newTour, title: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                         placeholder="e.g. Wilpattu Full Day Safari from Anuradhapura"
                       />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Category</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Category</label>
                       <div className="relative">
-                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           type="text"
                           value={newTour.category}
                           onChange={e => setNewTour({ ...newTour, category: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. Wildlife Jeep Safari"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Seat Count</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Seat Count</label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           required
                           type="number"
@@ -1580,15 +1728,15 @@ export default function App() {
                               available_seats: editingTourId ? newTour.available_seats : seatCount,
                             });
                           }}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. 6"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Price</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Price</label>
                       <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           required
                           type="number"
@@ -1600,7 +1748,7 @@ export default function App() {
                             }
                           }}
                           onChange={e => setNewTour({ ...newTour, price: Number(e.target.value || 0) })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. 250"
                         />
                       </div>
@@ -1608,46 +1756,46 @@ export default function App() {
                   </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Description</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Description</label>
                       <textarea
                         value={newTour.description}
                         onChange={e => setNewTour({ ...newTour, description: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all h-24 resize-none"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all h-24 resize-none"
                         placeholder="Describe the tour highlights..."
                       />
                     </div>
                   </div>
 
-                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
-                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Schedule</p>
+                  <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Schedule</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Location</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Start Location</label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           type="text"
                           value={newTour.start_location}
                           onChange={e => setNewTour({ ...newTour, start_location: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. Anuradhapura Town"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Start Day</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour Start Day</label>
                       <input
                         type="date"
                         value={newTour.start_day}
                         onChange={e => setNewTour({ ...newTour, start_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                   </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Start Time</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Start Time</label>
                       <input
                         type="time"
                         value={
@@ -1668,18 +1816,18 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Location</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">End Location</label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           type="text"
                           value={newTour.end_location}
                           onChange={e => setNewTour({ ...newTour, end_location: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. Anuradhapura Town"
                         />
                       </div>
@@ -1688,16 +1836,16 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour End Day</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour End Day</label>
                       <input
                         type="date"
                         value={newTour.end_day}
                         onChange={e => setNewTour({ ...newTour, end_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">End Time</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">End Time</label>
                       <input
                         type="time"
                         value={
@@ -1718,23 +1866,23 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                   </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Booking Close Date</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Booking Close Date</label>
                       <input
                         type="date"
                         value={newTour.booking_close_date}
                         onChange={e => setNewTour({ ...newTour, booking_close_date: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Booking Close Time</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Booking Close Time</label>
                       <input
                         type="time"
                         value={
@@ -1755,18 +1903,18 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                       />
                     </div>
                   </div>
                   </div>
 
-                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
-                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Route</p>
-                    <label className="block text-sm font-semibold text-zinc-700">Locations</label>
+                  <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Route</p>
+                    <label className="block text-sm font-semibold text-stone-800">Locations</label>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
-                        <Route className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <Route className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           type="text"
                           value={routeInput}
@@ -1777,7 +1925,7 @@ export default function App() {
                               addRouteStop();
                             }
                           }}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. Kurunegala"
                         />
                       </div>
@@ -1791,13 +1939,13 @@ export default function App() {
                     </div>
                     <div className="mt-2 space-y-2">
                       {normalizeRouteValue(newTour.route).length === 0 ? (
-                        <div className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                        <div className="text-xs text-stone-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
                           No route locations added yet.
                         </div>
                       ) : (
                         normalizeRouteValue(newTour.route).map((stop, index) => (
-                          <div key={`${stop}-${index}`} className="flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
-                            <span className="text-sm text-zinc-700">{index + 1}. {stop}</span>
+                          <div key={`${stop}-${index}`} className="flex items-center justify-between gap-3 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
+                            <span className="text-sm text-stone-800">{index + 1}. {stop}</span>
                             <button
                               type="button"
                               onClick={() => removeRouteStop(index)}
@@ -1811,62 +1959,65 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4">
-                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Extra Details</p>
+                  <div className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4">
+                    <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Extra Details</p>
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Operator Name</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Operator Name</label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           type="text"
                           value={newTour.operator_name}
                           onChange={e => setNewTour({ ...newTour, operator_name: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                           placeholder="e.g. Ceylon Transit Safaris"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">What's Included</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">What's Included</label>
                       <input
                         type="text"
                         value={newTour.whats_included}
                         onChange={e => setNewTour({ ...newTour, whats_included: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                         placeholder="e.g. Entry Tickets, Jeep and Guide, Lunch, Water"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Tour Features</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour Features</label>
                       <input
                         type="text"
                         value={newTour.tour_features}
                         onChange={e => setNewTour({ ...newTour, tour_features: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                         placeholder="e.g. Expert Tracking, Quality Jeeps, Ethical Practices"
                       />
                     </div>
                   </div>
 
-                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-3">
-                    <p className="text-xs font-semibold tracking-wide uppercase text-zinc-500">Images</p>
-                    <label className="block text-sm font-semibold text-zinc-700">Tour Images</label>
+                  <div className="border border-stone-200 rounded-2xl p-5 space-y-3 transition-all duration-200 hover:shadow-lg" style={{ 
+                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Images</p>
+                    <label className="block text-sm font-semibold text-stone-800">Tour Images</label>
                     {editingTourId && (
                       <div className="mb-3">
-                        <p className="text-xs font-medium text-zinc-500 mb-2">Current Images</p>
+                        <p className="text-xs font-medium text-stone-600 mb-2">Current Images</p>
                         {editingImages.length > 0 ? (
                           <div className="grid grid-cols-4 gap-2">
                             {editingImages.map((src, i) => (
-                              <div key={`${src}-${i}`} className="relative aspect-square rounded-lg overflow-hidden group/img border border-zinc-200">
+                              <div key={`${src}-${i}`} className="relative aspect-square rounded-lg overflow-hidden group/img border border-stone-200">
                                 <img src={src} className="w-full h-full object-cover" />
                                 <div className="absolute inset-x-1 bottom-1 flex items-center justify-between gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
                                   <button
                                     type="button"
                                     onClick={() => moveExistingImage(i, 'left')}
                                     disabled={i === 0}
-                                    className="p-1 bg-white/95 text-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="p-1 bg-white/95 text-stone-800 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <ChevronLeft className="w-3 h-3" />
                                   </button>
@@ -1874,7 +2025,7 @@ export default function App() {
                                     type="button"
                                     onClick={() => moveExistingImage(i, 'right')}
                                     disabled={i === editingImages.length - 1}
-                                    className="p-1 bg-white/95 text-zinc-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="p-1 bg-white/95 text-stone-800 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <ChevronRight className="w-3 h-3" />
                                   </button>
@@ -1890,7 +2041,7 @@ export default function App() {
                             ))}
                           </div>
                         ) : (
-                          <div className="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                          <div className="text-xs text-stone-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
                             No current images. Add new ones below.
                           </div>
                         )}
@@ -1907,7 +2058,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-zinc-50 border-2 border-dashed border-zinc-300 rounded-xl text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 transition-all"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-stone-50 border-2 border-dashed border-stone-300 rounded-xl text-stone-600 hover:border-emerald-400 hover:text-emerald-600 transition-all"
                     >
                       <Upload className="w-4 h-4" />
                       {editingTourId ? 'Add More Images' : 'Browse Images'}
@@ -1930,11 +2081,14 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="pt-5 -mx-7 px-7 pb-1 flex gap-3 sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-zinc-200">
+                  <div className="pt-5 -mx-7 px-7 pb-1 flex gap-3 sticky bottom-0 border-t border-stone-200" style={{ 
+                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.1)'
+                  }}>
                     <button
                       type="button"
                       onClick={closeTourModal}
-                      className="flex-1 px-6 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold rounded-xl transition-all"
+                      className="flex-1 px-6 py-3 bg-stone-100 hover:bg-zinc-200 text-stone-800 font-semibold rounded-xl transition-all"
                     >
                       Cancel
                     </button>
@@ -1955,3 +2109,6 @@ export default function App() {
     </div>
   );
 }
+
+
+

@@ -17,6 +17,8 @@ class _BookingScreenState extends State<BookingScreen> {
   int _kids6to12 = 0;
   int _kidsUnder6 = 0;
   final _pickupController = TextEditingController();
+  final _phoneController = TextEditingController();
+  String _countryCode = '+1'; // Default to US
   bool _agreeToPolicy = false;
 
   // Card fields
@@ -39,6 +41,7 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void dispose() {
     _pickupController.dispose();
+    _phoneController.dispose();
     _cardNumberController.dispose();
     _expiryController.dispose();
     _cvvController.dispose();
@@ -84,6 +87,7 @@ class _BookingScreenState extends State<BookingScreen> {
     );
 
     // Save to Firestore with booking details
+    final fullPhoneNumber = '$_countryCode${_phoneController.text}';
     await JoinedTourService().joinTour(
       tour: widget.tour,
       adults: _adults,
@@ -92,6 +96,7 @@ class _BookingScreenState extends State<BookingScreen> {
       pickupLocation: _pickupController.text,
       totalPrice: _totalPrice,
       cardHolderName: _cardHolderController.text,
+      phoneNumber: fullPhoneNumber,
     );
 
     // Wait for Firestore to sync the tour update before showing confirmation
@@ -200,6 +205,79 @@ class _BookingScreenState extends State<BookingScreen> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 20),
+
+            // Phone number
+            _buildSectionTitle('Contact Information'),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                // Country code input field
+                SizedBox(
+                  width: 85,
+                  child: TextFormField(
+                    initialValue: _countryCode,
+                    decoration: InputDecoration(
+                      hintText: '+1',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 14,
+                      ),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Code';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) {
+                      setState(() => _countryCode = value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Phone number field
+                Expanded(
+                  child: TextFormField(
+                    controller: _phoneController,
+                    decoration: InputDecoration(
+                      hintText: 'Phone number',
+                      prefixIcon: const Icon(
+                        Icons.phone_outlined,
+                        color: Color(0xFF1B5E20),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Required';
+                      }
+                      if (v.replaceAll(RegExp(r'[^0-9]'), '').length < 7) {
+                        return 'Invalid';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
 

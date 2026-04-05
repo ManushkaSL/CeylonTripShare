@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._();
@@ -17,8 +18,8 @@ class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    serverClientId:
-        '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
+    clientId: '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
+    serverClientId: '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
   );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -315,7 +316,28 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _googleSignIn.signOut();
-    await _auth.signOut();
+    try {
+      debugPrint('🚪 Logging out...');
+
+      // Clear all cached bookings and tours
+      JoinedTourService().clearCache();
+
+      // Sign out from Google (handle web errors gracefully)
+      try {
+        await _googleSignIn.signOut();
+        debugPrint('✅ Google sign out complete');
+      } catch (e) {
+        debugPrint('⚠️ Google sign out error (continuing): $e');
+      }
+      
+      // Always sign out from Firebase
+      await _auth.signOut();
+
+      debugPrint('✅ Firebase sign out complete');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Logout error: $e');
+      notifyListeners();
+    }
   }
 }

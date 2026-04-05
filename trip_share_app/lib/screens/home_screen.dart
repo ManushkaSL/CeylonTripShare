@@ -62,6 +62,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       extendBody: true,
       extendBodyBehindAppBar: _selectedIndex == 0,
       backgroundColor: const Color(0xFFF5F5F5),
+      body: Container(
+        decoration: _selectedIndex == 0
+            ? BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/bg.jpg'),
+                  fit: BoxFit.cover,
+                ),
+              )
+            : null,
+        child: _selectedIndex == 0
+            ? Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                ),
+                child: _buildBody(),
+              )
+            : _buildBody(),
+      ),
       appBar: _selectedIndex == 0
           ? PreferredSize(
               preferredSize: const Size.fromHeight(kToolbarHeight),
@@ -118,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-      body: _buildBody(),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
         child: ClipRRect(

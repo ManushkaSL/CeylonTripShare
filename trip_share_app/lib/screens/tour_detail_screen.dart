@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/screens/booking_screen.dart';
 
@@ -16,11 +17,13 @@ class TourDetailScreen extends StatefulWidget {
 class _TourDetailScreenState extends State<TourDetailScreen> {
   int _currentPhoto = 0;
   late final PageController _pageController;
+  late bool _isUserBooked;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _isUserBooked = JoinedTourService().isJoined(widget.tour.name);
   }
 
   @override
@@ -392,7 +395,43 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
             ),
           ],
         ),
-        child: tour.canBook
+        child: _isUserBooked
+            ? Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF2E7D32),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 18,
+                        color: Color(0xFF2E7D32),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'You are already booked',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF2E7D32),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : tour.canBook
             ? Row(
                 children: [
                   // Price summary

@@ -387,6 +387,7 @@ class JoinedTourService extends ChangeNotifier {
   }
 
   /// Save booking to Firestore and in-memory storage
+  /// If a booking already exists for this tour, add the new passenger to the passengers array
   Future<void> joinTour({
     required Tour tour,
     required int adults,
@@ -395,6 +396,7 @@ class JoinedTourService extends ChangeNotifier {
     required String pickupLocation,
     required double totalPrice,
     String? cardHolderName,
+    required String phoneNumber,
   }) async {
     try {
       final userId = _authService.userId;
@@ -403,16 +405,99 @@ class JoinedTourService extends ChangeNotifier {
         return;
       }
 
-      // Avoid duplicate joins
-      if (_joinedTours.any((jt) => jt.tour.name == tour.name)) {
+      final totalPersons = adults + kids6to12 + kidsUnder6;
+
+      // CHECK IF BOOKING EXISTS FOR THIS TOUR
+      final existingBookingSnapshot = await _firestore
+          .collection('bookings')
+          .where('tourId', isEqualTo: tour.id)
+          .limit(1)
+          .get();
+
+      if (existingBookingSnapshot.docs.isNotEmpty) {
+        // BOOKING EXISTS - ADD PASSENGER TO EXISTING BOOKING
+        final existingBookingDoc = existingBookingSnapshot.docs.first;
+        final existingBookingId = existingBookingDoc.id;
+        final existingData = existingBookingDoc.data();
+
+        debugPrint('✅ Booking found for tour ${tour.id}: $existingBookingId');
+        debugPrint('   Adding new passenger to existing booking...');
+
+        // Get current user data for the new passenger
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        final userName = userDoc.data()?['displayName'] ?? 
+                        userDoc.data()?['name'] ?? 
+                        'User';
+        final userEmail = userDoc.data()?['email'] ?? '';
+
+        // Create new passenger info
+        final newPassenger = PassengerInfo(
+          userId: userId,
+          name: userName,
+          email: userEmail,
+          phone: phoneNumber,
+        );
+
+        // Get current passengers array
+        final currentPassengers = 
+            (existingData['passengers'] as List<dynamic>? ?? [])
+            .map((p) => PassengerInfo.fromMap(p as Map<String, dynamic>))
+            .toList();
+
+        // Add new passenger to the list
+        currentPassengers.add(newPassenger);
+
+        // Calculate new total
+        final newTotalPersons = (existingData['totalPersons'] as int? ?? 0) + totalPersons;
+        final newTotalPrice = (existingData['totalPrice'] as num? ?? 0) + totalPrice;
+
+        // UPDATE EXISTING BOOKING
+        await _firestore
+            .collection('bookings')
+            .doc(existingBookingId)
+            .update({
+          'totalPersons': newTotalPersons,
+          'totalPrice': newTotalPrice,
+          'passengers': currentPassengers.map((p) => p.toMap()).toList(),
+        });
+
+        debugPrint('✅ Added passenger to booking $existingBookingId');
+        debugPrint('   New total: $newTotalPersons persons, Rs. $newTotalPrice');
+
+        // No need to update tour seats again - already deducted with first booking
+        debugPrint('ℹ️  Tour seats remain unchanged (already deducted from first booking)');
+
+        notifyListeners();
+        return;
+      }
+
+      // NO EXISTING BOOKING - CREATE NEW BOOKING
+      debugPrint('📝 No booking found for tour ${tour.id} - creating new booking...');
+
+      // Avoid duplicate joins check
+      if (_joinedTours.any((jt) => jt.tour.id == tour.id)) {
         debugPrint('⚠️ Already joined this tour');
         return;
       }
 
-      final totalPersons = adults + kids6to12 + kidsUnder6;
       final bookingId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      // Create booking object
+      // Get current user data
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userName = userDoc.data()?['displayName'] ?? 
+                      userDoc.data()?['name'] ?? 
+                      'User';
+      final userEmail = userDoc.data()?['email'] ?? '';
+
+      // Create initial passenger info for the first booker
+      final initialPassenger = PassengerInfo(
+        userId: userId,
+        name: userName,
+        email: userEmail,
+        phone: phoneNumber,
+      );
+
+      // Create booking object with passengers array
       final booking = Booking(
         id: bookingId,
         userId: userId,
@@ -425,6 +510,8 @@ class JoinedTourService extends ChangeNotifier {
         totalPrice: totalPrice,
         totalPersons: totalPersons,
         cardHolderName: cardHolderName,
+        phoneNumber: phoneNumber,
+        passengers: [initialPassenger],
       );
 
       // Save to Firestore
@@ -433,7 +520,7 @@ class JoinedTourService extends ChangeNotifier {
           .doc(bookingId)
           .set(booking.toMap());
 
-      debugPrint('✅ Booking saved: $bookingId');
+      debugPrint('✅ New booking saved: $bookingId');
       debugPrint(
         '📊 Before update - Tour ${tour.id}: remainingSeats=${tour.remainingSeats}, totalSeats=${tour.totalSeats}, totalPersons=$totalPersons',
       );
@@ -444,7 +531,6 @@ class JoinedTourService extends ChangeNotifier {
         debugPrint('🔄 Attempting tour update...');
 
         // IMPORTANT: Fetch the real tour data from Firestore to get accurate available_seats
-        // Don't use tour.remainingSeats from the UI object - it might be parsed incorrectly
         final realTour = await tourRef.get();
         final realTourData = realTour.data();
 
@@ -452,7 +538,6 @@ class JoinedTourService extends ChangeNotifier {
           throw Exception('Tour not found in Firestore: ${tour.id}');
         }
 
-        // Try to get available_seats first (from user's Firestore), then fall back to remainingSeats
         final firestoreAvailableSeats =
             (realTourData['available_seats'] ?? realTourData['remainingSeats'])
                 as int?;
@@ -463,11 +548,7 @@ class JoinedTourService extends ChangeNotifier {
         debugPrint(
           '   📥 Real from Firestore: available_seats=$firestoreAvailableSeats, totalSeats=$firestoreTotalSeats',
         );
-        debugPrint(
-          '   📱 From UI object: remainingSeats=${tour.remainingSeats}, totalSeats=${tour.totalSeats}',
-        );
 
-        // Use Firestore values or fall back to tour object
         final actualAvailable = firestoreAvailableSeats ?? tour.remainingSeats;
         final actualTotal = firestoreTotalSeats ?? tour.totalSeats;
 
@@ -483,22 +564,18 @@ class JoinedTourService extends ChangeNotifier {
         // Update available_seats field in Firestore
         await tourRef.update({
           'available_seats': newAvailable,
-          'remainingSeats':
-              newAvailable, // Also update remainingSeats for consistency
+          'remainingSeats': newAvailable,
         });
 
         debugPrint('✅ Updated available_seats to: $newAvailable');
 
-        // Verify the update by reading the updated document
-        await Future.delayed(
-          const Duration(milliseconds: 300),
-        ); // Wait for Firestore to sync
+        // Verify the update
+        await Future.delayed(const Duration(milliseconds: 300));
         final updatedTour = await tourRef.get();
         final verifiedAvailable = updatedTour.data()?['available_seats'];
         debugPrint(
-          '✅ VERIFIED from Firestore: available_seats=$verifiedAvailable (type: ${verifiedAvailable.runtimeType})',
+          '✅ VERIFIED from Firestore: available_seats=$verifiedAvailable',
         );
-        debugPrint('📝 Raw Firestore doc: ${updatedTour.data()}');
       } catch (updateError) {
         debugPrint(
           '❌ Error updating tour available_seats for ${tour.id}: $updateError',
@@ -511,7 +588,6 @@ class JoinedTourService extends ChangeNotifier {
         JoinedTour(tour: tour, joinedAt: DateTime.now(), persons: totalPersons),
       );
 
-      // Add to bookings list
       _bookings.add(booking);
 
       // Cache booking details for deletion detection
@@ -692,5 +768,15 @@ class JoinedTourService extends ChangeNotifier {
 
   List<JoinedTour> get toursWithChats {
     return _joinedTours.where((jt) => jt.isChatAvailable).toList();
+  }
+
+  /// Clear all cached bookings and tours when user logs out
+  void clearCache() {
+    _joinedTours.clear();
+    _bookings.clear();
+    _lastSeenBookings.clear();
+    _bookingCache.clear();
+    notifyListeners();
+    debugPrint('🗑️ JoinedTourService cache cleared');
   }
 }

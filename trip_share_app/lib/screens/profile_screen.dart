@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 
 /// Body-only widget for embedding in HomeScreen nav tabs
@@ -217,6 +218,9 @@ class _ProfileBodyState extends State<ProfileBody> {
                     ),
                     TextButton(
                       onPressed: () async {
+                        // Clear bookings cache first
+                        JoinedTourService().clearCache();
+                        // Then logout
                         await AuthService().logout();
                         if (!context.mounted) return;
                         Navigator.of(context).pop();

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/location_service.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/models/tour.dart';
@@ -209,6 +210,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                                 ),
                                 TextButton(
                                   onPressed: () async {
+                                    JoinedTourService().clearCache();
                                     await _auth.logout();
                                     if (context.mounted) {
                                       Navigator.of(context).pop();
