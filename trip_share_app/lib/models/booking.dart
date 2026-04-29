@@ -14,12 +14,7 @@ class PassengerInfo {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'userId': userId,
-      'name': name,
-      'email': email,
-      'phone': phone,
-    };
+    return {'userId': userId, 'name': name, 'email': email, 'phone': phone};
   }
 
   factory PassengerInfo.fromMap(Map<String, dynamic> map) {
@@ -65,6 +60,12 @@ class Booking {
 
   /// Convert to Firestore document data
   Map<String, dynamic> toMap() {
+    final passengerIds = passengers
+        .map((p) => p.userId)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
     return {
       'id': id,
       'userId': userId,
@@ -81,6 +82,7 @@ class Booking {
       'cardHolderName': cardHolderName,
       'phoneNumber': phoneNumber,
       'passengers': passengers.map((p) => p.toMap()).toList(),
+      'passengerIds': passengerIds,
     };
   }
 

@@ -24,6 +24,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
   bool _isSharing = false;
   String? _sharingTourId;
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -149,10 +150,36 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     }
   }
 
+  Future<void> _showLogoutDialog() async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              JoinedTourService().clearCache();
+              await _auth.logout();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final userEmail = _auth.userEmail;
-    final isRootScreen = Navigator.of(context).canPop() == false;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -165,15 +192,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
             child: AppBar(
               backgroundColor: Colors.white.withValues(alpha: 0.6),
               elevation: 0,
-              leading: isRootScreen
-                  ? null
-                  : IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        color: Color(0xFF1B5E20),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
+              automaticallyImplyLeading: false,
               title: const Text(
                 'Driver Dashboard',
                 style: TextStyle(
@@ -182,68 +201,168 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   fontSize: 20,
                 ),
               ),
-              actions: isRootScreen
-                  ? [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.logout,
-                          color: Color(0xFF1B5E20),
-                        ),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              title: const Text('Log Out'),
-                              content: const Text(
-                                'Are you sure you want to log out?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text(
-                                    'Cancel',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () async {
-                                    JoinedTourService().clearCache();
-                                    await _auth.logout();
-                                    if (context.mounted) {
-                                      Navigator.of(context).pop();
-                                    }
-                                  },
-                                  child: const Text(
-                                    'Log Out',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ]
-                  : null,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout, color: Color(0xFF1B5E20)),
+                  onPressed: _showLogoutDialog,
+                ),
+              ],
             ),
           ),
         ),
       ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+      body: _selectedIndex == 0
+          ? Column(
+              children: [
+                SizedBox(
+                  height:
+                      MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+                ),
+                _buildStatusBanner(),
+                const SizedBox(height: 16),
+                Expanded(child: _buildToursList(userEmail)),
+              ],
+            )
+          : _buildDriverProfileSection(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        indicatorColor: const Color(0xFF1B5E20).withValues(alpha: 0.16),
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Assigned Tours',
           ),
-          // Status banner
-          _buildStatusBanner(),
-          const SizedBox(height: 16),
-          // Tour list
-          Expanded(child: _buildToursList(userEmail)),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDriverProfileSection() {
+    return ListView(
+      physics: const ClampingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+        16,
+        24,
+      ),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 32,
+                backgroundColor: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                backgroundImage: _auth.photoUrl.isNotEmpty
+                    ? NetworkImage(_auth.photoUrl)
+                    : null,
+                child: _auth.photoUrl.isEmpty
+                    ? Text(
+                        _auth.userName.isNotEmpty
+                            ? _auth.userName[0].toUpperCase()
+                            : 'D',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B5E20),
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _auth.userName.isNotEmpty ? _auth.userName : 'Driver',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1B5E20),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _auth.userEmail,
+                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Driver Tools',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1B5E20),
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Use Assigned Tours to share live location and chat with passengers in tours already assigned to you.',
+                style: TextStyle(fontSize: 13, color: Colors.black87),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: _showLogoutDialog,
+            icon: const Icon(Icons.logout, color: Colors.red),
+            label: const Text(
+              'Log Out',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -396,23 +515,19 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
-            final bookingId = docs[index].id;
             final tourName = data['tourName'] ?? 'Unnamed Tour';
             final tourDate = data['tourDate'] as String? ?? '';
             final totalPersons = data['totalPersons'] ?? 0;
             final pickupLocation = data['pickupLocation'] ?? '';
-            final userId = data['userId'] ?? '';
             final tourId = data['tourId'] ?? '';
-            final isSharingThis = _isSharing && _sharingTourId == bookingId;
+            final isSharingThis = _isSharing && _sharingTourId == tourId;
 
             return _buildBookingCard(
-              bookingId: bookingId,
               tourId: tourId,
               tourName: tourName,
               tourDate: tourDate,
               totalPersons: totalPersons,
               pickupLocation: pickupLocation,
-              userId: userId,
               isSharingThis: isSharingThis,
             );
           },
@@ -422,13 +537,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   }
 
   Widget _buildBookingCard({
-    required String bookingId,
     required String tourId,
     required String tourName,
     required String tourDate,
     required int totalPersons,
     required String pickupLocation,
-    required String userId,
     required bool isSharingThis,
   }) {
     return Card(
@@ -499,7 +612,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _toggleSharing(bookingId, tourName),
+                    onPressed: () => _toggleSharing(tourId, tourName),
                     icon: Icon(
                       isSharingThis ? Icons.my_location : Icons.location_off,
                       size: 18,

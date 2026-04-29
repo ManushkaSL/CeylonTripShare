@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
@@ -19,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _selectedIndex = 0;
   late TabController _tabController;
   final TourService _tourService = TourService();
+  final JoinedTourService _joinedTourService = JoinedTourService();
 
   late final Stream<List<Tour>> _toursStream;
 
@@ -27,31 +27,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _toursStream = _tourService.streamTours();
+    _joinedTourService.addListener(_onBookingUpdate);
     // Bookings load automatically when user authenticates
     // This ensures they load even if auth was cached
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) JoinedTourService().loadBookings();
+      if (mounted) _joinedTourService.loadBookings();
     });
   }
 
   @override
   void dispose() {
+    _joinedTourService.removeListener(_onBookingUpdate);
     _tabController.dispose();
     super.dispose();
   }
 
+  void _onBookingUpdate() {
+    if (mounted) setState(() {});
+  }
+
   // Idle tours: no one has booked yet (remainingSeats == totalSeats)
   List<Tour> _idleTours(List<Tour> tours) {
-    final idle = tours.where((t) => t.remainingSeats == t.totalSeats).toList()
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    final activeTourIds = _joinedTourService.joinedTours
+        .map((jt) => jt.tour.id)
+        .toSet();
+    final idle =
+        tours
+            .where(
+              (t) =>
+                  t.remainingSeats == t.totalSeats &&
+                  !activeTourIds.contains(t.id),
+            )
+            .toList()
+          ..sort((a, b) => a.startDate.compareTo(b.startDate));
     debugPrint('✅ IDLE TOURS (${idle.length})');
     return idle;
   }
 
   // Active tours: someone has already booked (remainingSeats < totalSeats)
   List<Tour> _activeTours(List<Tour> tours) {
-    final active = tours.where((t) => t.remainingSeats < t.totalSeats).toList()
-      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    final activeTourIds = _joinedTourService.joinedTours
+        .map((jt) => jt.tour.id)
+        .toSet();
+    final active =
+        tours
+            .where(
+              (t) =>
+                  t.remainingSeats < t.totalSeats ||
+                  activeTourIds.contains(t.id),
+            )
+            .toList()
+          ..sort((a, b) => b.startDate.compareTo(a.startDate));
     debugPrint('✅ ACTIVE TOURS (${active.length})');
     return active;
   }
@@ -60,69 +86,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
-      extendBodyBehindAppBar: _selectedIndex == 0,
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: Container(
-        decoration: _selectedIndex == 0
-            ? BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage('assets/bg.jpg'),
-                  fit: BoxFit.cover,
-                ),
-              )
-            : null,
-        child: _selectedIndex == 0
-            ? Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                ),
-                child: _buildBody(),
-              )
-            : _buildBody(),
-      ),
+      backgroundColor: _selectedIndex == 0
+          ? const Color(0xFF070B17)
+          : const Color(0xFFF4F4F7),
+      body: _buildBody(),
       appBar: _selectedIndex == 0
-          ? PreferredSize(
-              preferredSize: const Size.fromHeight(kToolbarHeight),
-              child: ClipRRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: AppBar(
-                    backgroundColor: Colors.white.withValues(alpha: 0.6),
-                    elevation: 0,
-                    title: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF1B5E20,
-                            ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.travel_explore,
-                            color: Color(0xFF1B5E20),
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Ceylon Shared Tours',
-                          style: TextStyle(
-                            color: Color(0xFF1B5E20),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            )
+          ? null
           : AppBar(
-              backgroundColor: Colors.white.withValues(alpha: 0.8),
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
               elevation: 0,
+              centerTitle: true,
               title: Text(
                 _selectedIndex == 1
                     ? 'Chats'
@@ -130,42 +104,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ? 'Joined Tours'
                     : 'Profile',
                 style: const TextStyle(
-                  color: Color(0xFF1B5E20),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
+                  color: Color(0xFF0B1220),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                  fontSize: 19,
                 ),
               ),
             ),
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.65),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+        child: Container(
+          height: 66,
+          decoration: BoxDecoration(
+            color: _selectedIndex == 0
+                ? const Color(0xFF0F1627)
+                : const Color(0xFF121A2E),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 26,
+                offset: const Offset(0, 10),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(Icons.home_rounded, 'Home', 0),
-                  _buildNavItem(Icons.chat_bubble_rounded, 'Chats', 1),
-                  _buildNavItem(Icons.luggage_rounded, 'Joined', 2),
-                  _buildNavItem(Icons.person_rounded, 'Profile', 3),
-                ],
-              ),
-            ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.home_rounded, 'Home', 0),
+              _buildNavItem(Icons.chat_bubble_rounded, 'Chats', 1),
+              _buildNavItem(Icons.luggage_rounded, 'Joined', 2),
+              _buildNavItem(Icons.person_rounded, 'Profile', 3),
+            ],
           ),
         ),
       ),
@@ -203,40 +174,109 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final idleTours = _idleTours(tours);
         final activeTours = _activeTours(tours);
 
-        return Column(
-          children: [
-            SizedBox(
-              height: MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+        return Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF111B33), Color(0xFF070B17), Color(0xFF04060D)],
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                  child: SizedBox(
+                    height: 186,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.asset('assets/bg.jpg', fit: BoxFit.cover),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.08),
+                                  Colors.black.withValues(alpha: 0.68),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: -36,
+                            right: -22,
+                            child: Container(
+                              width: 140,
+                              height: 140,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.14),
+                              ),
+                            ),
+                          ),
+                          const Positioned(
+                            left: 16,
+                            right: 16,
+                            bottom: 42,
+                            child: Text(
+                              'Find your favorite place\nand travel with us',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 21,
+                                height: 1.25,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 16,
+                            right: 16,
+                            bottom: 14,
+                            child: Row(
+                              children: [
+                                _buildHeroBadge(
+                                  icon: Icons.auto_awesome,
+                                  label: 'Premium Tours',
+                                ),
+                                const SizedBox(width: 8),
+                                _buildHeroBadge(
+                                  icon: Icons.shield_moon,
+                                  label: 'Trusted Drivers',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 50,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.7),
+                      color: Colors.white.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
+                        color: Colors.white.withValues(alpha: 0.16),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
                     child: const TextField(
+                      style: TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Search destinations, tours...',
-                        hintStyle: TextStyle(color: Colors.grey),
+                        hintText: 'London, Bangkok etc',
+                        hintStyle: TextStyle(color: Color(0xFF9FA9C2)),
                         prefixIcon: Icon(
-                          Icons.search,
-                          color: Color(0xFF1B5E20),
+                          Icons.search_rounded,
+                          color: Color(0xFFFF5B8A),
                         ),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 14),
@@ -244,45 +284,68 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: TabBar(
+                        controller: _tabController,
+                        dividerColor: Colors.transparent,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        splashBorderRadius: BorderRadius.circular(12),
+                        indicator: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF3BA5FF), Color(0xFF1E6DE2)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF3BA5FF,
+                              ).withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        labelColor: Colors.white,
+                        unselectedLabelColor: const Color(0xFF9FA9C2),
+                        labelStyle: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                        tabs: [
+                          Tab(text: 'Idle Tours (${idleTours.length})'),
+                          Tab(text: 'Active Tours (${activeTours.length})'),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: const Color(0xFF1B5E20),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildToursView(context, snapshot, idleTours),
+                      _buildToursView(context, snapshot, activeTours),
+                    ],
                   ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: const [
-                    Tab(child: Text('Idle Tours')),
-                    Tab(child: Text('Active Tours')),
-                  ],
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildToursView(context, snapshot, idleTours),
-                  _buildToursView(context, snapshot, activeTours),
-                ],
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -327,7 +390,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     if (snapshot.connectionState == ConnectionState.waiting) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+        child: CircularProgressIndicator(color: Color(0xFF1E6DE2)),
       );
     }
 
@@ -339,39 +402,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Icon(
               Icons.travel_explore,
               size: 64,
-              color: Colors.grey.withValues(alpha: 0.3),
+              color: Colors.white.withValues(alpha: 0.35),
             ),
             const SizedBox(height: 12),
             const Text(
               'No tours available',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey,
+                color: Colors.white,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 4),
             const Text(
               'Check back soon for new adventures!',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(fontSize: 13, color: Color(0xFF9FA9C2)),
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return GridView.builder(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       itemCount: tours.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 1,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 0,
+        childAspectRatio: 2.2,
+      ),
       itemBuilder: (context, index) {
         final tour = tours[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: TourCard(
-            key: ValueKey('${tour.id}-${tour.remainingSeats}'),
-            tour: tour,
-          ),
+        return TourCard(
+          key: ValueKey('${tour.id}-${tour.remainingSeats}'),
+          tour: tour,
         );
       },
     );
@@ -382,27 +448,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
       behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 64,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 74,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.13)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
-              color: isSelected ? const Color(0xFF1B5E20) : Colors.grey,
-              size: 26,
+              color: isSelected
+                  ? const Color(0xFFFF5B8A)
+                  : const Color(0xFFAFB6C8),
+              size: 23,
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? const Color(0xFF1B5E20) : Colors.grey,
+                color: isSelected ? Colors.white : const Color(0xFFAFB6C8),
                 fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeroBadge({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

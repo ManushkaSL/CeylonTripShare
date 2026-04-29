@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 
@@ -57,15 +58,19 @@ class ChatsListBody extends StatefulWidget {
 }
 
 class _ChatsListBodyState extends State<ChatsListBody> {
+  final AuthService _authService = AuthService();
+
   @override
   void initState() {
     super.initState();
     JoinedTourService().addListener(_onUpdate);
+    _authService.addListener(_onUpdate);
   }
 
   @override
   void dispose() {
     JoinedTourService().removeListener(_onUpdate);
+    _authService.removeListener(_onUpdate);
     super.dispose();
   }
 
@@ -75,6 +80,31 @@ class _ChatsListBodyState extends State<ChatsListBody> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_authService.isLoggedIn) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: 64,
+              color: Colors.grey.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Login required',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Sign in to view your chats',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
     final allChats = JoinedTourService().joinedTours;
 
     // Deduplicate chats by tour ID

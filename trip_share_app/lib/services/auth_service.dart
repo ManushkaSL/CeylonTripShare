@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:trip_share_app/services/chat_cache_service.dart';
 
 class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._();
@@ -18,8 +19,10 @@ class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    clientId: '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
-    serverClientId: '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
+    clientId:
+        '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
+    serverClientId:
+        '230136178640-hock9if7mjn0cb0oe4mqlkkpv93p8r7b.apps.googleusercontent.com',
   );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -322,6 +325,9 @@ class AuthService extends ChangeNotifier {
       // Clear all cached bookings and tours
       JoinedTourService().clearCache();
 
+      // Clear locally cached chat messages to avoid showing stale chats
+      await ChatCacheService().clearAllCache();
+
       // Sign out from Google (handle web errors gracefully)
       try {
         await _googleSignIn.signOut();
@@ -329,7 +335,7 @@ class AuthService extends ChangeNotifier {
       } catch (e) {
         debugPrint('⚠️ Google sign out error (continuing): $e');
       }
-      
+
       // Always sign out from Firebase
       await _auth.signOut();
 

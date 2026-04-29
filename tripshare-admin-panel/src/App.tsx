@@ -36,6 +36,119 @@ function extractSupabasePathFromUrl(imageUrl: string, bucket: string) {
   return null;
 }
 
+function parseTourImagesValue(images: unknown): string[] {
+  if (Array.isArray(images)) {
+    return images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+
+  if (typeof images !== 'string') {
+    return [];
+  }
+
+  const trimmed = images.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        const objectCandidate = (parsed as Record<string, unknown>).url || (parsed as Record<string, unknown>).src || (parsed as Record<string, unknown>).path;
+        return typeof objectCandidate === 'string' && objectCandidate.trim().length > 0 ? [objectCandidate] : [];
+      }
+    } catch {
+      // Fallback to treating it as a single string value.
+    }
+  }
+
+  if (trimmed.includes(',')) {
+    return trimmed
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  return [trimmed];
+}
+
+function buildTourImageCandidates(rawImage: string): string[] {
+  const value = rawImage.trim();
+  if (!value) return [];
+
+  const candidates: string[] = [];
+  const pushCandidate = (candidate: string) => {
+    const normalized = candidate.trim();
+    if (!normalized) return;
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  // Rehydrate Supabase URLs back to fresh object URLs so expired signed links keep working.
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    const freshPath = extractSupabasePathFromUrl(value, SUPABASE_BUCKET);
+    if (freshPath) {
+      const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(freshPath);
+      if (data?.publicUrl) {
+        pushCandidate(data.publicUrl);
+      }
+      pushCandidate(value);
+      return candidates;
+    }
+
+    pushCandidate(value);
+    return candidates;
+  }
+
+  if (value.startsWith('data:') || value.startsWith('blob:')) {
+    pushCandidate(value);
+    return candidates;
+  }
+
+  if (value.startsWith('//')) {
+    pushCandidate(`https:${value}`);
+    return candidates;
+  }
+
+  if (value.startsWith('/storage/v1/object/')) {
+    pushCandidate(`https://${value.replace(/^\//, '')}`);
+    return candidates;
+  }
+
+  if (value.startsWith('/uploads/')) {
+    pushCandidate(value);
+    return candidates;
+  }
+
+  if (value.startsWith('uploads/')) {
+    pushCandidate(`/${value}`);
+    pushCandidate(`/uploads/${value.replace(/^uploads\//, '')}`);
+    return candidates;
+  }
+
+  if (value.startsWith('tours/')) {
+    const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(value);
+    if (data?.publicUrl) {
+      pushCandidate(data.publicUrl);
+    }
+  }
+
+  const cleanValue = value.replace(/^\.\//, '').replace(/^\//, '');
+  const fileName = cleanValue.split('/').pop();
+  pushCandidate(`/uploads/${cleanValue}`);
+  if (fileName) {
+    pushCandidate(`/uploads/${fileName}`);
+  }
+  pushCandidate(`/${cleanValue}`);
+
+  return candidates;
+}
+
 function normalizeRouteValue(route: Tour['route'] | string | undefined) {
   if (Array.isArray(route)) {
     return route.filter(stop => stop?.trim().length > 0);
@@ -128,34 +241,63 @@ function hasBookingClosePassed(
 
 function TourImageCarousel({ images, title }: { images: string[]; title: string }) {
   const [idx, setIdx] = useState(0);
+  const [candidateIdx, setCandidateIdx] = useState(0);
 
-  const getImageSrc = (image: string) => {
-    if (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('/uploads/')) {
-      return image;
+  useEffect(() => {
+    setIdx(0);
+    setCandidateIdx(0);
+  }, [images]);
+
+  const imageSources = buildTourImageCandidates(images[idx] || '');
+
+  const activeImageSrc = imageSources[candidateIdx];
+
+  const handleImageError = () => {
+    if (candidateIdx < imageSources.length - 1) {
+      setCandidateIdx(prev => prev + 1);
     }
-    return `/uploads/${image}`;
+  };
+
+  const goPrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIdx((prev) => (prev - 1 + images.length) % images.length);
+    setCandidateIdx(0);
+  };
+
+  const goNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIdx((prev) => (prev + 1) % images.length);
+    setCandidateIdx(0);
   };
 
   return (
     <>
-      <img
-        key={`${title}-${idx}`}
-        src={getImageSrc(images[idx])}
-        alt={title}
-        className="w-full h-full object-cover transition-transform duration-500"
-      />
+      {activeImageSrc ? (
+        <img
+          key={`${title}-${idx}-${candidateIdx}`}
+          src={activeImageSrc}
+          alt={title}
+          className="w-full h-full object-cover transition-transform duration-500"
+          loading="lazy"
+          onError={handleImageError}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-stone-400">
+          <ImageIcon className="w-12 h-12" />
+        </div>
+      )}
       {images.length > 1 && (
         <>
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setIdx((prev) => (prev - 1 + images.length) % images.length); }}
+            onClick={goPrev}
             className="absolute z-20 left-2 top-1/2 -translate-y-1/2 p-1 bg-white/80 backdrop-blur-sm rounded-full shadow hover:bg-white transition-colors pointer-events-auto"
           >
             <ChevronLeft className="w-4 h-4 text-stone-700" />
           </button>
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setIdx((prev) => (prev + 1) % images.length); }}
+            onClick={goNext}
             className="absolute z-20 right-2 top-1/2 -translate-y-1/2 p-1 bg-white/80 backdrop-blur-sm rounded-full shadow hover:bg-white transition-colors pointer-events-auto"
           >
             <ChevronRight className="w-4 h-4 text-stone-700" />
@@ -282,6 +424,15 @@ export default function App() {
         setUserRole('admin');
         sessionStorage.setItem('admin_user_id', user.uid);
         sessionStorage.setItem('admin_email', user.email || '');
+
+        // Keep users/{uid}.role in sync so Firestore admin checks pass for restored sessions.
+        setDoc(doc(db, 'users', user.uid), {
+          email: (user.email || '').toLowerCase(),
+          role: 'admin',
+          lastLogin: serverTimestamp()
+        }, { merge: true }).catch((err) => {
+          console.error('Failed to sync admin user profile:', err);
+        });
       } else {
         setIsAuthenticated(false);
         setUserRole('');
@@ -315,7 +466,7 @@ export default function App() {
   };
 
   const handleEditTour = (tour: Tour) => {
-    const existingImages = Array.isArray(tour.images) ? tour.images : [];
+    const existingImages = parseTourImagesValue(tour.images);
     const existingRoute = normalizeRouteValue(tour.route);
     const parsedStartTime = parseTimeValueAndPeriod(tour.start_time || tour.start_time_location, 'AM');
     const parsedEndTime = parseTimeValueAndPeriod(tour.end_time || tour.end_time_location, 'PM');
@@ -396,8 +547,8 @@ export default function App() {
       const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
       const querySnapshot = await getDocs(q);
       const driversData = querySnapshot.docs.map(doc => ({
+        ...doc.data(),
         id: doc.id,
-        ...doc.data()
       }));
       setDrivers(driversData);
     } catch (error) {
@@ -443,20 +594,30 @@ export default function App() {
       console.error('Failed to add driver:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
-      const errorMsg = error.message || 'Failed to add driver. Please try again.';
+      const errorMsg = error?.code === 'permission-denied'
+        ? 'Permission denied while adding driver. Please sign out and sign in again to refresh admin access.'
+        : error.message || 'Failed to add driver. Please try again.';
       setDriverError(errorMsg);
     } finally {
       setAddingDriver(false);
     }
   };
 
-  const handleDeleteDriver = async (driverId: string) => {
+  const handleDeleteDriver = async (driverId: string | undefined) => {
+    if (!driverId) {
+      setDriverError('Unable to delete driver: missing driver ID. Please refresh and try again.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this driver?')) return;
     try {
       await deleteDoc(doc(db, 'drivers', driverId));
-      setDrivers(drivers.filter(d => d.id !== driverId));
-    } catch (error) {
+      setDrivers(prev => prev.filter(d => d.id !== driverId));
+      if (expandedDriverId === driverId) {
+        setExpandedDriverId(null);
+      }
+    } catch (error: any) {
       console.error('Failed to delete driver:', error);
+      setDriverError(error?.message || 'Failed to delete driver. Please try again.');
     }
   };
 
@@ -748,17 +909,17 @@ export default function App() {
         >
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <LayoutDashboard className="w-8 h-8 text-orange-600" />
+              <LayoutDashboard className="w-8 h-8 text-emerald-600" />
             </div>
             <h1 className="text-2xl font-bold text-stone-900">TripShare Admin</h1>
             <p className="text-stone-700 text-sm mt-1">Admin role required to access this panel</p>
-            <div className="flex items-center gap-2 px-3 py-2 mt-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <Lock className="w-4 h-4 text-blue-600" />
-              <span className="text-xs text-blue-700">Only users with <strong>admin</strong> role can access</span>
+            <div className="flex items-center gap-2 px-3 py-2 mt-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <Lock className="w-4 h-4 text-emerald-600" />
+              <span className="text-xs text-emerald-700">Only users with <strong>admin</strong> role can access</span>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="rounded-2xl border border-stone-200 shadow-sm p-8 space-y-5" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
+          <form onSubmit={handleLogin} className="rounded-2xl border border-stone-200 shadow-sm p-8 space-y-5" style={{ backgroundColor: '#ffffff' }}>
             {loginError && (
               <div className="bg-red-50 text-red-600 text-sm font-medium px-4 py-3 rounded-xl border border-red-100">
                 {loginError}
@@ -773,7 +934,7 @@ export default function App() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                   placeholder="admin@gmail.com"
                 />
               </div>
@@ -787,7 +948,7 @@ export default function App() {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                   placeholder="••••••••"
                 />
               </div>
@@ -824,11 +985,7 @@ export default function App() {
       const data = snapshot.docs.map((docSnapshot) => {
         const tour = docSnapshot.data() as Omit<Tour, 'id'> & { images?: string[] | string; route?: string[] | string; available_seats?: number };
         console.log('Processing tour:', docSnapshot.id, tour);
-        const images = Array.isArray(tour.images)
-          ? tour.images
-          : typeof tour.images === 'string'
-            ? JSON.parse(tour.images)
-            : [];
+        const images = parseTourImagesValue(tour.images);
         const route = normalizeRouteValue(tour.route);
         const parsedStartTime = parseTimeValueAndPeriod(tour.start_time || tour.start_time_location, 'AM');
         const parsedEndTime = parseTimeValueAndPeriod(tour.end_time || tour.end_time_location, 'PM');
@@ -1033,9 +1190,9 @@ export default function App() {
   return (
     <div className="min-h-screen flex bg-stone-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-stone-200 flex flex-col hidden md:flex sticky top-0 h-screen overflow-y-auto">
+      <aside className="w-64 bg-white border-r border-stone-200 hidden md:flex md:flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="p-6 border-b border-stone-100">
-          <h1 className="text-xl font-bold tracking-tight text-orange-600 flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight text-emerald-600 flex items-center gap-2">
             <LayoutDashboard className="w-6 h-6" />
             TripShare Admin
           </h1>
@@ -1045,7 +1202,7 @@ export default function App() {
             onClick={() => setActiveSection('tours')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'tours'
-                ? 'text-orange-600 bg-orange-50'
+                ? 'text-emerald-700 bg-emerald-50'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
@@ -1056,7 +1213,7 @@ export default function App() {
             onClick={() => setActiveSection('bookings')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'bookings'
-                ? 'text-orange-600 bg-orange-50'
+                ? 'text-emerald-700 bg-emerald-50'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
@@ -1067,7 +1224,7 @@ export default function App() {
             onClick={() => setActiveSection('drivers')}
             className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
               activeSection === 'drivers'
-                ? 'text-orange-600 bg-orange-50'
+                ? 'text-emerald-700 bg-emerald-50'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
             }`}
           >
@@ -1078,14 +1235,14 @@ export default function App() {
         <div className="p-4 border-t border-stone-100">
           <div className="px-4 py-3 mb-3 bg-emerald-50 rounded-lg border border-emerald-200">
             <p className="text-xs font-medium text-stone-700 mb-1">Logged in as</p>
-            <p className="text-sm font-semibold text-zinc-900 truncate">{sessionStorage.getItem('admin_email') || email}</p>
+            <p className="text-sm font-semibold text-stone-900 truncate">{sessionStorage.getItem('admin_email') || email}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-emerald-600 rounded-full">
                 {userRole || 'ADMIN'}
               </span>
             </div>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-stone-600 hover:text-zinc-900 transition-colors w-full rounded-lg hover:bg-stone-50">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors w-full rounded-lg hover:bg-stone-50">
             <LogOut className="w-4 h-4" />
             Sign Out
           </button>
@@ -1094,9 +1251,9 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-zinc-900">
+            <h2 className="text-lg font-semibold text-stone-900">
               {activeSection === 'tours' ? 'Tours Management' : activeSection === 'bookings' ? 'Booking Management' : 'Driver Management'}
             </h2>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
@@ -1107,7 +1264,7 @@ export default function App() {
           {activeSection === 'tours' && (
             <button
               onClick={openCreateTourModal}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 md:px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-sm active:scale-95"
             >
               <Plus className="w-4 h-4" />
               Add New Tour
@@ -1115,8 +1272,33 @@ export default function App() {
           )}
         </header>
 
+        <div className="md:hidden px-4 pt-4">
+          <div className="grid grid-cols-3 gap-2 p-1 border border-stone-200 rounded-xl" style={{ backgroundColor: '#ffffff' }}>
+            {[
+              { key: 'tours', label: 'Tours', icon: LayoutDashboard },
+              { key: 'bookings', label: 'Bookings', icon: Calendar },
+              { key: 'drivers', label: 'Drivers', icon: Users },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => setActiveSection(item.key as 'tours' | 'bookings' | 'drivers')}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors ${
+                    isActive ? 'bg-emerald-600 text-white' : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {activeSection === 'tours' && (
-        <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
@@ -1132,15 +1314,12 @@ export default function App() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="rounded-2xl border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}
+                    className="rounded-2xl border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group"
+                    style={{ backgroundColor: '#ffffff' }}
                   >
                     <div className="aspect-video relative overflow-hidden bg-stone-100">
                       {(() => {
-                        const imgs: string[] = Array.isArray(tour.images)
-                          ? tour.images
-                          : typeof tour.images === 'string'
-                            ? JSON.parse(tour.images)
-                            : [];
+                        const imgs = parseTourImagesValue(tour.images);
                         if (imgs.length > 0) {
                           return <TourImageCarousel images={imgs} title={tour.title} />;
                         }
@@ -1159,7 +1338,7 @@ export default function App() {
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteTour(tour.id, Array.isArray(tour.images) ? tour.images : [])}
+                            onClick={() => handleDeleteTour(tour.id, parseTourImagesValue(tour.images))}
                             className="p-2 bg-white/90 backdrop-blur-sm text-red-600 rounded-full hover:bg-red-50 transition-colors shadow-sm"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1177,7 +1356,7 @@ export default function App() {
                           <span className="text-xs font-medium bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{tour.category}</span>
                         )}
                       </div>
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2 line-clamp-1">{tour.title}</h3>
+                      <h3 className="text-lg font-bold text-stone-900 mb-2 line-clamp-1">{tour.title}</h3>
                       <p className="text-stone-600 text-sm line-clamp-2 mb-3">{tour.description}</p>
                       {tour.operator_name && (
                         <p className="text-xs text-stone-400 mb-3">by <span className="font-medium text-stone-700">{tour.operator_name}</span></p>
@@ -1192,7 +1371,7 @@ export default function App() {
                             <Clock className="w-4 h-4" />
                             {tour.start_time ? `${tour.start_time} ${tour.start_time_period || 'AM'}` : 'N/A'}
                           </div>
-                          <div className="flex items-center gap-1.5 text-zinc-900 font-bold">
+                          <div className="flex items-center gap-1.5 text-stone-900 font-bold">
                             <DollarSign className="w-4 h-4 text-emerald-600" />
                             {tour.price}
                           </div>
@@ -1210,7 +1389,7 @@ export default function App() {
               <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <LayoutDashboard className="w-8 h-8 text-stone-300" />
               </div>
-              <h3 className="text-lg font-semibold text-zinc-900 mb-1">No tours found</h3>
+              <h3 className="text-lg font-semibold text-stone-900 mb-1">No tours found</h3>
               <p className="text-stone-600 mb-6">Get started by creating your first tour package.</p>
               <button
                 onClick={openCreateTourModal}
@@ -1225,11 +1404,11 @@ export default function App() {
         )}
 
         {activeSection === 'drivers' && (
-        <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           <div className="space-y-6">
             {/* Add Driver Form */}
-            <div className="rounded-2xl border border-stone-200 p-6" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
-              <h3 className="text-lg font-semibold text-zinc-900 mb-4">Add Driver by Email</h3>
+            <div className="rounded-2xl border border-stone-200 p-6" style={{ backgroundColor: '#ffffff' }}>
+              <h3 className="text-lg font-semibold text-stone-900 mb-4">Add Driver by Email</h3>
               <form onSubmit={handleAddDriver} className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <input
@@ -1240,7 +1419,7 @@ export default function App() {
                       setDriverError('');
                     }}
                     placeholder="Enter driver email address"
-                    className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                    className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                   />
                 </div>
                 <button
@@ -1269,12 +1448,12 @@ export default function App() {
             </div>
 
             {/* Drivers List */}
-            <div className="rounded-2xl border border-stone-200 overflow-hidden transition-transform duration-300 hover:scale-105 active:scale-95" style={{ 
-              backgroundColor: 'rgba(237, 224, 196, 0.92)',
+            <div className="rounded-2xl border border-stone-200 overflow-hidden" style={{ 
+              backgroundColor: '#ffffff',
               boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
             }}>
               <div className="p-6 border-b border-stone-100">
-                <h3 className="text-lg font-semibold text-zinc-900">Registered Drivers ({drivers.length})</h3>
+                <h3 className="text-lg font-semibold text-stone-900">Registered Drivers ({drivers.length})</h3>
               </div>
               {drivers.length === 0 ? (
                 <div className="p-8 text-center">
@@ -1297,19 +1476,19 @@ export default function App() {
                           className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer"
                         >
                           <div className="flex-1">
-                            <p className="font-medium text-zinc-900">{driver.email}</p>
+                            <p className="font-medium text-stone-900">{driver.email}</p>
                           <div className="flex items-center gap-3 mt-2">
                               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
                                 driver.status === 'active'
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : driver.status === 'pending'
-                                    ? 'bg-yellow-100 text-yellow-700'
+                                    ? 'bg-emerald-50 text-emerald-700'
                                     : 'bg-stone-100 text-stone-800'
                               }`}>
                                 {driver.status === 'active' ? 'Active' : driver.status === 'pending' ? 'Pending' : 'Inactive'}
                               </span>
                               {getAssignedToursForDriver(driver.id).length > 0 && (
-                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
                                   Assigned to {getAssignedToursForDriver(driver.id).length} tour(s)
                                 </span>
@@ -1353,37 +1532,37 @@ export default function App() {
                             >
                               <div className="p-6 bg-stone-50 space-y-5">
                                 <div>
-                                  <h4 className="text-sm font-semibold text-zinc-900 mb-4">Driver Information</h4>
+                                  <h4 className="text-sm font-semibold text-stone-900 mb-4">Driver Information</h4>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Email</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.email}</p>
+                                      <p className="text-sm font-medium text-stone-900">{driver.email}</p>
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Status</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.status || 'N/A'}</p>
+                                      <p className="text-sm font-medium text-stone-900">{driver.status || 'N/A'}</p>
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Phone</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.phone || 'Not provided'}</p>
+                                      <p className="text-sm font-medium text-stone-900">{driver.phone || 'Not provided'}</p>
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">License</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.license_number || 'Not provided'}</p>
+                                      <p className="text-sm font-medium text-stone-900">{driver.license_number || 'Not provided'}</p>
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Vehicle</p>
-                                      <p className="text-sm font-medium text-zinc-900">{driver.vehicle || 'Not assigned'}</p>
+                                      <p className="text-sm font-medium text-stone-900">{driver.vehicle || 'Not assigned'}</p>
                                     </div>
                                     <div>
                                       <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Assigned Tours</p>
-                                      <p className="text-sm font-medium text-zinc-900">{getAssignedToursForDriver(driver.id).length}</p>
+                                      <p className="text-sm font-medium text-stone-900">{getAssignedToursForDriver(driver.id).length}</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 <div className="border-t border-stone-200 pt-4">
-                                  <h4 className="text-sm font-semibold text-zinc-900 mb-3">Active Ratings</h4>
+                                  <h4 className="text-sm font-semibold text-stone-900 mb-3">Active Ratings</h4>
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="bg-white rounded-lg p-3 border border-stone-200">
                                       <p className="text-xs font-medium text-stone-600 mb-1">Average Rating</p>
@@ -1391,30 +1570,30 @@ export default function App() {
                                     </div>
                                     <div className="bg-white rounded-lg p-3 border border-stone-200">
                                       <p className="text-xs font-medium text-stone-600 mb-1">Total Trips</p>
-                                      <p className="text-lg font-bold text-blue-600">{driver.total_trips || 0}</p>
+                                      <p className="text-lg font-bold text-emerald-600">{driver.total_trips || 0}</p>
                                     </div>
                                     <div className="bg-white rounded-lg p-3 border border-stone-200">
                                       <p className="text-xs font-medium text-stone-600 mb-1">Completion Rate</p>
-                                      <p className="text-lg font-bold text-purple-600">{driver.completion_rate || '98%'}</p>
+                                      <p className="text-lg font-bold text-emerald-600">{driver.completion_rate || '98%'}</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 {getAssignedToursForDriver(driver.id).length > 0 && (
                                   <div className="border-t border-stone-200 pt-4">
-                                    <h4 className="text-sm font-semibold text-zinc-900 mb-3">Assigned Tours</h4>
+                                    <h4 className="text-sm font-semibold text-stone-900 mb-3">Assigned Tours</h4>
                                     <div className="space-y-2">
                                       {getAssignedToursForDriver(driver.id).map(booking => (
-                                        <div key={booking.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                        <div key={booking.id} className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                                           <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                              <p className="text-sm font-semibold text-zinc-900">{booking.tourTitle || 'Tour Name'}</p>
+                                              <p className="text-sm font-semibold text-stone-900">{booking.tourTitle || 'Tour Name'}</p>
                                               <p className="text-xs text-stone-700 mt-1">User: {booking.userName}</p>
                                               <p className="text-xs text-stone-700">Passengers: {booking.numberOfPeople}</p>
                                             </div>
                                             <span className={`text-xs font-semibold px-2 py-0.5 rounded whitespace-nowrap ml-2 ${
                                               booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                              booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                              booking.status === 'pending' ? 'bg-emerald-50 text-emerald-700' :
                                               'bg-red-100 text-red-700'
                                             }`}>
                                               {booking.status}
@@ -1431,7 +1610,7 @@ export default function App() {
                                     <button className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
                                       Edit Driver
                                     </button>
-                                    <button className="flex-1 px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-900 text-sm font-medium rounded-lg transition-colors">
+                                    <button className="flex-1 px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-900 text-sm font-medium rounded-lg transition-colors">
                                       View History
                                     </button>
                                   </div>
@@ -1451,16 +1630,16 @@ export default function App() {
         )}
 
         {activeSection === 'bookings' && (
-        <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           <div className="space-y-6">
             {/* Bookings List */}
-            <div className="rounded-2xl border border-stone-200 overflow-hidden transition-transform duration-300 hover:scale-105 active:scale-95" style={{ 
-              backgroundColor: 'rgba(237, 224, 196, 0.92)',
+            <div className="rounded-2xl border border-stone-200 overflow-hidden" style={{ 
+              backgroundColor: '#ffffff',
               boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
             }}>
               <div className="p-6 border-b border-stone-100 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-zinc-900">All Bookings</h3>
+                  <h3 className="text-lg font-semibold text-stone-900">All Bookings</h3>
                   <p className="text-sm text-stone-600 mt-1">Manage and track all tour bookings</p>
                 </div>
                 <button
@@ -1511,15 +1690,15 @@ export default function App() {
                             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Tour Name</p>
-                                <p className="font-medium text-zinc-900 truncate">{tourData.tourTitle || 'N/A'}</p>
+                                <p className="font-medium text-stone-900 truncate">{tourData.tourTitle || 'N/A'}</p>
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Booked By</p>
-                                <p className="font-medium text-zinc-900 text-sm line-clamp-2">{allPassengers.join(', ') || 'N/A'}</p>
+                                <p className="font-medium text-stone-900 text-sm line-clamp-2">{allPassengers.join(', ') || 'N/A'}</p>
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Passengers</p>
-                                <p className="font-medium text-zinc-900">{totalPeople}</p>
+                                <p className="font-medium text-stone-900">{totalPeople}</p>
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Revenue</p>
@@ -1558,26 +1737,26 @@ export default function App() {
                               >
                                 <div className="p-6 bg-stone-50 space-y-5">
                                   <div>
-                                    <h4 className="text-sm font-semibold text-zinc-900 mb-4">People Who Booked This Tour</h4>
+                                    <h4 className="text-sm font-semibold text-stone-900 mb-4">People Who Booked This Tour</h4>
                                     <div className="space-y-3">
                                       {tourData.bookings.map((booking, idx) => (
                                         <div key={booking.id} className="bg-white rounded-lg p-4 border border-stone-200">
                                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-3">
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Booking ID</p>
-                                              <p className="text-sm font-mono font-medium text-zinc-900">{booking.id}</p>
+                                              <p className="text-sm font-mono font-medium text-stone-900">{booking.id}</p>
                                             </div>
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Name</p>
-                                              <p className="text-sm font-medium text-zinc-900">{booking.userName || 'N/A'}</p>
+                                              <p className="text-sm font-medium text-stone-900">{booking.userName || 'N/A'}</p>
                                             </div>
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Email</p>
-                                              <p className="text-sm font-medium text-zinc-900">{booking.userEmail || 'N/A'}</p>
+                                              <p className="text-sm font-medium text-stone-900">{booking.userEmail || 'N/A'}</p>
                                             </div>
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Phone</p>
-                                              <p className="text-sm font-medium text-zinc-900">+94 {booking.userPhone || 'N/A'}</p>
+                                              <p className="text-sm font-medium text-stone-900">+94 {booking.userPhone || 'N/A'}</p>
                                             </div>
                                             <div className="flex items-end">
                                               <button
@@ -1644,14 +1823,14 @@ export default function App() {
               transition={{ type: 'spring', stiffness: 200, damping: 20 }}
               className="relative w-full max-w-4xl rounded-3xl border border-stone-200 overflow-hidden max-h-[92vh] flex flex-col"
               style={{ 
-                backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                backgroundColor: '#ffffff',
                 boxShadow: '0 8px 15px rgba(0, 0, 0, 0.25)'
               }}
             >
-              <div className="p-7 border-b border-stone-100 sticky top-0 z-10" style={{ backgroundColor: 'rgba(237, 224, 196, 0.92)' }}>
+              <div className="p-7 border-b border-stone-100 sticky top-0 z-10" style={{ backgroundColor: '#ffffff' }}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-2xl font-bold text-zinc-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
+                    <h3 className="text-2xl font-bold text-stone-900">{editingTourId ? 'Edit Tour' : 'Create New Tour'}</h3>
                     <p className="text-sm text-stone-600 mt-1">Fill in the details below to publish this tour.</p>
                   </div>
                   <button
@@ -1663,7 +1842,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-7 overflow-y-auto" style={{ backgroundColor: 'rgba(237, 224, 196, 0.15)' }}>
+              <div className="p-7 overflow-y-auto" style={{ backgroundColor: 'rgba(248, 250, 252, 0.92)' }}>
                 <form onSubmit={handleAddTour} className="space-y-6">
                   {createError && (
                     <div className="bg-red-50 text-red-700 text-sm font-medium px-4 py-3 rounded-xl border border-red-100 break-all">
@@ -1676,7 +1855,7 @@ export default function App() {
                     </div>
                   )}
                   <div className="border border-stone-200 rounded-2xl p-5 space-y-4 transition-all duration-200 hover:shadow-lg" style={{ 
-                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    backgroundColor: '#ffffff',
                     boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
                   }}>
                     <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Basic Details</p>
@@ -1687,7 +1866,7 @@ export default function App() {
                         type="text"
                         value={newTour.title}
                         onChange={e => setNewTour({ ...newTour, title: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                         placeholder="e.g. Wilpattu Full Day Safari from Anuradhapura"
                       />
                     </div>
@@ -1701,7 +1880,7 @@ export default function App() {
                           type="text"
                           value={newTour.category}
                           onChange={e => setNewTour({ ...newTour, category: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. Wildlife Jeep Safari"
                         />
                       </div>
@@ -1728,7 +1907,7 @@ export default function App() {
                               available_seats: editingTourId ? newTour.available_seats : seatCount,
                             });
                           }}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. 6"
                         />
                       </div>
@@ -1748,7 +1927,7 @@ export default function App() {
                             }
                           }}
                           onChange={e => setNewTour({ ...newTour, price: Number(e.target.value || 0) })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. 250"
                         />
                       </div>
@@ -1760,7 +1939,7 @@ export default function App() {
                       <textarea
                         value={newTour.description}
                         onChange={e => setNewTour({ ...newTour, description: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all h-24 resize-none"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all h-24 resize-none"
                         placeholder="Describe the tour highlights..."
                       />
                     </div>
@@ -1777,7 +1956,7 @@ export default function App() {
                           type="text"
                           value={newTour.start_location}
                           onChange={e => setNewTour({ ...newTour, start_location: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. Anuradhapura Town"
                         />
                       </div>
@@ -1788,7 +1967,7 @@ export default function App() {
                         type="date"
                         value={newTour.start_day}
                         onChange={e => setNewTour({ ...newTour, start_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -1816,7 +1995,7 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1827,7 +2006,7 @@ export default function App() {
                           type="text"
                           value={newTour.end_location}
                           onChange={e => setNewTour({ ...newTour, end_location: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. Anuradhapura Town"
                         />
                       </div>
@@ -1841,7 +2020,7 @@ export default function App() {
                         type="date"
                         value={newTour.end_day}
                         onChange={e => setNewTour({ ...newTour, end_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1866,7 +2045,7 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -1878,7 +2057,7 @@ export default function App() {
                         type="date"
                         value={newTour.booking_close_date}
                         onChange={e => setNewTour({ ...newTour, booking_close_date: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1903,7 +2082,7 @@ export default function App() {
                             });
                           }
                         }}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -1925,7 +2104,7 @@ export default function App() {
                               addRouteStop();
                             }
                           }}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. Kurunegala"
                         />
                       </div>
@@ -1969,7 +2148,7 @@ export default function App() {
                           type="text"
                           value={newTour.operator_name}
                           onChange={e => setNewTour({ ...newTour, operator_name: e.target.value })}
-                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                           placeholder="e.g. Ceylon Transit Safaris"
                         />
                       </div>
@@ -1981,7 +2160,7 @@ export default function App() {
                         type="text"
                         value={newTour.whats_included}
                         onChange={e => setNewTour({ ...newTour, whats_included: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                         placeholder="e.g. Entry Tickets, Jeep and Guide, Lunch, Water"
                       />
                     </div>
@@ -1992,14 +2171,14 @@ export default function App() {
                         type="text"
                         value={newTour.tour_features}
                         onChange={e => setNewTour({ ...newTour, tour_features: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                         placeholder="e.g. Expert Tracking, Quality Jeeps, Ethical Practices"
                       />
                     </div>
                   </div>
 
                   <div className="border border-stone-200 rounded-2xl p-5 space-y-3 transition-all duration-200 hover:shadow-lg" style={{ 
-                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    backgroundColor: '#ffffff',
                     boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
                   }}>
                     <p className="text-xs font-semibold tracking-wide uppercase text-stone-600">Images</p>
@@ -2011,7 +2190,7 @@ export default function App() {
                           <div className="grid grid-cols-4 gap-2">
                             {editingImages.map((src, i) => (
                               <div key={`${src}-${i}`} className="relative aspect-square rounded-lg overflow-hidden group/img border border-stone-200">
-                                <img src={src} className="w-full h-full object-cover" />
+                                <img src={buildTourImageCandidates(src)[0] || src} className="w-full h-full object-cover" />
                                 <div className="absolute inset-x-1 bottom-1 flex items-center justify-between gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
                                   <button
                                     type="button"
@@ -2082,13 +2261,13 @@ export default function App() {
                   </div>
 
                   <div className="pt-5 -mx-7 px-7 pb-1 flex gap-3 sticky bottom-0 border-t border-stone-200" style={{ 
-                    backgroundColor: 'rgba(237, 224, 196, 0.92)',
+                    backgroundColor: '#ffffff',
                     boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.1)'
                   }}>
                     <button
                       type="button"
                       onClick={closeTourModal}
-                      className="flex-1 px-6 py-3 bg-stone-100 hover:bg-zinc-200 text-stone-800 font-semibold rounded-xl transition-all"
+                      className="flex-1 px-6 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold rounded-xl transition-all"
                     >
                       Cancel
                     </button>
@@ -2109,6 +2288,9 @@ export default function App() {
     </div>
   );
 }
+
+
+
 
 
 

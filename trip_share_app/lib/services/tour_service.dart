@@ -151,7 +151,7 @@ class TourService {
             } catch (e, st) {
               debugPrint('❌ Error mapping tour data: $e');
               debugPrint('📍 Stack trace: $st');
-              throw e;
+              rethrow;
             }
           })
           .handleError((error, stackTrace) {
@@ -169,7 +169,7 @@ class TourService {
     } catch (e, st) {
       debugPrint('❌ Fatal error creating stream: $e');
       debugPrint('📍 Stack trace: $st');
-      throw e;
+      rethrow;
     }
   }
 

@@ -1,9 +1,8 @@
-import 'dart:ui';
-import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:flutter/material.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 
 class JoinedToursScreen extends StatefulWidget {
   const JoinedToursScreen({super.key});
@@ -135,260 +134,253 @@ class _JoinedTourCard extends StatelessWidget {
       },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            height: 190,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+        child: Container(
+          height: 190,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDE0C4).withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Thumbnail
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  bottomLeft: Radius.circular(16),
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Thumbnail
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    bottomLeft: Radius.circular(16),
-                  ),
-                  child: SizedBox(
-                    width: 110,
-                    child: CachedNetworkImage(
-                      imageUrl: tour.imageUrl,
-                      fit: BoxFit.cover,
-                      height: double.infinity,
-                      placeholder: (context, url) => Container(
-                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF1B5E20),
-                              ),
+                child: SizedBox(
+                  width: 110,
+                  child: CachedNetworkImage(
+                    imageUrl: tour.imageUrl,
+                    fit: BoxFit.cover,
+                    height: double.infinity,
+                    placeholder: (context, url) => Container(
+                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF1B5E20),
                             ),
                           ),
                         ),
                       ),
-                      errorWidget: (context, url, error) => Container(
-                        color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
-                        child: const Center(
-                          child: Icon(
-                            Icons.landscape,
-                            size: 36,
-                            color: Color(0xFF1B5E20),
-                          ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      child: const Center(
+                        child: Icon(
+                          Icons.landscape,
+                          size: 36,
+                          color: Color(0xFF1B5E20),
                         ),
                       ),
                     ),
                   ),
                 ),
-                // Details
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Tour name
-                        Text(
-                          tour.name,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B5E20),
+              ),
+              // Details
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Tour name
+                      Text(
+                        tour.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B5E20),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      // Date row
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today,
+                            size: 13,
+                            color: Colors.grey,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        // Date row
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today,
-                              size: 13,
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDate(tour.startDate),
+                            style: const TextStyle(
+                              fontSize: 11,
                               color: Colors.grey,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatDate(tour.startDate),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(
-                              Icons.access_time,
-                              size: 13,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatTime(tour.startDate),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        // Persons
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.people_outline,
-                              size: 13,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${joinedTour.persons} person(s) booked',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        // Journey status chip
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
                           ),
-                          decoration: BoxDecoration(
+                          const SizedBox(width: 10),
+                          const Icon(
+                            Icons.access_time,
+                            size: 13,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatTime(tour.startDate),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Persons
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.people_outline,
+                            size: 13,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${joinedTour.persons} person(s) booked',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Journey status chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: joinedTour.isLiveLocationAvailable
+                              ? const Color(0xFFE8F5E9)
+                              : const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          joinedTour.isLiveLocationAvailable
+                              ? 'Journey In Progress'
+                              : 'Not Started Yet',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
                             color: joinedTour.isLiveLocationAvailable
-                                ? const Color(0xFFE8F5E9)
-                                : const Color(0xFFFFF8E1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            joinedTour.isLiveLocationAvailable
-                                ? 'Journey In Progress'
-                                : 'Not Started Yet',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: joinedTour.isLiveLocationAvailable
-                                  ? const Color(0xFF2E7D32)
-                                  : const Color(0xFFF57F17),
-                            ),
+                                ? const Color(0xFF2E7D32)
+                                : const Color(0xFFF57F17),
                           ),
                         ),
-                        const Spacer(),
-                        // Buttons row: Live Location + Chat
-                        Row(
-                          children: [
-                            // Live Location button
-                            Expanded(
-                              child: SizedBox(
-                                height: 30,
-                                child: ElevatedButton.icon(
-                                  onPressed: joinedTour.isLiveLocationAvailable
-                                      ? () {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Opening live location...',
-                                              ),
-                                              backgroundColor: Color(
-                                                0xFF1B5E20,
-                                              ),
-                                              duration: Duration(seconds: 1),
+                      ),
+                      const Spacer(),
+                      // Buttons row: Live Location + Chat
+                      Row(
+                        children: [
+                          // Live Location button
+                          Expanded(
+                            child: SizedBox(
+                              height: 30,
+                              child: ElevatedButton.icon(
+                                onPressed: joinedTour.isLiveLocationAvailable
+                                    ? () {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Opening live location...',
                                             ),
-                                          );
-                                        }
-                                      : null,
-                                  icon: Icon(
-                                    Icons.location_on,
-                                    size: 13,
-                                    color: joinedTour.isLiveLocationAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
+                                            backgroundColor: Color(0xFF1B5E20),
+                                            duration: Duration(seconds: 1),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                                icon: Icon(
+                                  Icons.location_on,
+                                  size: 13,
+                                  color: joinedTour.isLiveLocationAvailable
+                                      ? Colors.white
+                                      : Colors.grey,
+                                ),
+                                label: Text(
+                                  joinedTour.isLiveLocationAvailable
+                                      ? 'Live Location'
+                                      : 'Not Available',
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      joinedTour.isLiveLocationAvailable
+                                      ? const Color(0xFF1B5E20)
+                                      : Colors.grey.shade300,
+                                  foregroundColor:
+                                      joinedTour.isLiveLocationAvailable
+                                      ? Colors.white
+                                      : Colors.grey,
+                                  disabledBackgroundColor: Colors.grey.shade200,
+                                  disabledForegroundColor: Colors.grey,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  label: Text(
-                                    joinedTour.isLiveLocationAvailable
-                                        ? 'Live Location'
-                                        : 'Not Available',
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        joinedTour.isLiveLocationAvailable
-                                        ? const Color(0xFF1B5E20)
-                                        : Colors.grey.shade300,
-                                    foregroundColor:
-                                        joinedTour.isLiveLocationAvailable
-                                        ? Colors.white
-                                        : Colors.grey,
-                                    disabledBackgroundColor:
-                                        Colors.grey.shade200,
-                                    disabledForegroundColor: Colors.grey,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                  ),
+                                  padding: EdgeInsets.zero,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            // Chat button
-                            Expanded(
-                              child: SizedBox(
-                                height: 30,
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => ChatScreen(tour: tour),
-                                      ),
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    Icons.chat_bubble_outline,
-                                    size: 13,
-                                    color: Colors.white,
-                                  ),
-                                  label: const Text(
-                                    'Chat',
-                                    style: TextStyle(fontSize: 10),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1B5E20),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                          ),
+                          const SizedBox(width: 6),
+                          // Chat button
+                          Expanded(
+                            child: SizedBox(
+                              height: 30,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatScreen(tour: tour),
                                     ),
-                                    padding: EdgeInsets.zero,
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  'Chat',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1B5E20),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
+                                  padding: EdgeInsets.zero,
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

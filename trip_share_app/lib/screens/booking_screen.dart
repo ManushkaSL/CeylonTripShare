@@ -27,6 +27,7 @@ class _BookingScreenState extends State<BookingScreen> {
   final _cvvController = TextEditingController();
   final _cardHolderController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isSubmitting = false;
 
   // Pricing
   static const double _kidsDiscount = 0.5;
@@ -50,6 +51,8 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _confirmBooking() async {
+    if (_isSubmitting) return;
+
     if (!widget.tour.canBook) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -86,50 +89,69 @@ class _BookingScreenState extends State<BookingScreen> {
       '   Tour ${widget.tour.name}: remainingSeats=${widget.tour.remainingSeats}, totalSeats=${widget.tour.totalSeats}',
     );
 
-    // Save to Firestore with booking details
-    final fullPhoneNumber = '$_countryCode${_phoneController.text}';
-    await JoinedTourService().joinTour(
-      tour: widget.tour,
-      adults: _adults,
-      kids6to12: _kids6to12,
-      kidsUnder6: _kidsUnder6,
-      pickupLocation: _pickupController.text,
-      totalPrice: _totalPrice,
-      cardHolderName: _cardHolderController.text,
-      phoneNumber: fullPhoneNumber,
-    );
+    setState(() => _isSubmitting = true);
 
-    // Wait for Firestore to sync the tour update before showing confirmation
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      // Save to Firestore with booking details
+      final fullPhoneNumber = '$_countryCode${_phoneController.text}';
+      final success = await JoinedTourService().joinTour(
+        tour: widget.tour,
+        adults: _adults,
+        kids6to12: _kids6to12,
+        kidsUnder6: _kidsUnder6,
+        pickupLocation: _pickupController.text,
+        totalPrice: _totalPrice,
+        cardHolderName: _cardHolderController.text,
+        phoneNumber: fullPhoneNumber,
+      );
 
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 28),
-            SizedBox(width: 8),
-            Text('Booking Confirmed'),
+      if (!mounted) return;
+
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Booking could not be completed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 28),
+              SizedBox(width: 8),
+              Text('Booking Confirmed'),
+            ],
+          ),
+          content: Text(
+            'You have booked ${widget.tour.name} for $_totalPersons person(s).\n\nTotal: \$${_totalPrice.toStringAsFixed(2)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Done',
+                style: TextStyle(color: Color(0xFF1B5E20)),
+              ),
+            ),
           ],
         ),
-        content: Text(
-          'You have booked ${widget.tour.name} for $_totalPersons person(s).\n\nTotal: \$${_totalPrice.toStringAsFixed(2)}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text(
-              'Done',
-              style: TextStyle(color: Color(0xFF1B5E20)),
-            ),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -302,7 +324,7 @@ class _BookingScreenState extends State<BookingScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: _confirmBooking,
+                onPressed: _isSubmitting ? null : _confirmBooking,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1B5E20),
                   foregroundColor: Colors.white,
@@ -311,15 +333,26 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   elevation: 2,
                 ),
-                child: Text(
-                  widget.tour.status == TourStatus.idle
-                      ? 'Start Tour'
-                      : 'Join Tour',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        widget.tour.status == TourStatus.idle
+                            ? 'Start Tour'
+                            : 'Join Tour',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 30),
