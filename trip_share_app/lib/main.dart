@@ -80,11 +80,29 @@ class _AppInitializerState extends State<AppInitializer> {
         // Initialize deep link listening
         _initializeDeepLinkListener();
 
+        // Also check for initial deep link (when app is launched from a link)
+        _checkInitialDeepLink();
+
         debugPrint('✅ App services initialized');
       } catch (e) {
         debugPrint('⚠️ Error initializing services: $e');
       }
     });
+  }
+
+  /// Check for initial deep link when app is launched
+  Future<void> _checkInitialDeepLink() async {
+    try {
+      final appLinks = AppLinks();
+      final initialAppLink = await appLinks.getInitialAppLink();
+
+      if (initialAppLink != null) {
+        debugPrint('🔗 Initial deep link detected: $initialAppLink');
+        _handleDeepLink(initialAppLink.toString());
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error checking initial deep link: $e');
+    }
   }
 
   /// Listen for deep links via custom URL scheme (tripshare://)
