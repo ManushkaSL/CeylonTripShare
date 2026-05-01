@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 /// Body-only widget for embedding in HomeScreen nav tabs
 class ProfileBody extends StatefulWidget {
@@ -49,13 +50,13 @@ class _ProfileBodyState extends State<ProfileBody> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                color: DesignColors.primary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.person_outline_rounded,
                 size: 48,
-                color: Color(0xFF1B5E20),
+                color: DesignColors.primary,
               ),
             ),
             const SizedBox(height: 20),
@@ -64,14 +65,14 @@ class _ProfileBodyState extends State<ProfileBody> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF333333),
+                color: DesignColors.textPrimary,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             const Text(
               'Sign in to manage your bookings, chat with passengers, and more.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: DesignColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
@@ -88,8 +89,8 @@ class _ProfileBodyState extends State<ProfileBody> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
-                  foregroundColor: Colors.white,
+                  backgroundColor: DesignColors.primary,
+                  foregroundColor: DesignColors.textPrimary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -116,7 +117,7 @@ class _ProfileBodyState extends State<ProfileBody> {
                 width: 90,
                 height: 90,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B5E20).withValues(alpha: 0.12),
+                  color: DesignColors.primary.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: auth.photoUrl.isNotEmpty
@@ -134,7 +135,7 @@ class _ProfileBodyState extends State<ProfileBody> {
                               style: const TextStyle(
                                 fontSize: 36,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1B5E20),
+                                color: DesignColors.primary,
                               ),
                             ),
                           ),
@@ -148,7 +149,7 @@ class _ProfileBodyState extends State<ProfileBody> {
                           style: const TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B5E20),
+                            color: DesignColors.primary,
                           ),
                         ),
                       ),
@@ -159,13 +160,16 @@ class _ProfileBodyState extends State<ProfileBody> {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF333333),
+                  color: DesignColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 auth.userEmail,
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: DesignColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -213,7 +217,7 @@ class _ProfileBodyState extends State<ProfileBody> {
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(color: DesignColors.textSecondary),
                       ),
                     ),
                     TextButton(

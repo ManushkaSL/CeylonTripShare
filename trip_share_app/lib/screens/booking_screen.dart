@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class BookingScreen extends StatefulWidget {
   final Tour tour;
@@ -125,7 +126,7 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
           title: const Row(
             children: [
-              Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 28),
+              Icon(Icons.check_circle, color: DesignColors.primary, size: 28),
               SizedBox(width: 8),
               Text('Booking Confirmed'),
             ],
@@ -141,7 +142,7 @@ class _BookingScreenState extends State<BookingScreen> {
               },
               child: const Text(
                 'Done',
-                style: TextStyle(color: Color(0xFF1B5E20)),
+                style: TextStyle(color: Color(0xFFE8F1EC)),
               ),
             ),
           ],
@@ -157,18 +158,18 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DesignColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white.withValues(alpha: 0.8),
+        backgroundColor: DesignColors.surface.withOpacity(0.8),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B5E20)),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFFE8F1EC)),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Book Tour',
           style: TextStyle(
-            color: Color(0xFF1B5E20),
+            color: Color(0xFFE8F1EC),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -208,10 +209,10 @@ class _BookingScreenState extends State<BookingScreen> {
                 hintText: 'Enter hotel name or pickup location',
                 prefixIcon: const Icon(
                   Icons.location_on_outlined,
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.primary,
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: DesignColors.surface,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,

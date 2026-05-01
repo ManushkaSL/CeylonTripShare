@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trip_share_app/services/location_service.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 /// Passenger view – shows the driver's live location on a Google Map
 /// for a specific tour.
@@ -50,9 +51,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   void _listenToDriverLocation() {
-    _locationSub = _locationService
-        .streamDriverLocation(widget.tourId)
-        .listen((data) {
+    _locationSub = _locationService.streamDriverLocation(widget.tourId).listen((
+      data,
+    ) {
       if (!mounted) return;
 
       if (data != null) {
@@ -72,9 +73,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           });
 
           // Animate camera to driver position
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(newPos, 15),
-          );
+          _mapController?.animateCamera(CameraUpdate.newLatLngZoom(newPos, 15));
         }
       } else {
         setState(() {
@@ -92,10 +91,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         markerId: const MarkerId('driver'),
         position: _driverPosition!,
         rotation: _driverHeading,
-        infoWindow: InfoWindow(
-          title: _driverName,
-          snippet: 'Vehicle location',
-        ),
+        infoWindow: InfoWindow(title: _driverName, snippet: 'Vehicle location'),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
     };
@@ -104,12 +100,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DesignColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DesignColors.surface,
         elevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B5E20)),
+          icon: const Icon(Icons.arrow_back, color: DesignColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
@@ -118,7 +114,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             Text(
               widget.tourName,
               style: const TextStyle(
-                color: Color(0xFF1B5E20),
+                color: DesignColors.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -131,7 +127,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: _isDriverOnline ? const Color(0xFF4CAF50) : Colors.grey,
+                    color: _isDriverOnline
+                        ? DesignColors.accent
+                        : DesignColors.textSecondary,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -140,7 +138,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   _isDriverOnline ? 'Driver is live' : 'Driver offline',
                   style: TextStyle(
                     fontSize: 12,
-                    color: _isDriverOnline ? const Color(0xFF4CAF50) : Colors.grey,
+                    color: _isDriverOnline
+                        ? DesignColors.accent
+                        : DesignColors.textSecondary,
                   ),
                 ),
               ],
@@ -184,7 +184,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               bottom: 140 + MediaQuery.of(context).padding.bottom,
               child: FloatingActionButton.small(
                 heroTag: 'recenter',
-                backgroundColor: Colors.white,
+                backgroundColor: DesignColors.surface,
                 onPressed: () {
                   if (_driverPosition != null) {
                     _mapController?.animateCamera(
@@ -194,7 +194,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 },
                 child: const Icon(
                   Icons.my_location,
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.primary,
                 ),
               ),
             ),
@@ -207,11 +207,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DesignColors.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: DesignColors.background.withOpacity(0.1),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -285,11 +285,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: Color(0xFF4CAF50),
-                      ),
+                      Icon(Icons.circle, size: 8, color: Color(0xFF4CAF50)),
                       SizedBox(width: 6),
                       Text(
                         'LIVE',

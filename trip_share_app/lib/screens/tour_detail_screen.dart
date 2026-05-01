@@ -4,6 +4,7 @@ import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/screens/booking_screen.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class TourDetailScreen extends StatefulWidget {
   final Tour tour;
@@ -56,7 +57,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     final photos = _allPhotos;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B17),
+      backgroundColor: DesignColors.background,
       body: CustomScrollView(
         physics: const ClampingScrollPhysics(),
         slivers: [
@@ -64,11 +65,11 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
           SliverAppBar(
             expandedHeight: 320,
             pinned: true,
-            backgroundColor: const Color(0xFF0D1424),
+            backgroundColor: DesignColors.background,
             leading: IconButton(
               icon: const CircleAvatar(
                 backgroundColor: Color(0xAA0D1424),
-                child: Icon(Icons.arrow_back, color: Colors.white),
+                child: Icon(Icons.arrow_back, color: Color(0xFFE8F1EC)),
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
@@ -77,7 +78,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Colors.white,
+                color: Color(0xFFE8F1EC),
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
@@ -96,12 +97,12 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         photos[index],
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: DesignColors.textPrimary.withOpacity(0.08),
                           child: const Center(
                             child: Icon(
                               Icons.landscape,
                               size: 60,
-                              color: Color(0xFFAFB6C8),
+                              color: Color(0xFF7A8A80),
                             ),
                           ),
                         ),
@@ -120,7 +121,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: [
-                            Colors.black.withValues(alpha: 0.72),
+                            DesignColors.background.withOpacity(0.72),
                             Colors.transparent,
                           ],
                         ),
@@ -142,8 +143,8 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                             margin: const EdgeInsets.symmetric(horizontal: 3),
                             decoration: BoxDecoration(
                               color: _currentPhoto == i
-                                  ? Colors.white
-                                  : Colors.white54,
+                                  ? DesignColors.textPrimary
+                                  : DesignColors.textPrimary.withOpacity(0.54),
                               borderRadius: BorderRadius.circular(4),
                             ),
                           );
@@ -173,7 +174,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     style: const TextStyle(
                       fontSize: 23,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: Color(0xFFE8F1EC),
                     ),
                   ),
                   if (tour.category.isNotEmpty) ...[
@@ -184,7 +185,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF162D36),
+                        color: DesignColors.surface,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -192,7 +193,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF57D4FF),
+                          color: Color(0xFFC49A3A),
                         ),
                       ),
                     ),
@@ -210,7 +211,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                             'by ${tour.operatorName}',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Color(0xFFAFB6C8),
+                              color: Color(0xFF7A8A80),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -284,7 +285,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.6,
-                      color: Color(0xFFD6DEEF),
+                      color: DesignColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -304,7 +305,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     _buildChipList(
                       tour.whatsIncluded,
                       Icons.check_circle,
-                      const Color(0xFF57D4FF),
+                      DesignColors.accent,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -316,7 +317,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     _buildChipList(
                       tour.tourFeatures,
                       Icons.star_rounded,
-                      const Color(0xFFF57F17),
+                      DesignColors.accentSecondary,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -347,7 +348,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                                 decoration: BoxDecoration(
                                   border: _currentPhoto == index
                                       ? Border.all(
-                                          color: const Color(0xFF57D4FF),
+                                          color: DesignColors.accent,
                                           width: 2,
                                         )
                                       : null,
@@ -360,7 +361,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                                     color: Colors.white.withValues(alpha: 0.08),
                                     child: const Icon(
                                       Icons.landscape,
-                                      color: Color(0xFFAFB6C8),
+                                      color: DesignColors.textSecondary,
                                     ),
                                   ),
                                 ),
@@ -538,18 +539,14 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     final (String label, Color bg, Color fg) = switch (status) {
       TourStatus.fullBooked => (
         'Fully Booked',
-        const Color(0xFF3D1720),
-        const Color(0xFFFF7D9D),
+        DesignColors.accentSecondary,
+        DesignColors.textPrimary,
       ),
-      TourStatus.idle => (
-        'Idle',
-        const Color(0xFF2D2815),
-        const Color(0xFFFFCF5B),
-      ),
+      TourStatus.idle => ('Idle', DesignColors.primary, DesignColors.accent),
       TourStatus.active => (
         'Active',
-        const Color(0xFF162D36),
-        const Color(0xFF57D4FF),
+        DesignColors.surface,
+        DesignColors.accent,
       ),
     };
 
@@ -571,18 +568,21 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F1628),
+          color: DesignColors.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: DesignColors.textPrimary.withOpacity(0.08)),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: const Color(0xFF57D4FF)),
+            Icon(icon, size: 18, color: DesignColors.accent),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 text,
-                style: const TextStyle(fontSize: 13, color: Color(0xFFD6DEEF)),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: DesignColors.textPrimary,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

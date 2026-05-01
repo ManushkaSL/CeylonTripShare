@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -86,18 +87,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: DesignColors.background,
       appBar: AppBar(
         title: const Text(
           'Create Account',
           style: TextStyle(
-            color: Color(0xFF1B5E20),
+            color: DesignColors.textPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white.withValues(alpha: 0.8),
+        backgroundColor: DesignColors.surface.withOpacity(0.8),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B5E20)),
+          icon: const Icon(Icons.arrow_back, color: DesignColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -263,8 +265,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _register,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1B5E20),
-                      foregroundColor: Colors.white,
+                      backgroundColor: DesignColors.primary,
+                      foregroundColor: DesignColors.textPrimary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -293,7 +295,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Expanded(child: Divider()),
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('or', style: TextStyle(color: Colors.grey)),
+                      child: Text(
+                        'or',
+                        style: TextStyle(color: DesignColors.textSecondary),
+                      ),
                     ),
                     Expanded(child: Divider()),
                   ],
@@ -327,12 +332,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
+                      backgroundColor: DesignColors.surface,
+                      foregroundColor: DesignColors.textPrimary,
                       elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade300),
+                        side: BorderSide(
+                          color: DesignColors.textSecondary.withOpacity(0.2),
+                        ),
                       ),
                     ),
                   ),

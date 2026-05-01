@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class JoinedToursScreen extends StatefulWidget {
   const JoinedToursScreen({super.key});
@@ -31,14 +32,14 @@ class _JoinedToursScreenState extends State<JoinedToursScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DesignColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white.withValues(alpha: 0.8),
+        backgroundColor: DesignColors.surface.withOpacity(0.8),
         elevation: 0,
         title: const Text(
           'Joined Tours',
           style: TextStyle(
-            color: Color(0xFF1B5E20),
+            color: DesignColors.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
@@ -71,7 +72,9 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
       stream: JoinedTourService().streamBookings(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(color: DesignColors.accent),
+          );
         }
 
         final joined = snapshot.data ?? [];
@@ -84,17 +87,23 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
                     Icon(
                       Icons.luggage_outlined,
                       size: 64,
-                      color: Colors.grey.withValues(alpha: 0.4),
+                      color: DesignColors.textSecondary.withOpacity(0.4),
                     ),
                     const SizedBox(height: 12),
                     const Text(
                       'No joined tours yet',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: DesignColors.textSecondary,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Join a tour from the home screen',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: DesignColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -137,11 +146,11 @@ class _JoinedTourCard extends StatelessWidget {
         child: Container(
           height: 190,
           decoration: BoxDecoration(
-            color: const Color(0xFFEDE0C4).withValues(alpha: 0.92),
+            color: DesignColors.surface.withOpacity(0.92),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: DesignColors.background.withOpacity(0.06),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -162,7 +171,7 @@ class _JoinedTourCard extends StatelessWidget {
                     fit: BoxFit.cover,
                     height: double.infinity,
                     placeholder: (context, url) => Container(
-                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      color: DesignColors.primary.withOpacity(0.1),
                       child: const Center(
                         child: SizedBox(
                           width: 20,
@@ -170,19 +179,19 @@ class _JoinedTourCard extends StatelessWidget {
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFF1B5E20),
+                              DesignColors.primary,
                             ),
                           ),
                         ),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
-                      color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                      color: DesignColors.primary.withOpacity(0.1),
                       child: const Center(
                         child: Icon(
                           Icons.landscape,
                           size: 36,
-                          color: Color(0xFF1B5E20),
+                          color: DesignColors.primary,
                         ),
                       ),
                     ),
@@ -202,7 +211,7 @@ class _JoinedTourCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B5E20),
+                          color: DesignColors.primary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

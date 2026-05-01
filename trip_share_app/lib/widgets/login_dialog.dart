@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/screens/register_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class LoginDialog extends StatefulWidget {
   const LoginDialog({super.key});
@@ -95,9 +96,11 @@ class _LoginDialogState extends State<LoginDialog> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: DesignColors.textPrimary.withOpacity(0.85),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: DesignColors.textPrimary.withOpacity(0.3),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -105,7 +108,7 @@ class _LoginDialogState extends State<LoginDialog> {
                 const Icon(
                   Icons.lock_outline_rounded,
                   size: 48,
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.primary,
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -113,13 +116,13 @@ class _LoginDialogState extends State<LoginDialog> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B5E20),
+                    color: DesignColors.primary,
                   ),
                 ),
                 const SizedBox(height: 6),
                 const Text(
                   'Please sign in to book a tour',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  style: TextStyle(fontSize: 13, color: Color(0xFF7A8A80)),
                 ),
                 const SizedBox(height: 18),
                 Form(
@@ -189,8 +192,8 @@ class _LoginDialogState extends State<LoginDialog> {
                               ? null
                               : _loginWithEmailPassword,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
-                            foregroundColor: Colors.white,
+                            backgroundColor: DesignColors.primary,
+                            foregroundColor: DesignColors.textPrimary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -201,7 +204,7 @@ class _LoginDialogState extends State<LoginDialog> {
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: DesignColors.textPrimary,
                                   ),
                                 )
                               : const Text(

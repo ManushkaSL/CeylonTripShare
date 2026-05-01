@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:trip_share_app/firebase_options.dart';
@@ -8,6 +9,8 @@ import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/notification_service.dart';
 import 'package:trip_share_app/services/booking_deadline_service.dart';
 import 'package:trip_share_app/services/chat_cache_service.dart';
+import 'package:trip_share_app/services/dynamic_link_service.dart';
+import 'package:trip_share_app/services/deep_link_navigation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,9 +37,17 @@ class MyApp extends StatelessWidget {
         overscroll: false,
       ),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B5E20),
-          brightness: Brightness.light,
+        colorScheme: const ColorScheme.dark(
+          primary: DesignColors.primary,
+          secondary: DesignColors.accent,
+          surface: DesignColors.surface,
+          background: DesignColors.background,
+          error: DesignColors.error,
+          onPrimary: DesignColors.textPrimary,
+          onSecondary: DesignColors.textPrimary,
+          onSurface: DesignColors.textPrimary,
+          onBackground: DesignColors.textPrimary,
+          onError: DesignColors.textPrimary,
         ),
         useMaterial3: true,
       ),
@@ -58,17 +69,46 @@ class _AppInitializerState extends State<AppInitializer> {
     super.initState();
 
     // Initialize services after frame is rendered
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
       try {
         NotificationService().setRootContext(context);
         BookingDeadlineService().startMonitoring();
+
+        // Initialize dynamic links
+        await _initializeDynamicLinks();
+
         debugPrint('✅ App services initialized');
       } catch (e) {
         debugPrint('⚠️ Error initializing services: $e');
       }
     });
+  }
+
+  /// Initialize Firebase Dynamic Links for deep link handling
+  Future<void> _initializeDynamicLinks() async {
+    final dynamicLinkService = DynamicLinkService();
+
+    // Initialize dynamic links and set callback
+    await dynamicLinkService.initDynamicLinks((tourId) {
+      if (mounted) {
+        _navigateToTourFromDeepLink(tourId);
+      }
+    });
+  }
+
+  /// Navigate to tour when deep link is received
+  Future<void> _navigateToTourFromDeepLink(String tourId) async {
+    if (!mounted) return;
+
+    // Add a small delay to ensure context is ready
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    // Use the deep link navigation service
+    await DeepLinkNavigationService.navigateToTourWithRoute(context, tourId);
   }
 
   @override
@@ -86,9 +126,9 @@ class _AppInitializerState extends State<AppInitializer> {
         if (authService.isLoggedIn && authService.isCheckingDriver) {
           debugPrint('⏳ Checking driver status...');
           return Scaffold(
-            backgroundColor: const Color(0xFFF5F5F5),
+            backgroundColor: DesignColors.background,
             body: const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+              child: CircularProgressIndicator(color: DesignColors.primary),
             ),
           );
         }

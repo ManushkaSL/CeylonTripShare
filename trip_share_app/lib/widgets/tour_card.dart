@@ -7,7 +7,11 @@ import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/screens/booking_screen.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/dynamic_link_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
+import 'package:trip_share_app/widgets/custom_button.dart';
+import 'package:trip_share_app/widgets/skeleton_loader.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 class TourCard extends StatelessWidget {
   final Tour tour;
@@ -15,397 +19,385 @@ class TourCard extends StatelessWidget {
 
   const TourCard({super.key, required this.tour, this.onCardTap});
 
-  @override
-  Widget build(BuildContext context) {
-    final isFull = !tour.canBook;
-
-    void openTourDetails() {
-      if (onCardTap != null) {
-        onCardTap!();
-        return;
-      }
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
+  void _openDetails(BuildContext context) {
+    if (onCardTap != null) {
+      onCardTap!();
+      return;
     }
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: openTourDetails,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFCCE1FF).withValues(alpha: 0.14),
-                  const Color(0xFF8FB2FF).withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.24),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: const Color(0xFF8CC3FF).withValues(alpha: 0.2),
-                  blurRadius: 26,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    bottomLeft: Radius.circular(18),
-                  ),
-                  child: SizedBox(
-                    width: 104,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CachedNetworkImage(
-                          imageUrl: tour.imageUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF1E6DE2),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            child: const Center(
-                              child: Icon(
-                                Icons.landscape,
-                                size: 36,
-                                color: Color(0xFF9FA9C2),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.04),
-                                Colors.black.withValues(alpha: 0.48),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.34),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.24),
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.star_rounded,
-                              size: 12,
-                              color: Color(0xFFFFD769),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              tour.name,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: 0.1,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 5),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.place_rounded,
-                                  size: 11,
-                                  color: Color(0xFF8D99B8),
-                                ),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: Text(
-                                    tour.startLocation,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 9.5,
-                                      color: Color(0xFF8D99B8),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.28,
-                                      ),
-                                    ),
-                                    borderRadius: BorderRadius.circular(7),
-                                  ),
-                                  child: Text(
-                                    '\$${tour.price.toInt()}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                isFull
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2.5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFFF7D9D,
-                                          ).withValues(alpha: 0.2),
-                                          border: Border.all(
-                                            color: const Color(
-                                              0xFFFF7D9D,
-                                            ).withValues(alpha: 0.45),
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            7,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Full',
-                                          style: TextStyle(
-                                            fontSize: 8.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFFFF7D9D),
-                                          ),
-                                        ),
-                                      )
-                                    : Text(
-                                        '${tour.remainingSeats}/${tour.totalSeats}',
-                                        style: const TextStyle(
-                                          fontSize: 9.5,
-                                          color: Color(0xFF8D99B8),
-                                        ),
-                                      ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            _buildStatusBadge(tour.status),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            if (!isFull)
-                              Expanded(
-                                child: SizedBox(
-                                  height: 30,
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      if (!AuthService().isLoggedIn) {
-                                        final loggedIn = await LoginDialog.show(
-                                          context,
-                                        );
-                                        if (!loggedIn) return;
-                                      }
-                                      if (!context.mounted) return;
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              BookingScreen(tour: tour),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white.withValues(
-                                        alpha: 0.17,
-                                      ),
-                                      foregroundColor: Colors.white,
-                                      side: BorderSide(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.28,
-                                        ),
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                    child: Text(
-                                      tour.status == TourStatus.idle
-                                          ? 'Start'
-                                          : 'Join',
-                                      style: const TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (!isFull) const SizedBox(width: 6),
-                            Expanded(
-                              child: SizedBox(
-                                height: 30,
-                                child: OutlinedButton(
-                                  onPressed: openTourDetails,
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                      width: 1.1,
-                                    ),
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.08,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(9),
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  child: const Text(
-                                    'Details',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFFD6DEEF),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            SizedBox(
-                              width: 30,
-                              height: 30,
-                              child: IconButton.outlined(
-                                onPressed: () {
-                                  SharePlus.instance.share(
-                                    ShareParams(
-                                      text:
-                                          'Check out this tour: ${tour.name} - \$${tour.price.toInt()} per person!',
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.share, size: 13),
-                                color: const Color(0xFFD6DEEF),
-                                padding: EdgeInsets.zero,
-                                style: IconButton.styleFrom(
-                                  side: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.3),
-                                    width: 1.1,
-                                  ),
-                                  backgroundColor: Colors.white.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(9),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
   }
 
-  Widget _buildStatusBadge(TourStatus status) {
-    final (String label, Color bgColor, Color fgColor) = switch (status) {
-      TourStatus.fullBooked => (
-        'Fully Booked',
-        const Color(0xFF3D1720),
-        const Color(0xFFFF7D9D),
-      ),
-      TourStatus.idle => (
-        'Idle',
-        const Color(0xFF2C2A14),
-        const Color(0xFFFFCF5B),
-      ),
-      TourStatus.active => (
-        'Active',
-        const Color(0xFF162D36),
-        const Color(0xFF57D4FF),
-      ),
-    };
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dateToFormat = DateTime(date.year, date.month, date.day);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: bgColor.withValues(alpha: 0.26),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fgColor.withValues(alpha: 0.7), width: 1),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w600,
-          color: fgColor,
+    if (dateToFormat == today) {
+      return 'Today';
+    } else if (dateToFormat == today.add(const Duration(days: 1))) {
+      return 'Tomorrow';
+    } else {
+      return '${date.day} ${_getMonthName(date.month)}';
+    }
+  }
+
+  String _formatTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isFull = !tour.canBook;
+
+    return GestureDetector(
+      onTap: () => _openDetails(context),
+      behavior: HitTestBehavior.opaque,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: DesignColors.surface.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: DesignColors.textPrimary.withOpacity(0.08),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: DesignColors.background.withOpacity(0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left image (fixed width)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 100,
+                  height: double.infinity,
+                  child: CachedNetworkImage(
+                    imageUrl: tour.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (c, u) => Container(
+                      color: Colors.grey.shade200.withOpacity(0.06),
+                      child: const Center(
+                        child: SkeletonLoader(height: 60, width: 80),
+                      ),
+                    ),
+                    errorWidget: (c, u, e) => Container(
+                      color: DesignColors.primary.withOpacity(0.15),
+                      child: const Center(
+                        child: Icon(
+                          Icons.landscape,
+                          size: 40,
+                          color: DesignColors.accent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              // Right column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Upper section
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Text(
+                          tour.name.length > 48
+                              ? tour.name.substring(0, 45) + '...'
+                              : tour.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: DesignColors.textPrimary,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Location with icon
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_rounded,
+                              size: 13,
+                              color: DesignColors.accent,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                tour.startLocation,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: DesignColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Date & Time
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month,
+                              size: 13,
+                              color: DesignColors.textTertiary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_formatDate(tour.startDate)} at ${_formatTime(tour.startDate)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: DesignColors.textTertiary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Bottom section with price, seats, status, and actions
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Price badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: DesignColors.accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: DesignColors.accent.withOpacity(0.3),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            '\$${tour.price.toInt()}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: DesignColors.accent,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        // Seats indicator
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isFull
+                                ? DesignColors.accentSecondary.withOpacity(0.12)
+                                : DesignColors.success.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isFull
+                                  ? DesignColors.accentSecondary.withOpacity(
+                                      0.3,
+                                    )
+                                  : DesignColors.success.withOpacity(0.3),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            isFull
+                                ? 'Full'
+                                : '${tour.remainingSeats}/${tour.totalSeats}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isFull
+                                  ? DesignColors.accentSecondary
+                                  : DesignColors.success,
+                            ),
+                          ),
+                        ),
+
+                        const Spacer(),
+
+                        // Compact action buttons
+                        if (!isFull)
+                          SizedBox(
+                            height: 32,
+                            child: CustomButton(
+                              onPressed: () async {
+                                if (!AuthService().isLoggedIn) {
+                                  final loggedIn = await LoginDialog.show(
+                                    context,
+                                  );
+                                  if (!loggedIn) return;
+                                }
+                                if (!context.mounted) return;
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => BookingScreen(tour: tour),
+                                  ),
+                                );
+                              },
+                              backgroundColor: DesignColors.accent.withOpacity(
+                                0.2,
+                              ),
+                              border: Border.all(
+                                color: DesignColors.accent.withOpacity(0.4),
+                                width: 0.8,
+                              ),
+                              textColor: DesignColors.accent,
+                              borderRadius: 8,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                tour.status == TourStatus.idle
+                                    ? 'Start'
+                                    : 'Join',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        if (!isFull) const SizedBox(width: 6),
+
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CustomButton(
+                            onPressed: () => _openDetails(context),
+                            backgroundColor: DesignColors.primary.withOpacity(
+                              0.2,
+                            ),
+                            border: Border.all(
+                              color: DesignColors.primary.withOpacity(0.4),
+                              width: 0.8,
+                            ),
+                            textColor: DesignColors.textPrimary,
+                            borderRadius: 8,
+                            padding: EdgeInsets.zero,
+                            child: const Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: DesignColors.textPrimary,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 6),
+
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CustomButton(
+                            onPressed: () async {
+                              // Show loading indicator
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Generating share link...'),
+                                  backgroundColor: DesignColors.primary,
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+
+                              try {
+                                // Generate share message with dynamic link
+                                final dynamicLinkService = DynamicLinkService();
+                                final message = await dynamicLinkService
+                                    .getTourShareMessage(tour);
+
+                                // Share using share_plus
+                                await SharePlus.instance.share(
+                                  ShareParams(text: message),
+                                );
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to share: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            backgroundColor: DesignColors.surface.withOpacity(
+                              0.4,
+                            ),
+                            border: Border.all(
+                              color: DesignColors.textPrimary.withOpacity(0.1),
+                              width: 0.8,
+                            ),
+                            textColor: DesignColors.textPrimary,
+                            borderRadius: 8,
+                            padding: EdgeInsets.zero,
+                            child: const Icon(
+                              Icons.share_outlined,
+                              size: 16,
+                              color: DesignColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
