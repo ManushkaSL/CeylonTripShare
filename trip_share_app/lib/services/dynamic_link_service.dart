@@ -2,96 +2,67 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 
 class DynamicLinkService {
-  // Custom URL scheme - no hosted domain needed!
-  // Format: tripshare://tour/TOUR_ID?name=...&price=...
-  static const String _appScheme = 'tripshare://tour';
+  // Landing page URL - handles device detection and app opening
+  static const String _landingPageUrl =
+      'https://ceylon-trip-share-ytdf.vercel.app';
 
   /// Generate a shareable link for a tour
+  /// Simply directs to landing page with tour ID in URL
   Future<String> generateTourShareLink(Tour tour) async {
     try {
       debugPrint('🔗 Generating share link for tour: ${tour.id}');
 
-      // Create a custom URL scheme link
-      // Format: tripshare://tour/TOUR_ID?name=...&price=...&location=...
-      final shareUrl = '$_appScheme/${tour.id}'
-          '?name=${Uri.encodeComponent(tour.name)}'
-          '&price=${tour.price}'
+      // Create link with tour details as query parameters
+      final shareUrl =
+          '$_landingPageUrl?tourId=${tour.id}'
+          '&name=${Uri.encodeComponent(tour.name)}'
+          '&price=${tour.price.toInt()}'
           '&location=${Uri.encodeComponent(tour.startLocation)}';
 
       debugPrint('✅ Share link generated: $shareUrl');
       return shareUrl;
     } catch (e) {
       debugPrint('⚠️ Error generating share link: $e');
-      return '$_appScheme/${tour.id}';
+      return _landingPageUrl;
     }
   }
 
-  /// Initialize dynamic links - handles incoming deep links
+  /// Initialize deep link listening for when app is opened via the landing page
   Future<void> initDynamicLinks(
     Function(String tourId) onTourLinkReceived,
   ) async {
     try {
-      debugPrint('✅ Dynamic links initialized successfully');
-
-      // Note: For full Firebase Dynamic Links functionality,
-      // you need to:
-      // 1. Run: flutter pub get
-      // 2. Configure Android/iOS (see FIREBASE_DYNAMIC_LINKS_SETUP.md)
-      // 3. Enable Firebase Dynamic Links in Firebase Console
-
-      // This basic implementation provides fallback functionality
-      // using standard deep links with custom URL schemes
-
-      // In a real scenario, you would add:
-      // - Firebase Dynamic Links native handlers
-      // - Deep link parsing from intent filters
-      // - URL scheme handling for iOS
+      debugPrint('✅ Dynamic links listener initialized');
+      // Deep link handling is done through Android intent filters and iOS universal links
+      // The landing page will pass tourId to the app via tripshare:// custom scheme
     } catch (e) {
       debugPrint('⚠️ Error initializing dynamic links: $e');
     }
   }
 
-  /// Listen for incoming dynamic links (when app is running)
+  /// Listen for incoming deep links (when app is running)
   void listenToDynamicLinks(Function(String tourId) onTourLinkReceived) {
     try {
-      debugPrint('📱 Listening for dynamic links...');
-
-      // This would be implemented through native handlers
-      // See platform-specific implementations in:
-      // - android/app/src/main/AndroidManifest.xml
-      // - ios/Runner/Info.plist
+      debugPrint('📱 Listening for deep links...');
+      // Deep link parsing happens in Android/iOS native code
+      // and through the tripshare:// custom URL scheme
     } catch (e) {
       debugPrint('⚠️ Error listening to dynamic links: $e');
     }
   }
 
   /// Extract tour ID from deep link URL
-  void _handleDeepLink(
-    String deepLink,
-    Function(String tourId) onTourLinkReceived,
-  ) {
+  void _handleDeepLink(Uri link, Function(String tourId) onTourLinkReceived) {
     try {
-      final uri = Uri.parse(deepLink);
-      debugPrint('🔗 Parsing deep link: ${uri.path}');
+      debugPrint('🔗 Parsing deep link: $link');
 
-      // Extract tour ID from path: /tour/TOUR_ID
-      if (uri.pathSegments.contains('tour')) {
-        final tourIndex = uri.pathSegments.indexOf('tour');
-        if (tourIndex < uri.pathSegments.length - 1) {
-          final tourId = uri.pathSegments[tourIndex + 1];
-          if (tourId.isNotEmpty) {
-            debugPrint('✅ Tour ID extracted: $tourId');
-            onTourLinkReceived(tourId);
-            return;
-          }
-        }
-      }
+      // Extract tour ID from query parameters
+      // Link format: tripshare://tour?tourId=ABC123&name=...&price=...
+      final tourId = link.queryParameters['tourId'];
 
-      // Fallback: check query parameters
-      final tourIdParam = uri.queryParameters['tourId'];
-      if (tourIdParam != null && tourIdParam.isNotEmpty) {
-        debugPrint('✅ Tour ID from query param: $tourIdParam');
-        onTourLinkReceived(tourIdParam);
+      if (tourId != null && tourId.isNotEmpty) {
+        debugPrint('✅ Tour ID extracted: $tourId');
+        onTourLinkReceived(tourId);
         return;
       }
 
@@ -101,7 +72,7 @@ class DynamicLinkService {
     }
   }
 
-  /// Generate tour share message with deep link
+  /// Generate tour share message with link
   Future<String> getTourShareMessage(Tour tour) async {
     try {
       final shareLink = await generateTourShareLink(tour);
@@ -112,7 +83,7 @@ class DynamicLinkService {
           '$shareLink';
     } catch (e) {
       debugPrint('⚠️ Error creating share message: $e');
-      return 'Check out this tour: ${tour.name}\n$_appScheme/${tour.id}';
+      return 'Check out this tour: ${tour.name}\n$_landingPageUrl';
     }
   }
 }

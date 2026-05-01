@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:app_links/app_links.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
@@ -76,8 +77,8 @@ class _AppInitializerState extends State<AppInitializer> {
         NotificationService().setRootContext(context);
         BookingDeadlineService().startMonitoring();
 
-        // Initialize dynamic links
-        await _initializeDynamicLinks();
+        // Initialize deep link listening
+        _initializeDeepLinkListener();
 
         debugPrint('✅ App services initialized');
       } catch (e) {
@@ -86,16 +87,66 @@ class _AppInitializerState extends State<AppInitializer> {
     });
   }
 
-  /// Initialize Firebase Dynamic Links for deep link handling
-  Future<void> _initializeDynamicLinks() async {
-    final dynamicLinkService = DynamicLinkService();
+  /// Listen for deep links via custom URL scheme (tripshare://)
+  void _initializeDeepLinkListener() {
+    try {
+      debugPrint('🔗 Setting up deep link listener');
 
-    // Initialize dynamic links and set callback
-    await dynamicLinkService.initDynamicLinks((tourId) {
-      if (mounted) {
-        _navigateToTourFromDeepLink(tourId);
+      final appLinks = AppLinks();
+
+      // Listen for new links while app is running
+      appLinks.uriLinkStream.listen(
+        (uri) {
+          debugPrint('🔗 Deep link received: $uri');
+          _handleDeepLink(uri.toString());
+        },
+        onError: (error) {
+          debugPrint('⚠️ Deep link error: $error');
+        },
+      );
+
+      debugPrint('✅ Deep link listener initialized');
+    } catch (e) {
+      debugPrint('⚠️ Error initializing deep link listener: $e');
+    }
+  }
+
+  /// Handle incoming deep link
+  void _handleDeepLink(String deepLink) {
+    try {
+      debugPrint('📱 Handling deep link: $deepLink');
+
+      // Parse the deep link
+      // Formats:
+      // From landing page: tripshare://tour/ABC123?name=...&price=...&location=...
+      // From app share: https://ceylon-trip-share-ytdf.vercel.app?tourId=ABC123&...
+      final uri = Uri.parse(deepLink);
+
+      String? tourId;
+
+      // Try to extract from path segments (tripshare://tour/ABC123)
+      if (uri.pathSegments.isNotEmpty && uri.pathSegments[0] == 'tour') {
+        if (uri.pathSegments.length > 1) {
+          tourId = uri.pathSegments[1];
+        }
       }
-    });
+
+      // Fallback to query parameters (for vercel links)
+      tourId ??= uri.queryParameters['tourId'];
+
+      if (tourId != null && tourId.isNotEmpty) {
+        debugPrint('✅ Tour ID extracted from deep link: $tourId');
+
+        // Navigate to tour if mounted
+        if (mounted) {
+          _navigateToTourFromDeepLink(tourId);
+        }
+      } else {
+        debugPrint('⚠️ No tour ID found in deep link');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error handling deep link: $e');
+    }
   }
 
   /// Navigate to tour when deep link is received

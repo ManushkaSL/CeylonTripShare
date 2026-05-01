@@ -3,101 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { motion } from "motion/react";
-import { Download, Smartphone, Apple, Play } from "lucide-react";
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import TourRedirect from './pages/TourRedirect';
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 md:p-12 selection:bg-emerald-200">
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-        {/* Left Content */}
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="flex flex-col space-y-8"
-        >
-          <div className="space-y-4">
-            <motion.h1 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="font-display text-5xl md:text-7xl font-bold tracking-tight text-emerald-950"
-            >
-              Download <br />
-              <span className="text-emerald-600">TripShare</span>
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-lg md:text-xl text-emerald-900/70 max-w-md leading-relaxed"
-            >
-              Start sharing and discovering amazing travel experiences with your community across your devices.
-            </motion.p>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
-              transition={{ delay: 0.4 }}
-              className="text-xs font-medium uppercase tracking-widest text-emerald-950"
-            >
-              By installing TripShare, you agree to our Terms & Privacy Policy.
-            </motion.p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="bg-white/80 backdrop-blur-md rounded-3xl p-8 border border-emerald-100 shadow-xl shadow-emerald-900/5 max-w-md transform hover:scale-[1.02] transition-transform duration-300">
-              <div className="flex items-center gap-3 mb-4">
-                <Smartphone className="w-6 h-6 text-emerald-600" />
-                <h2 className="font-display text-2xl font-semibold text-emerald-950">Mobile</h2>
-              </div>
-              <p className="text-emerald-900/70 mb-8 leading-relaxed">
-                Connect with travelers, share itineraries, and explore hidden gems worldwide. Requires iOS 14.0 or Android 8.0 and newer.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4">
-                <a 
-                  href="https://apps.apple.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-3 bg-black text-white hover:bg-zinc-800 px-6 py-3.5 rounded-xl transition-all duration-200 group shadow-lg"
-                >
-                  <Apple className="w-6 h-6 fill-white" />
-                  <div className="flex flex-col items-start leading-none">
-                    <span className="text-[10px] uppercase font-medium opacity-70">Download from the</span>
-                    <span className="text-lg font-semibold">App Store</span>
-                  </div>
-                </a>
-
-                <a 
-                  href="https://play.google.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-3 bg-black text-white hover:bg-zinc-800 px-6 py-3.5 rounded-xl transition-all duration-200 group shadow-lg"
-                >
-                  <Play className="w-6 h-6 fill-white" />
-                  <div className="flex flex-col items-start leading-none">
-                    <span className="text-[10px] uppercase font-medium opacity-70">Get it on</span>
-                    <span className="text-lg font-semibold">Google Play</span>
-                  </div>
-                </a>
-              </div>
-            </div>
-
-            <button className="flex items-center gap-2 text-emerald-700 hover:text-emerald-900 font-medium transition-colors pl-2 group">
-              Explore in browser
-              <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
-                →
-              </motion.span>
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Right Illustration */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/tour/:tourId" element={<TourRedirect />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
           className="relative flex justify-center lg:justify-end"
         >
           <div className="relative w-full max-w-md aspect-square bg-emerald-100/50 rounded-full flex items-center justify-center overflow-hidden">

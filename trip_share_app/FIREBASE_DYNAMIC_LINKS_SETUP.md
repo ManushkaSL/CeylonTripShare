@@ -1,52 +1,261 @@
 # Firebase Dynamic Links Setup Guide
 
-This guide walks you through setting up Firebase Dynamic Links for the TripShare app to enable tour sharing with deep links.
+This guide explains how to complete the Firebase Dynamic Links setup so the tour sharing system works end-to-end.
 
-## Prerequisites
+---
 
-- Firebase project already set up
-- Firebase Console access
-- Android and iOS apps registered in Firebase
+## 🎯 How It Works
 
-## Step 1: Enable Firebase Dynamic Links
+1. **User taps share button** → Generates a Firebase Dynamic Link
+2. **Link is clicked** → Firebase detects device and app installation
+3. **If app installed** → Opens app with tour details
+4. **If not installed** → Redirects to App Store/Play Store
+5. **After install** → User can click link again and open the app directly
 
-1. Go to **Firebase Console** → Your Project
-2. Navigate to **Engage** section → **Dynamic Links**
-3. Click **Get Started** or **Create New Domain**
-4. Follow the prompts to create a Dynamic Link domain (e.g., `https://tripshareapp.page.link`)
+---
 
-## Step 2: Configure Android Deep Links
+## ✅ Step 1: Update Dynamic Link Domain
 
-### In Android Manifest (`android/app/src/main/AndroidManifest.xml`)
+Your Firebase project has a unique dynamic link domain. Update it in:
 
-Add an intent filter to handle deep links:
+**File:** `lib/services/dynamic_link_service.dart`
+
+```dart
+static const String _domain = 'https://YOUR_PROJECT_ID.page.link';
+```
+
+**How to find your domain:**
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Select your TripShare project
+3. Go to **Dynamic Links** section
+4. You'll see your dynamic link domain (e.g., `https://tripshare-abc123.page.link`)
+5. Copy it and replace in the code above
+
+---
+
+## ✅ Step 2: Get Your App Store IDs
+
+### iOS App Store ID
+1. Go to [App Store Connect](https://appstoreconnect.apple.com)
+2. Find your TripShare app
+3. In the URL, find the ID number: `https://apps.apple.com/app/[name]/id**1234567890**`
+4. Update in `lib/services/dynamic_link_service.dart`:
+   ```dart
+   appStoreId: '1234567890', // Your actual ID
+   ```
+
+### Android Package Name
+1. Go to [Google Play Console](https://play.google.com/console)
+2. Find your TripShare app
+3. In the URL, find the package: `https://play.google.com/store/apps/details?id=**com.tripshare.app**`
+4. This is already correct in the code: `com.tripshare.app`
+
+---
+
+## ✅ Step 3: Configure Android
+
+### Android Intent Filter
+
+Update `android/app/src/main/AndroidManifest.xml`:
 
 ```xml
-<activity
-    android:name=".MainActivity"
-    android:exported="true"
-    android:theme="@style/LaunchTheme"
-    android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-    android:hardwareAccelerated="true"
-    android:windowSoftInputMode="adjustResize">
-    
-    <intent-filter>
+<manifest>
+  <application>
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        android:launchMode="singleTop">
+        
+      <!-- Standard launcher intent -->
+      <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
+      </intent-filter>
 
-    <!-- Deep link intent filter for Dynamic Links -->
-    <intent-filter>
+      <!-- Handle Firebase Dynamic Links and custom scheme -->
+      <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <!-- Your Dynamic Links domain -->
-        <data android:host="tripshareapp.page.link" android:scheme="https" />
-        <!-- App deep links -->
-        <data android:host="tripshareapp.com" android:scheme="https" android:pathPrefix="/tour" />
-    </intent-filter>
-</activity>
+        <!-- Firebase Dynamic Links domain -->
+        <data
+            android:scheme="https"
+            android:host="tripshare-abc123.page.link" />
+        <!-- Your custom deep link scheme -->
+        <data android:scheme="tripshare" />
+      </intent-filter>
+
+    </activity>
+  </application>
+</manifest>
 ```
+
+**Replace** `tripshare-abc123.page.link` with your actual Firebase dynamic link domain.
+
+---
+
+## ✅ Step 4: Configure iOS
+
+### iOS Associated Domains
+
+Update `ios/Runner/Info.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- ... other config ... -->
+    
+    <!-- Firebase Dynamic Links -->
+    <key>FirebaseDynamicLinksCustomDomains</key>
+    <array>
+        <string>https://ceylon-trip-share-ytdf.vercel.app</string>
+        <string>https://tripshare-abc123.page.link</string>
+    </array>
+    
+    <!-- Associated Domains for Universal Links -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:ceylon-trip-share-ytdf.vercel.app</string>
+        <string>applinks:tripshare-abc123.page.link</string>
+    </array>
+    
+    <!-- ... rest of config ... -->
+</dict>
+</plist>
+```
+
+---
+
+## ✅ Step 5: Test the Setup
+
+### Local Testing
+
+1. Run: `flutter pub get`
+2. Run app on physical device (not emulator for Firebase DL)
+3. On your device, open a tour and tap Share
+4. Copy the generated Firebase Dynamic Link
+5. Open link in browser
+   - **App installed:** Should open the tour in the app
+   - **App not installed:** Should redirect to App Store/Play Store
+
+### What You'll See
+
+**In app (console logs):**
+```
+🔗 Generating Firebase Dynamic Link for tour: Dpe9GqIjWS8slOqZX2d7
+✅ Firebase Dynamic Link generated: https://tripshare-abc123.page.link/abc123xyz
+```
+
+**Share message:**
+```
+Check out this amazing tour: Udawalawe Half Day Safari
+💰 $50 per person
+📍 Ella
+📅 Available seats: 6/6
+
+https://tripshare-abc123.page.link/abc123xyz
+```
+
+---
+
+## 🔗 How Links Work
+
+### Firebase Dynamic Link Path
+
+When you generate a link, it creates a format like:
+```
+https://tripshare-abc123.page.link/a1b2c3d4e5f6g7h8
+```
+
+Firebase automatically:
+1. Detects the device (iOS/Android)
+2. Checks if app is installed
+3. Opens the app if installed, showing the shared tour
+4. Redirects to store if app not installed
+
+Your Vercel landing page is a **fallback** - it only shows if something goes wrong with the Firebase link.
+
+---
+
+## 🚀 Complete Flow
+
+```
+User clicks Share
+    ↓
+generateTourShareLink() → Creates Firebase Dynamic Link
+    ↓
+Firebase Dynamic Link: https://tripshare-abc123.page.link/xyz123
+    ↓
+Link is shared via WhatsApp/SMS/etc
+    ↓
+Recipient clicks link
+    ↓
+Firebase detects device
+    ├─ App installed? → Opens app with tour data ✅
+    └─ App not installed? → Redirects to App Store/Play Store
+        └─ After install, link opens app directly
+```
+
+---
+
+## ❗ Troubleshooting
+
+### Issue: Links not working on iOS
+**Solution:** Ensure Bundle ID matches in:
+- Xcode project settings
+- Firebase Console
+- `Info.plist` configuration
+
+### Issue: Links not working on Android
+**Solution:** 
+- Verify package name: `com.tripshare.app`
+- Check `AndroidManifest.xml` has correct domain
+- Ensure Android app is signed with correct signing key
+
+### Issue: Firebase Dynamic Links page shows 404
+**Solution:** 
+- Verify you used the correct dynamic link domain
+- Domain must be in format: `https://PROJECT_ID.page.link`
+
+### Issue: Redirects to store every time
+**Solution:**
+- App might not be properly associated with store
+- Try installing app fresh and testing again
+- Check app is signed with same certificate as store listing
+
+---
+
+## 📝 Configuration Checklist
+
+- [ ] Updated `_domain` constant with your Firebase DL domain
+- [ ] Updated iOS `appStoreId` with correct ID number
+- [ ] Added Android Intent Filter to `AndroidManifest.xml`
+- [ ] Added iOS Associated Domains to `Info.plist`
+- [ ] Tested on physical iOS device
+- [ ] Tested on physical Android device
+- [ ] Share button generates Firebase Dynamic Links
+- [ ] Links work when app is installed
+- [ ] Links redirect to store when app not installed
+
+---
+
+## 🎉 You're Done!
+
+Your tour sharing system is now complete. Users can:
+- Share tours via any messaging app
+- Links automatically detect if app is installed
+- Seamless experience whether app is installed or not
+- Users can download the app and view the shared tour immediately after installation
+
+---
+
+## Support
+
+For more info:
+- [Firebase Dynamic Links Docs](https://firebase.google.com/docs/dynamic-links)
+- [Your Firebase Console](https://console.firebase.google.com)
 
 ## Step 3: Configure iOS Deep Links
 

@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
 class DesignColors {
-  // Light Theme - Modern Mint & Teal
-  static const Color primary = Color(0xFF0D7377); // Deep Teal
-  static const Color primaryVariant = Color(0xFF14919B); // Medium Teal
-  static const Color secondary = Color(0xFF40C4CB); // Light Teal
-  static const Color background = Color(0xFFF0F9F8); // Very Light Mint
-  static const Color surface = Color(0xFFFFFFFF); // White
-  static const Color accent = Color(0xFF0D7377); // Deep Teal (primary)
-  static const Color accentSecondary = Color(0xFF40C4CB); // Light Teal
-  static const Color error = Color(0xFFE74C3C); // Warm Red
-  static const Color success = Color(0xFF27AE60); // Green
-  static const Color warning = Color(0xFFF39C12); // Orange
-  static const Color textPrimary = Color(0xFF1A1A1A); // Dark gray (almost black)
-  static const Color textSecondary = Color(0xFF5A7A78); // Medium gray-teal
-  static const Color textTertiary = Color(0xFF8B9D9A); // Light gray-teal
-  static const Color divider = Color(0xFFE0F2F1); // Very light teal
-  static const Color glass = Color(0x80FFFFFF); // White with opacity
+  // Core Palette - Premium & Refined
+  static const Color primary = Color(0xFF1a4d3a); // Deep Teal Green
+  static const Color primaryVariant = Color(0xFF0f3d2f);
+  static const Color secondary = Color(0xFF2a5a46); // Rich Moss
+  static const Color background = Color(0xFF0d1513); // Deep Charcoal
+  static const Color surface = Color(0xFF1a2a22); // Subtle Dark Surface
+  static const Color accent = Color(0xFFd4a155); // Warm Gold
+  static const Color accentSecondary = Color(0xFFe8956f); // Warm Coral
+  static const Color error = Color(0xFFc44569);
+  static const Color success = Color(0xFF6ec38b);
+  static const Color warning = Color(0xFFf4a460);
+  static const Color textPrimary = Color(0xFFe8f1ec);
+  static const Color textSecondary = Color(0xFF95a89d);
+  static const Color textTertiary = Color(0xFF637367);
+  static const Color glass = Color(0x80FFFFFF);
+  static const Color divider = Color(0xFF2a3a30);
 }
 
 class Spacing {
