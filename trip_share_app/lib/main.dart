@@ -77,11 +77,11 @@ class _AppInitializerState extends State<AppInitializer> {
         NotificationService().setRootContext(context);
         BookingDeadlineService().startMonitoring();
 
-        // Initialize deep link listening
-        _initializeDeepLinkListener();
+        // Check for initial deep link FIRST (when app is launched from a link)
+        await _checkInitialDeepLink();
 
-        // Also check for initial deep link (when app is launched from a link)
-        _checkInitialDeepLink();
+        // Initialize deep link listener for new links
+        _initializeDeepLinkListener();
 
         debugPrint('✅ App services initialized');
       } catch (e) {
@@ -98,7 +98,10 @@ class _AppInitializerState extends State<AppInitializer> {
 
       if (initialAppLink != null) {
         debugPrint('🔗 Initial deep link detected: $initialAppLink');
+        await Future.delayed(const Duration(milliseconds: 100));
         _handleDeepLink(initialAppLink.toString());
+      } else {
+        debugPrint('✅ No initial deep link');
       }
     } catch (e) {
       debugPrint('⚠️ Error checking initial deep link: $e');
@@ -134,33 +137,32 @@ class _AppInitializerState extends State<AppInitializer> {
     try {
       debugPrint('📱 Handling deep link: $deepLink');
 
-      // Parse the deep link
-      // Formats:
-      // From landing page: tripshare://tour/ABC123?name=...&price=...&location=...
-      // From app share: https://ceylon-trip-share-ytdf.vercel.app?tourId=ABC123&...
       final uri = Uri.parse(deepLink);
-
       String? tourId;
 
       // Try to extract from path segments (tripshare://tour/ABC123)
-      if (uri.pathSegments.isNotEmpty && uri.pathSegments[0] == 'tour') {
-        if (uri.pathSegments.length > 1) {
+      if (uri.pathSegments.isNotEmpty) {
+        if (uri.pathSegments[0] == 'tour' && uri.pathSegments.length > 1) {
           tourId = uri.pathSegments[1];
+          debugPrint('✅ Extracted tour ID from path: $tourId');
         }
       }
 
-      // Fallback to query parameters (for vercel links)
-      tourId ??= uri.queryParameters['tourId'];
+      // Fallback to query parameters (for vercel links and other formats)
+      if ((tourId == null || tourId.isEmpty)) {
+        tourId = uri.queryParameters['tourId'];
+        if (tourId != null) {
+          debugPrint('✅ Extracted tour ID from query params: $tourId');
+        }
+      }
 
       if (tourId != null && tourId.isNotEmpty) {
-        debugPrint('✅ Tour ID extracted from deep link: $tourId');
-
-        // Navigate to tour if mounted
+        debugPrint('✅ Valid tour ID found: $tourId');
         if (mounted) {
           _navigateToTourFromDeepLink(tourId);
         }
       } else {
-        debugPrint('⚠️ No tour ID found in deep link');
+        debugPrint('⚠️ No tour ID found in deep link: $deepLink');
       }
     } catch (e) {
       debugPrint('⚠️ Error handling deep link: $e');
@@ -169,15 +171,35 @@ class _AppInitializerState extends State<AppInitializer> {
 
   /// Navigate to tour when deep link is received
   Future<void> _navigateToTourFromDeepLink(String tourId) async {
-    if (!mounted) return;
+    if (!mounted) {
+      debugPrint('⚠️ Widget not mounted, cannot navigate');
+      return;
+    }
 
-    // Add a small delay to ensure context is ready
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Wait for widget to be fully built
+    await Future.delayed(const Duration(milliseconds: 1000));
 
-    if (!mounted) return;
+    if (!mounted) {
+      debugPrint('⚠️ Widget unmounted during navigation delay');
+      return;
+    }
 
-    // Use the deep link navigation service
-    await DeepLinkNavigationService.navigateToTourWithRoute(context, tourId);
+    debugPrint('🚀 Navigating to tour: $tourId');
+
+    try {
+      // Use the deep link navigation service
+      await DeepLinkNavigationService.navigateToTourWithRoute(context, tourId);
+    } catch (e) {
+      debugPrint('⚠️ Error navigating to tour: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open tour: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override

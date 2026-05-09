@@ -80,5 +80,12 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Associated domains for Universal Links -->
+	<key>NSBonjourServices</key>
+	<array/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Travel and tour discovery</string>
+	<key>NSZeroConfServices</key>
+	<array/>
 </dict>
 </plist>

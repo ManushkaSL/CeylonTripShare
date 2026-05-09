@@ -34,6 +34,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tripshare" />
             </intent-filter>
+            <!-- App Links for landing page domain -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="ceylon-trip-share-ytdf.vercel.app" />
+            </intent-filter>
         </activity>
         <!-- Google Maps API key -->
         <meta-data

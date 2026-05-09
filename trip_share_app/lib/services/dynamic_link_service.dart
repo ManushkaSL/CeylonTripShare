@@ -2,28 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 
 class DynamicLinkService {
-  // Landing page URL - handles device detection and app opening
-  static const String _landingPageUrl =
-      'https://ceylon-trip-share-ytdf.vercel.app';
+  // Smart redirect endpoint that detects if app is installed
+  static const String _baseUrl = 'https://ceylon-trip-share-ytdf.vercel.app';
+  static const String _apiEndpoint = '$_baseUrl/api/tour-link';
 
-  /// Generate a shareable link for a tour
-  /// Simply directs to landing page with tour ID in URL
+  /// Generate a shareable link that detects app installation
+  /// If app is installed → opens in app
+  /// If app not installed → opens web version
   Future<String> generateTourShareLink(Tour tour) async {
     try {
-      debugPrint('🔗 Generating share link for tour: ${tour.id}');
+      debugPrint('🔗 Generating smart share link for tour: ${tour.id}');
 
-      // Create link with tour details as query parameters
+      // Create link to smart redirect API that handles app detection
       final shareUrl =
-          '$_landingPageUrl?tourId=${tour.id}'
+          '$_apiEndpoint'
+          '?tourId=${tour.id}'
           '&name=${Uri.encodeComponent(tour.name)}'
           '&price=${tour.price.toInt()}'
           '&location=${Uri.encodeComponent(tour.startLocation)}';
 
-      debugPrint('✅ Share link generated: $shareUrl');
+      debugPrint('✅ Smart share link generated: $shareUrl');
       return shareUrl;
     } catch (e) {
       debugPrint('⚠️ Error generating share link: $e');
-      return _landingPageUrl;
+      return _baseUrl;
     }
   }
 
@@ -34,7 +36,7 @@ class DynamicLinkService {
     try {
       debugPrint('✅ Dynamic links listener initialized');
       // Deep link handling is done through Android intent filters and iOS universal links
-      // The landing page will pass tourId to the app via tripshare:// custom scheme
+      // The smart redirect page passes tourId to the app via tripshare:// custom scheme
     } catch (e) {
       debugPrint('⚠️ Error initializing dynamic links: $e');
     }
@@ -72,18 +74,18 @@ class DynamicLinkService {
     }
   }
 
-  /// Generate tour share message with link
+  /// Generate tour share message with smart detection link
   Future<String> getTourShareMessage(Tour tour) async {
     try {
       final shareLink = await generateTourShareLink(tour);
       return 'Check out this amazing tour: ${tour.name}\n'
-          '💰 \$${tour.price.toInt()} per person\n'
+          '💰 PKR ${tour.price.toInt()} per person\n'
           '📍 ${tour.startLocation}\n'
           '📅 Available seats: ${tour.remainingSeats}/${tour.totalSeats}\n\n'
           '$shareLink';
     } catch (e) {
       debugPrint('⚠️ Error creating share message: $e');
-      return 'Check out this tour: ${tour.name}\n$_landingPageUrl';
+      return 'Check out this tour: ${tour.name}\n$_baseUrl';
     }
   }
 }
