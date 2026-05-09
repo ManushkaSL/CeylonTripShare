@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin
@@ -28,7 +29,10 @@ const getFirebaseApp = () => {
 };
 
 export default async function handler(
-  req: VercelRequest,req: any, res: any  // Only allow GET requests
+  req: VercelRequest,
+  res: VercelResponse
+) {
+  // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
