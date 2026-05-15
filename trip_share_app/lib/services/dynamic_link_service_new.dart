@@ -2,26 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 
 class DynamicLinkService {
-  // Domain link prefix - replace with your actual domain
-  static const String _appDomain = 'https://tripshareapp.com';
+  // Your Vercel redirect handler endpoint - detects app and opens it
+  static const String _redirectBase =
+      'https://ceylon-trip-share-ytdf.vercel.app/api/tour-link';
 
   /// Generate a shareable link for a tour
   Future<String> generateTourShareLink(Tour tour) async {
     try {
-      debugPrint('🔗 Generating share link for tour: ${tour.id}');
+      debugPrint('🔗 Generating smart share link for tour: ${tour.id}');
 
-      // Create a deep link URL
+      // Create link to the redirect handler which detects if app is installed
       final shareUrl =
-          '$_appDomain/tour/${tour.id}'
-          '?name=${Uri.encodeComponent(tour.name)}'
-          '&price=${tour.price}'
+          '$_redirectBase'
+          '?tourId=${tour.id}'
+          '&name=${Uri.encodeComponent(tour.name)}'
+          '&price=${tour.price.toInt()}'
           '&location=${Uri.encodeComponent(tour.startLocation)}';
 
       debugPrint('✅ Share link generated: $shareUrl');
       return shareUrl;
     } catch (e) {
       debugPrint('⚠️ Error generating share link: $e');
-      return '$_appDomain/tour/${tour.id}';
+      return '$_redirectBase?tourId=${tour.id}';
     }
   }
 

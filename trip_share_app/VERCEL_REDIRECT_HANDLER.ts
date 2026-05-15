@@ -17,8 +17,8 @@ export default function handler(
   // Build custom deep link
   const deepLink = `tripshare://tour/${tourId}`;
   
-  // If app not found, redirect to download page
-  const downloadUrl = `https://ceylon-trip-share-ytdf.vercel.app/`;
+  // If app not found, redirect to download page with tourId so "Open in App" button works
+  const downloadUrl = `https://ceylon-trip-share-ytdf.vercel.app/?tourId=${tourId}`;
 
   // HTML page that tries to open app and falls back to web
   const html = `
@@ -89,9 +89,9 @@ export default function handler(
       <div class="container">
         <div class="spinner"></div>
         <h1>Opening Tour...</h1>
-        <p>Redirecting to the app</p>
-        <p id="status">Please wait...</p>
-        <a id="fallback-link" href="https://ceylon-trip-share-ytdf.vercel.app/" class="button">
+        <p>Attempting to open in your app</p>
+        <p id="status">If your app doesn't open, you'll be redirected...</p>
+        <a id="fallback-link" href="${downloadUrl}" class="button">
           Download App
         </a>
       </div>
@@ -109,49 +109,86 @@ export default function handler(
         const deepLink = '${deepLink}';
         const isIOS = ${isIOS ? 'true' : 'false'};
         const isAndroid = ${isAndroid ? 'true' : 'false'};
-        // If app not found, redirect to download page
-        const downloadUrl = 'https://ceylon-trip-share-ytdf.vercel.app/';
+        const downloadUrl = '${downloadUrl}';
         const packageName = 'com.example.trip_share_app';
+
+        let appOpened = false;
+        const startTime = Date.now();
+        let pageVisited = false;
+
+        // Track if the page goes out of focus (app opened)
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            appOpened = true;
+            pageVisited = false;
+            console.log('✅ App detected as opened (visibility changed)');
+          } else {
+            pageVisited = true;
+            console.log('⚠️ Page came to foreground');
+          }
+        });
+
+        // Track if window loses focus (app opened)
+        window.addEventListener('blur', () => {
+          appOpened = true;
+          pageVisited = false;
+          console.log('✅ App detected as opened (blur event)');
+        });
+
+        window.addEventListener('focus', () => {
+          pageVisited = true;
+          console.log('⚠️ Window focused - app might not have opened');
+        });
 
         // Attempt to open the app
         function attemptOpenApp() {
           try {
-            if (isAndroid) {
-              // Android: Use intent URI for more reliable app detection
-              const intentUri = 'intent://tour/${tourId}#Intent;scheme=tripshare;package=' + packageName + ';end';
-              window.location.href = intentUri;
-            } else {
-              // iOS and others: Use custom scheme directly
-              window.location.href = deepLink;
-            }
+            console.log('Attempting to open app via deepLink:', deepLink);
+            console.log('Platform - Android: ' + isAndroid + ', iOS: ' + isIOS);
+            
+            // Direct approach: Use window.location.href to open the deep link
+            // This is the most reliable method on mobile browsers
+            window.location.href = deepLink;
+            
+            appOpened = true; // Assume it worked
+            
           } catch (e) {
             console.error('Error opening app:', e);
-            // Fall back immediately
-            redirectToHome();
           }
-        }
-
-        function redirectToHome() {
-          document.getElementById('status').textContent = 'Opening app...';
-          window.location.href = downloadUrl;
         }
 
         // Start the process when page loads
         window.addEventListener('load', () => {
-          console.log('Page loaded, attempting to open app...');
+          console.log('📱 Page loaded, attempting to open app with deepLink:', deepLink);
           attemptOpenApp();
 
-          // Fallback timeout: if still on this page after 4 seconds, app didn't open
-          // or user dismissed the app dialog
+          // Wait for app to open - if it does, page will lose focus
+          // If not, after timeout we redirect to download page
           setTimeout(() => {
-            if (document.hidden === false) {
-              console.log('No response from app, redirecting to home...');
-              redirectToHome();
+            const elapsed = Date.now() - startTime;
+            console.log('⏱️ Timeout check - Elapsed: ' + elapsed + 'ms, appOpened: ' + appOpened + ', pageVisi: ' + pageVisited);
+            
+            // If app opened (either via blur or visibility), don't redirect
+            if (appOpened) {
+              console.log('✅ App opened successfully, not redirecting');
+              return;
             }
-          }, 4000);
+            
+            // If page is not visible, app might be opening
+            if (document.hidden) {
+              console.log('📱 Page hidden, app likely opening...');
+              return;
+            }
+            
+            // If we reach here, app didn't open - redirect to download page
+            console.log('❌ App did not open, redirecting to download page:', downloadUrl);
+            document.getElementById('status').textContent = 'App not found. Downloading...';
+            window.location.href = downloadUrl;
+            
+          }, 5000); // 5 second timeout
         });
 
-        // Also start immediately if script loads after body
+        // Also try immediately if script loads after body
         attemptOpenApp();
       </script>
     </body>

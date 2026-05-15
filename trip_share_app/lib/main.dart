@@ -140,19 +140,47 @@ class _AppInitializerState extends State<AppInitializer> {
       final uri = Uri.parse(deepLink);
       String? tourId;
 
-      // Try to extract from path segments (tripshare://tour/ABC123)
-      if (uri.pathSegments.isNotEmpty) {
-        if (uri.pathSegments[0] == 'tour' && uri.pathSegments.length > 1) {
-          tourId = uri.pathSegments[1];
-          debugPrint('✅ Extracted tour ID from path: $tourId');
+      if (uri.scheme == 'tripshare') {
+        // Custom scheme: tripshare://tour/ABC123
+        // In this URI format, 'tour' is the HOST, and 'ABC123' is pathSegments[0]
+        if (uri.host == 'tour' && uri.pathSegments.isNotEmpty) {
+          tourId = uri.pathSegments[0];
+          debugPrint('✅ Extracted tour ID from custom scheme: $tourId');
         }
-      }
-
-      // Fallback to query parameters (for vercel links and other formats)
-      if ((tourId == null || tourId.isEmpty)) {
-        tourId = uri.queryParameters['tourId'];
+        // Also handle tripshare://tour?tourId=ABC123 (query param fallback)
+        if (tourId == null || tourId.isEmpty) {
+          tourId = uri.queryParameters['tourId'];
+          if (tourId != null) {
+            debugPrint('✅ Extracted tour ID from custom scheme query: $tourId');
+          }
+        }
+      } else if (uri.scheme == 'https' || uri.scheme == 'http') {
+        // HTTPS App Link: https://ceylon-trip-share-ytdf.vercel.app/tour/ABC123
+        if (uri.pathSegments.isNotEmpty &&
+            uri.pathSegments[0] == 'tour' &&
+            uri.pathSegments.length > 1) {
+          tourId = uri.pathSegments[1];
+          debugPrint('✅ Extracted tour ID from https path: $tourId');
+        }
+        // Fallback: https://...?tourId=ABC123 or /api/tour-link?tourId=ABC123
+        if (tourId == null || tourId.isEmpty) {
+          tourId = uri.queryParameters['tourId'];
+          if (tourId != null) {
+            debugPrint('✅ Extracted tour ID from https query: $tourId');
+          }
+        }
+      } else {
+        // Unknown scheme — try generic parsing
+        if (uri.pathSegments.isNotEmpty) {
+          if (uri.pathSegments[0] == 'tour' && uri.pathSegments.length > 1) {
+            tourId = uri.pathSegments[1];
+          }
+        }
+        if (tourId == null || tourId.isEmpty) {
+          tourId = uri.queryParameters['tourId'];
+        }
         if (tourId != null) {
-          debugPrint('✅ Extracted tour ID from query params: $tourId');
+          debugPrint('✅ Extracted tour ID from generic parse: $tourId');
         }
       }
 
