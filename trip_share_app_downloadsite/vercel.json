@@ -3,6 +3,13 @@
   "outputDirectory": "dist",
   "routes": [
     {
+      "src": "/.well-known/(.*)",
+      "dest": "/public/.well-known/$1",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },

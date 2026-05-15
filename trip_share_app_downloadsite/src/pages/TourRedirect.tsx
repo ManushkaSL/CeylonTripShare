@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Smartphone, Loader, MapPin, Users, Clock, DollarSign, ArrowRight } from 'lucide-react';
+import { Loader, MapPin, Users, Clock, ArrowRight } from 'lucide-react';
 import { APP_CONFIG } from '../config';
 
 interface Tour {
@@ -29,58 +29,11 @@ export default function TourRedirect() {
   const [tour, setTour] = useState<Tour | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [appCheckTimeout, setAppCheckTimeout] = useState(false);
 
+  // If someone reaches this page, it means App Links didn't intercept the URL
+  // (i.e., the app is not installed). Just show tour details + download prompt.
   useEffect(() => {
     if (!tourId) return;
-
-    // Extract tour details from URL parameters
-    const name = searchParams.get('name') || 'Amazing Tour';
-    const price = searchParams.get('price') || '0';
-    const location = searchParams.get('location') || 'Unknown';
-
-    // Detect device type
-    const userAgent = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
-    const isAndroid = /Android/.test(userAgent);
-
-    // Custom URL scheme for the app
-    const customScheme = `${APP_CONFIG.DEEP_LINK_SCHEME}://tour/${tourId}?name=${encodeURIComponent(name)}&price=${price}&location=${encodeURIComponent(location)}`;
-
-    console.log(`Device detected: ${isIOS ? 'iOS' : isAndroid ? 'Android' : 'Web'}`);
-    console.log(`Attempting deep link: ${customScheme}`);
-
-    // Attempt to open the app with the custom scheme
-    const attemptAppDeepLink = () => {
-      // Create an iframe to silently attempt the deep link
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = customScheme;
-      document.body.appendChild(iframe);
-
-      // Check if app opens (for mobile devices)
-      if (isIOS || isAndroid) {
-        const timeout = setTimeout(() => {
-          if (!document.hidden) {
-            // App didn't open
-            console.log('App not detected, showing web version');
-            setAppCheckTimeout(true);
-          }
-        }, 2000);
-
-        return () => clearTimeout(timeout);
-      } else {
-        // For web devices, immediately show web version
-        setAppCheckTimeout(true);
-      }
-    };
-
-    attemptAppDeepLink();
-  }, [tourId, searchParams]);
-
-  // Fetch tour details after app check
-  useEffect(() => {
-    if (!appCheckTimeout || !tourId) return;
 
     const fetchTour = async () => {
       try {
@@ -96,18 +49,40 @@ export default function TourRedirect() {
         setError(null);
       } catch (err) {
         console.error('Error fetching tour:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load tour details');
-        setTour(null);
+        // Fallback to URL params if API fails
+        const name = searchParams.get('name');
+        const price = searchParams.get('price');
+        const location = searchParams.get('location');
+
+        if (name) {
+          setTour({
+            id: tourId,
+            name: name,
+            imageUrl: '',
+            price: Number(price) || 0,
+            startLocation: location || 'Unknown',
+            endLocation: '',
+            description: '',
+            totalSeats: 0,
+            remainingSeats: 0,
+            startDate: '',
+            operatorName: '',
+            whatsIncluded: [],
+          });
+          setError(null);
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load tour details');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchTour();
-  }, [appCheckTimeout, tourId]);
+  }, [tourId, searchParams]);
 
-  // Show loading spinner while checking for app
-  if (!appCheckTimeout) {
+  // Loading state
+  if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-emerald-50 to-teal-50">
         <div className="text-center space-y-6 max-w-md">
@@ -116,30 +91,13 @@ export default function TourRedirect() {
               <Loader className="w-12 h-12 text-emerald-600" />
             </div>
           </div>
-
-          <div className="space-y-3">
-            <h1 className="text-3xl font-bold text-emerald-950">Opening Tour</h1>
-            <p className="text-emerald-700/70 leading-relaxed">
-              We're attempting to open the tour in your TripShare app...
-            </p>
-          </div>
-
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100 space-y-4">
-            <p className="text-sm text-emerald-900/70">
-              If the app doesn't open automatically, we'll show you the tour details on the web.
-            </p>
-
-            <div className="flex items-center justify-center gap-2 text-xs text-emerald-600">
-              <Smartphone className="w-4 h-4" />
-              <span>Opening app...</span>
-            </div>
-          </div>
+          <p className="text-emerald-700/70">Loading tour details...</p>
         </div>
       </div>
     );
   }
 
-  // Show error state
+  // Error state
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-emerald-50 to-teal-50">
@@ -170,26 +128,12 @@ export default function TourRedirect() {
     );
   }
 
-  // Show loading while fetching tour data
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-emerald-50 to-teal-50">
-        <div className="text-center space-y-6 max-w-md">
-          <div className="flex justify-center">
-            <div className="animate-spin">
-              <Loader className="w-12 h-12 text-emerald-600" />
-            </div>
-          </div>
-          <p className="text-emerald-700/70">Loading tour details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show tour details
+  // Show tour details (user doesn't have the app, so show download prompt)
   if (tour) {
-    const startDate = new Date(tour.startDate);
-    const formattedDate = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const startDate = tour.startDate ? new Date(tour.startDate) : null;
+    const formattedDate = startDate
+      ? startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-4 md:p-8">
@@ -212,50 +156,58 @@ export default function TourRedirect() {
 
             {/* Content */}
             <div className="p-6 md:p-8 space-y-6">
-              {/* Title and Price */}
+              {/* Title */}
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold text-emerald-950 mb-2">
                   {tour.name}
                 </h1>
-                <p className="text-emerald-600/80 text-sm">{tour.category}</p>
               </div>
 
               {/* Price and Availability */}
               <div className="flex flex-col md:flex-row gap-4 md:items-center">
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-bold text-emerald-600">
-                    PKR {tour.price.toLocaleString()}
+                    LKR {tour.price.toLocaleString()}
                   </span>
                   <span className="text-emerald-600/70">per person</span>
                 </div>
 
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-100 rounded-lg w-fit">
-                  <Users className="w-5 h-5 text-emerald-600" />
-                  <span className="font-semibold text-emerald-900">
-                    {tour.remainingSeats}/{tour.totalSeats} seats left
-                  </span>
-                </div>
+                {tour.totalSeats > 0 && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-emerald-100 rounded-lg w-fit">
+                    <Users className="w-5 h-5 text-emerald-600" />
+                    <span className="font-semibold text-emerald-900">
+                      {tour.remainingSeats}/{tour.totalSeats} seats left
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6 border-y border-emerald-100">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-1" />
-                  <div>
-                    <p className="text-sm text-emerald-600/70">Route</p>
-                    <p className="font-semibold text-emerald-950">
-                      {tour.startLocation} <ArrowRight className="w-4 h-4 inline mx-1" /> {tour.endLocation}
-                    </p>
+                {tour.startLocation && (
+                  <div className="flex items-start gap-3">
+                    <MapPin className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-sm text-emerald-600/70">Route</p>
+                      <p className="font-semibold text-emerald-950">
+                        {tour.startLocation}
+                        {tour.endLocation && (
+                          <> <ArrowRight className="w-4 h-4 inline mx-1" /> {tour.endLocation}</>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-1" />
-                  <div>
-                    <p className="text-sm text-emerald-600/70">Start Date</p>
-                    <p className="font-semibold text-emerald-950">{formattedDate}</p>
+                {formattedDate && (
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-sm text-emerald-600/70">Start Date</p>
+                      <p className="font-semibold text-emerald-950">{formattedDate}</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {tour.operatorName && (
                   <div className="flex items-start gap-3">
@@ -288,10 +240,10 @@ export default function TourRedirect() {
                 </div>
               )}
 
-              {/* Download App Button */}
+              {/* Download App CTA */}
               <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200">
                 <p className="text-sm text-emerald-700/70 mb-4">
-                  Want to book this tour? Download the TripShare app for a better experience.
+                  Download the TripShare app to book this tour and get the best experience.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <a 
@@ -302,12 +254,6 @@ export default function TourRedirect() {
                   >
                     📱 Download App
                   </a>
-                  <button 
-                    onClick={() => window.location.href = APP_CONFIG.DEEP_LINK_SCHEME + `://tour/${tourId}`}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-white text-emerald-600 font-semibold rounded-lg border-2 border-emerald-600 hover:bg-emerald-50 transition-colors"
-                  >
-                    Open in App
-                  </button>
                 </div>
               </div>
             </div>
@@ -319,4 +265,3 @@ export default function TourRedirect() {
 
   return null;
 }
-

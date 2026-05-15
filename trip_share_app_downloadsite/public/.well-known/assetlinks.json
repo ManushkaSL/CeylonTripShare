@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.example.trip_share_app",
+    "sha256_cert_fingerprints": ["10:4C:9D:F1:AB:2B:50:24:9D:75:B6:00:0D:8C:F8:71:8E:34:B5:B6:0B:49:B6:17:27:73:99:63:AC:05:E1:BC"]
+  }
+}]

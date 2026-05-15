@@ -7,17 +7,17 @@ class DynamicLinkService {
   static const String _apiEndpoint = '$_baseUrl/api/tour-link';
 
   /// Generate a shareable link for a tour
-  /// Uses /tour/{id} path directly so:
-  /// - If app is installed (and App Links verified) → opens in app
-  /// - If app not installed → opens web page with "Open in App" button
+  /// With App Links verified:
+  /// - App installed → Android opens app directly (no browser)
+  /// - App NOT installed → opens in browser → shows web page
   Future<String> generateTourShareLink(Tour tour) async {
     try {
       debugPrint('🔗 Generating share link for tour: ${tour.id}');
 
-      // Share direct tour URL — bypasses the unreliable /api/tour-link detection page
       final shareUrl =
           '$_baseUrl/tour/${tour.id}'
-          '?name=${Uri.encodeComponent(tour.name)}'
+          '?tourId=${tour.id}'
+          '&name=${Uri.encodeComponent(tour.name)}'
           '&price=${tour.price.toInt()}'
           '&location=${Uri.encodeComponent(tour.startLocation)}';
 
