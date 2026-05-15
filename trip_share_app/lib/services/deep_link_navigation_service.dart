@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
+import 'package:trip_share_app/services/tour_service.dart';
 
 class DeepLinkNavigationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -28,40 +29,7 @@ class DeepLinkNavigationService {
       }
 
       final tourData = tourDoc.data() as Map<String, dynamic>;
-
-      // Parse route stops
-      final List<dynamic> routeData = tourData['route'] ?? [];
-      final route = routeData.map((stop) {
-        return RouteStop(
-          location: stop['location'] ?? '',
-          time: stop['time'] ?? '',
-        );
-      }).toList();
-
-      // Create tour object
-      final tour = Tour(
-        id: tourDoc.id,
-        name: tourData['name'] ?? 'Unknown Tour',
-        imageUrl: tourData['imageUrl'] ?? '',
-        startDate:
-            (tourData['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        totalSeats: tourData['totalSeats'] ?? 0,
-        remainingSeats: tourData['remainingSeats'] ?? 0,
-        price: (tourData['price'] ?? 0).toDouble(),
-        description: tourData['description'] ?? '',
-        photos: List<String>.from(tourData['photos'] ?? []),
-        category: tourData['category'] ?? '',
-        startLocation: tourData['startLocation'] ?? '',
-        endLocation: tourData['endLocation'] ?? '',
-        lastJoiningTime: (tourData['lastJoiningTime'] as Timestamp?)?.toDate(),
-        endTime: tourData['endTime'] ?? '',
-        route: route,
-        operatorName: tourData['operatorName'] ?? '',
-        whatsIncluded: List<String>.from(tourData['whatsIncluded'] ?? []),
-        tourFeatures: List<String>.from(tourData['tourFeatures'] ?? []),
-        firstBookedUserId: tourData['firstBookedUserId'] ?? '',
-        bookedUserIds: List<String>.from(tourData['bookedUserIds'] ?? []),
-      );
+      final tour = TourService().parseTour(tourData, tourDoc.id);
 
       // Navigate to tour detail screen
       if (context.mounted) {
@@ -102,40 +70,7 @@ class DeepLinkNavigationService {
       }
 
       final tourData = tourDoc.data() as Map<String, dynamic>;
-
-      // Parse route stops
-      final List<dynamic> routeData = tourData['route'] ?? [];
-      final route = routeData.map((stop) {
-        return RouteStop(
-          location: stop['location'] ?? '',
-          time: stop['time'] ?? '',
-        );
-      }).toList();
-
-      // Create tour object
-      final tour = Tour(
-        id: tourDoc.id,
-        name: tourData['name'] ?? 'Unknown Tour',
-        imageUrl: tourData['imageUrl'] ?? '',
-        startDate:
-            (tourData['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        totalSeats: tourData['totalSeats'] ?? 0,
-        remainingSeats: tourData['remainingSeats'] ?? 0,
-        price: (tourData['price'] ?? 0).toDouble(),
-        description: tourData['description'] ?? '',
-        photos: List<String>.from(tourData['photos'] ?? []),
-        category: tourData['category'] ?? '',
-        startLocation: tourData['startLocation'] ?? '',
-        endLocation: tourData['endLocation'] ?? '',
-        lastJoiningTime: (tourData['lastJoiningTime'] as Timestamp?)?.toDate(),
-        endTime: tourData['endTime'] ?? '',
-        route: route,
-        operatorName: tourData['operatorName'] ?? '',
-        whatsIncluded: List<String>.from(tourData['whatsIncluded'] ?? []),
-        tourFeatures: List<String>.from(tourData['tourFeatures'] ?? []),
-        firstBookedUserId: tourData['firstBookedUserId'] ?? '',
-        bookedUserIds: List<String>.from(tourData['bookedUserIds'] ?? []),
-      );
+      final tour = TourService().parseTour(tourData, tourDoc.id);
 
       // Navigate using MaterialPageRoute
       if (context.mounted) {

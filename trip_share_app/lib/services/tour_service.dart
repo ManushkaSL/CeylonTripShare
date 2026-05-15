@@ -127,7 +127,7 @@ class TourService {
               final tours = snapshot.docs
                   .map((doc) {
                     try {
-                      return _tourFromMap(doc.data(), doc.id);
+                      return parseTour(doc.data(), doc.id);
                     } catch (e) {
                       debugPrint('⚠️ Error parsing tour ${doc.id}: $e');
                       return null;
@@ -173,7 +173,7 @@ class TourService {
     }
   }
 
-  Tour _tourFromMap(Map<String, dynamic> map, String docId) {
+  Tour parseTour(Map<String, dynamic> map, String docId) {
     final photos = _toStringList(_pick(map, ['photos', 'images', 'gallery']));
     final imageUrl = _stringFrom(
       _pick(map, ['imageUrl', 'image', 'image_url', 'thumbnail']),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'package:trip_share_app/theme/design_system.dart';
@@ -12,6 +13,9 @@ import 'package:trip_share_app/services/booking_deadline_service.dart';
 import 'package:trip_share_app/services/chat_cache_service.dart';
 import 'package:trip_share_app/services/dynamic_link_service.dart';
 import 'package:trip_share_app/services/deep_link_navigation_service.dart';
+
+/// Global navigator key for reliable navigation from anywhere (including deep links)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +38,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ceylon Shared Tours',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         overscroll: false,
       ),
@@ -65,9 +70,14 @@ class AppInitializer extends StatefulWidget {
 }
 
 class _AppInitializerState extends State<AppInitializer> {
+  // Keep AppLinks instance alive so stream subscription isn't garbage collected
+  late final AppLinks _appLinks;
+  StreamSubscription? _linkSubscription;
+
   @override
   void initState() {
     super.initState();
+    _appLinks = AppLinks();
 
     // Initialize services after frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -77,11 +87,11 @@ class _AppInitializerState extends State<AppInitializer> {
         NotificationService().setRootContext(context);
         BookingDeadlineService().startMonitoring();
 
-        // Check for initial deep link FIRST (when app is launched from a link)
-        await _checkInitialDeepLink();
-
-        // Initialize deep link listener for new links
+        // Initialize deep link listener FIRST (so we don't miss links)
         _initializeDeepLinkListener();
+
+        // Then check for initial deep link (when app is cold-launched from a link)
+        await _checkInitialDeepLink();
 
         debugPrint('✅ App services initialized');
       } catch (e) {
@@ -90,16 +100,20 @@ class _AppInitializerState extends State<AppInitializer> {
     });
   }
 
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
   /// Check for initial deep link when app is launched
   Future<void> _checkInitialDeepLink() async {
     try {
-      final appLinks = AppLinks();
-      final initialAppLink = await appLinks.getInitialAppLink();
+      final initialLink = await _appLinks.getInitialAppLink();
 
-      if (initialAppLink != null) {
-        debugPrint('🔗 Initial deep link detected: $initialAppLink');
-        await Future.delayed(const Duration(milliseconds: 100));
-        _handleDeepLink(initialAppLink.toString());
+      if (initialLink != null) {
+        debugPrint('🔗 Initial deep link detected: $initialLink');
+        _handleDeepLink(initialLink.toString());
       } else {
         debugPrint('✅ No initial deep link');
       }
@@ -108,21 +122,18 @@ class _AppInitializerState extends State<AppInitializer> {
     }
   }
 
-  /// Listen for deep links via custom URL scheme (tripshare://)
+  /// Listen for deep links while app is running
   void _initializeDeepLinkListener() {
     try {
       debugPrint('🔗 Setting up deep link listener');
 
-      final appLinks = AppLinks();
-
-      // Listen for new links while app is running
-      appLinks.uriLinkStream.listen(
+      _linkSubscription = _appLinks.uriLinkStream.listen(
         (uri) {
-          debugPrint('🔗 Deep link received: $uri');
+          debugPrint('🔗 Deep link received while running: $uri');
           _handleDeepLink(uri.toString());
         },
         onError: (error) {
-          debugPrint('⚠️ Deep link error: $error');
+          debugPrint('⚠️ Deep link stream error: $error');
         },
       );
 
@@ -145,7 +156,7 @@ class _AppInitializerState extends State<AppInitializer> {
         // In this URI format, 'tour' is the HOST, and 'ABC123' is pathSegments[0]
         if (uri.host == 'tour' && uri.pathSegments.isNotEmpty) {
           tourId = uri.pathSegments[0];
-          debugPrint('✅ Extracted tour ID from custom scheme: $tourId');
+          debugPrint('✅ Extracted tour ID from custom scheme path: $tourId');
         }
         // Also handle tripshare://tour?tourId=ABC123 (query param fallback)
         if (tourId == null || tourId.isEmpty) {
@@ -162,7 +173,7 @@ class _AppInitializerState extends State<AppInitializer> {
           tourId = uri.pathSegments[1];
           debugPrint('✅ Extracted tour ID from https path: $tourId');
         }
-        // Fallback: https://...?tourId=ABC123 or /api/tour-link?tourId=ABC123
+        // Fallback: https://...?tourId=ABC123
         if (tourId == null || tourId.isEmpty) {
           tourId = uri.queryParameters['tourId'];
           if (tourId != null) {
@@ -171,24 +182,20 @@ class _AppInitializerState extends State<AppInitializer> {
         }
       } else {
         // Unknown scheme — try generic parsing
-        if (uri.pathSegments.isNotEmpty) {
-          if (uri.pathSegments[0] == 'tour' && uri.pathSegments.length > 1) {
-            tourId = uri.pathSegments[1];
-          }
+        if (uri.pathSegments.isNotEmpty &&
+            uri.pathSegments[0] == 'tour' &&
+            uri.pathSegments.length > 1) {
+          tourId = uri.pathSegments[1];
         }
-        if (tourId == null || tourId.isEmpty) {
-          tourId = uri.queryParameters['tourId'];
-        }
+        tourId ??= uri.queryParameters['tourId'];
         if (tourId != null) {
           debugPrint('✅ Extracted tour ID from generic parse: $tourId');
         }
       }
 
       if (tourId != null && tourId.isNotEmpty) {
-        debugPrint('✅ Valid tour ID found: $tourId');
-        if (mounted) {
-          _navigateToTourFromDeepLink(tourId);
-        }
+        debugPrint('🚀 Tour ID found: $tourId — navigating...');
+        _navigateToTour(tourId);
       } else {
         debugPrint('⚠️ No tour ID found in deep link: $deepLink');
       }
@@ -197,36 +204,32 @@ class _AppInitializerState extends State<AppInitializer> {
     }
   }
 
-  /// Navigate to tour when deep link is received
-  Future<void> _navigateToTourFromDeepLink(String tourId) async {
-    if (!mounted) {
-      debugPrint('⚠️ Widget not mounted, cannot navigate');
-      return;
+  /// Navigate to tour using the global navigator key (works even during cold start)
+  Future<void> _navigateToTour(String tourId) async {
+    debugPrint('🚀 _navigateToTour called with: $tourId');
+
+    // Wait for the navigator to be ready (short delay for cold starts)
+    for (int i = 0; i < 10; i++) {
+      if (navigatorKey.currentContext != null) break;
+      await Future.delayed(const Duration(milliseconds: 200));
+      debugPrint('⏳ Waiting for navigator... attempt ${i + 1}');
     }
 
-    // Wait for widget to be fully built
-    await Future.delayed(const Duration(milliseconds: 1000));
-
-    if (!mounted) {
-      debugPrint('⚠️ Widget unmounted during navigation delay');
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null) {
+      debugPrint('⚠️ Navigator context still null after waiting');
       return;
     }
-
-    debugPrint('🚀 Navigating to tour: $tourId');
 
     try {
-      // Use the deep link navigation service
-      await DeepLinkNavigationService.navigateToTourWithRoute(context, tourId);
+      debugPrint('🚀 Fetching tour $tourId from Firestore...');
+      await DeepLinkNavigationService.navigateToTourWithRoute(
+        navContext,
+        tourId,
+      );
+      debugPrint('✅ Navigation to tour complete');
     } catch (e) {
       debugPrint('⚠️ Error navigating to tour: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not open tour: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
