@@ -17,8 +17,8 @@ export default function handler(
   // Build custom deep link
   const deepLink = `tripshare://tour/${tourId}`;
   
-  // Web fallback URL
-  const webUrl = `https://ceylon-trip-share-ytdf.vercel.app/?tourId=${tourId}&name=${name}&price=${price}&location=${location}`;
+  // If app not found, redirect to download page
+  const downloadUrl = `https://ceylon-trip-share-ytdf.vercel.app/`;
 
   // HTML page that tries to open app and falls back to web
   const html = `
@@ -91,8 +91,8 @@ export default function handler(
         <h1>Opening Tour...</h1>
         <p>Redirecting to the app</p>
         <p id="status">Please wait...</p>
-        <a id="fallback-link" href="${webUrl}" class="button">
-          Open in Web
+        <a id="fallback-link" href="https://ceylon-trip-share-ytdf.vercel.app/" class="button">
+          Download App
         </a>
       </div>
 
@@ -109,7 +109,8 @@ export default function handler(
         const deepLink = '${deepLink}';
         const isIOS = ${isIOS ? 'true' : 'false'};
         const isAndroid = ${isAndroid ? 'true' : 'false'};
-        const homeUrl = 'https://ceylon-trip-share-ytdf.vercel.app/';
+        // If app not found, redirect to download page
+        const downloadUrl = 'https://ceylon-trip-share-ytdf.vercel.app/';
         const packageName = 'com.example.trip_share_app';
 
         // Attempt to open the app
@@ -132,7 +133,7 @@ export default function handler(
 
         function redirectToHome() {
           document.getElementById('status').textContent = 'Opening app...';
-          window.location.href = homeUrl;
+          window.location.href = downloadUrl;
         }
 
         // Start the process when page loads
