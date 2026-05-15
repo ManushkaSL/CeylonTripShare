@@ -106,62 +106,52 @@ export default function handler(
           location: '${location}'
         }));
 
-        // Get the deep link
         const deepLink = '${deepLink}';
         const isIOS = ${isIOS ? 'true' : 'false'};
         const isAndroid = ${isAndroid ? 'true' : 'false'};
-        const webUrl = '${webUrl}';
+        const homeUrl = 'https://ceylon-trip-share-ytdf.vercel.app/';
+        const packageName = 'com.example.trip_share_app';
 
-        // Try to open app
-        function openApp() {
-          const startTime = Date.now();
-          
-          // Set iframe source to deep link
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          iframe.src = deepLink;
-          document.body.appendChild(iframe);
-
-          // Check if app opened by seeing if page is still visible
-          setTimeout(() => {
-            const elapsed = Date.now() - startTime;
-            
-            // If user is still on this page after timeout, app wasn't opened
-            if (elapsed < 3000 && document.hidden === false) {
-              document.getElementById('status').textContent = 'App not found, opening web version...';
-              // Redirect to web version
-              setTimeout(() => {
-                window.location.href = webUrl;
-              }, 500);
+        // Attempt to open the app
+        function attemptOpenApp() {
+          try {
+            if (isAndroid) {
+              // Android: Use intent URI for more reliable app detection
+              const intentUri = 'intent://tour/${tourId}#Intent;scheme=tripshare;package=' + packageName + ';end';
+              window.location.href = intentUri;
+            } else {
+              // iOS and others: Use custom scheme directly
+              window.location.href = deepLink;
             }
-          }, 2500);
-
-          // Fallback after longer delay
-          setTimeout(() => {
-            if (document.hidden === false) {
-              window.location.href = webUrl;
-            }
-          }, 4000);
+          } catch (e) {
+            console.error('Error opening app:', e);
+            // Fall back immediately
+            redirectToHome();
+          }
         }
 
-        // Start the process
-        window.addEventListener('load', openApp);
-        openApp();
+        function redirectToHome() {
+          document.getElementById('status').textContent = 'Opening app...';
+          window.location.href = homeUrl;
+        }
 
-        // If page comes to foreground, app didn't open
-        document.addEventListener('visibilitychange', () => {
-          if (!document.hidden) {
-            const elapsed = Date.now() - window.startTime;
-            if (elapsed < 3000) {
-              document.getElementById('status').textContent = 'App not found, opening web version...';
-              setTimeout(() => {
-                window.location.href = webUrl;
-              }, 500);
+        // Start the process when page loads
+        window.addEventListener('load', () => {
+          console.log('Page loaded, attempting to open app...');
+          attemptOpenApp();
+
+          // Fallback timeout: if still on this page after 4 seconds, app didn't open
+          // or user dismissed the app dialog
+          setTimeout(() => {
+            if (document.hidden === false) {
+              console.log('No response from app, redirecting to home...');
+              redirectToHome();
             }
-          }
+          }, 4000);
         });
 
-        window.startTime = Date.now();
+        // Also start immediately if script loads after body
+        attemptOpenApp();
       </script>
     </body>
     </html>
