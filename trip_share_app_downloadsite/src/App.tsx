@@ -9,7 +9,7 @@ import TourRedirect from './pages/TourRedirect';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/">
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/tour/:tourId" element={<TourRedirect />} />
