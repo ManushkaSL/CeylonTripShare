@@ -109,10 +109,14 @@ class _BookingScreenState extends State<BookingScreen> {
       if (!mounted) return;
 
       if (!success) {
+        debugPrint('❌ Booking failed for tour: ${widget.tour.name} (ID: ${widget.tour.id})');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Booking could not be completed. Please try again.'),
+            content: Text(
+              'Booking could not be completed. Please check your connection and try again.',
+            ),
             backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
           ),
         );
         return;

@@ -24,16 +24,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final JoinedTourService _joinedTourService = JoinedTourService();
 
   late final Stream<List<Tour>> _toursStream;
+  late final Stream<Set<String>> _bookedTourIdsStream;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _toursStream = _tourService.streamTours();
+    _bookedTourIdsStream = _tourService.streamTourIdsWithBookings();
     _joinedTourService.addListener(_onBookingUpdate);
-    // Bookings load automatically when user authenticates
-    // This ensures they load even if auth was cached
-    Future.delayed(const Duration(milliseconds: 300), () {
+    // Sync global tour idle/active state from bookings, then load user bookings
+    Future.delayed(const Duration(milliseconds: 300), () async {
+      if (!mounted) return;
+      await _tourService.syncTourStatusesFromBookings();
       if (mounted) _joinedTourService.loadBookings();
     });
   }
@@ -49,39 +52,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (mounted) setState(() {});
   }
 
-  // Idle tours: no one has booked yet (remainingSeats == totalSeats)
-  List<Tour> _idleTours(List<Tour> tours) {
-    final activeTourIds = _joinedTourService.joinedTours
-        .map((jt) => jt.tour.id)
-        .toSet();
+  bool _isTourActive(Tour tour, Set<String> bookedTourIds) {
+    return tour.status != TourStatus.idle || bookedTourIds.contains(tour.id);
+  }
+
+  // Idle tours: no bookings exist yet (Firestore + bookings collection)
+  List<Tour> _idleTours(List<Tour> tours, Set<String> bookedTourIds) {
     final idle =
-        tours
-            .where(
-              (t) =>
-                  t.remainingSeats == t.totalSeats &&
-                  !activeTourIds.contains(t.id),
-            )
-            .toList()
+        tours.where((t) => !_isTourActive(t, bookedTourIds)).toList()
           ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    debugPrint('✅ IDLE TOURS (${idle.length})');
+    debugPrint('📊 IDLE TOURS (${idle.length}): No bookings made yet');
+    for (final tour in idle) {
+      debugPrint('   - ${tour.name}: ${tour.remainingSeats}/${tour.totalSeats} seats');
+    }
     return idle;
   }
 
-  // Active tours: someone has already booked (remainingSeats < totalSeats)
-  List<Tour> _activeTours(List<Tour> tours) {
-    final activeTourIds = _joinedTourService.joinedTours
-        .map((jt) => jt.tour.id)
-        .toSet();
+  // Active tours: at least one booking exists (Firestore + bookings collection)
+  List<Tour> _activeTours(List<Tour> tours, Set<String> bookedTourIds) {
     final active =
-        tours
-            .where(
-              (t) =>
-                  t.remainingSeats < t.totalSeats ||
-                  activeTourIds.contains(t.id),
-            )
-            .toList()
+        tours.where((t) => _isTourActive(t, bookedTourIds)).toList()
           ..sort((a, b) => b.startDate.compareTo(a.startDate));
-    debugPrint('✅ ACTIVE TOURS (${active.length})');
+    debugPrint('🔥 ACTIVE TOURS (${active.length}): At least one member booked');
+    for (final tour in active) {
+      final bookedCount = tour.totalSeats - tour.remainingSeats;
+      debugPrint('   - ${tour.name}: $bookedCount booked, ${tour.remainingSeats}/${tour.totalSeats} seats left');
+    }
     return active;
   }
 
@@ -158,22 +154,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildHomeContent() {
-    return StreamBuilder<List<Tour>>(
-      stream: _toursStream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          debugPrint('🔴 StreamBuilder error: ${snapshot.error}');
-        }
-        if (snapshot.connectionState == ConnectionState.active) {
-          debugPrint(
-            '✅ StreamBuilder: active with ${(snapshot.data ?? []).length} tours',
-          );
-        }
+    return StreamBuilder<Set<String>>(
+      stream: _bookedTourIdsStream,
+      builder: (context, bookingSnapshot) {
+        final bookedTourIds = bookingSnapshot.data ?? const <String>{};
 
-        final loadedTours = snapshot.data ?? const <Tour>[];
-        final tours = <Tour>[...loadedTours];
-        final idleTours = _idleTours(tours);
-        final activeTours = _activeTours(tours);
+        return StreamBuilder<List<Tour>>(
+          stream: _toursStream,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              debugPrint('🔴 StreamBuilder error: ${snapshot.error}');
+            }
+            if (snapshot.connectionState == ConnectionState.active) {
+              debugPrint(
+                '✅ StreamBuilder: active with ${(snapshot.data ?? []).length} tours, ${bookedTourIds.length} booked',
+              );
+            }
+
+            final loadedTours = snapshot.data ?? const <Tour>[];
+            final tours = <Tour>[...loadedTours];
+            final idleTours = _idleTours(tours, bookedTourIds);
+            final activeTours = _activeTours(tours, bookedTourIds);
 
         return Container(
           decoration: const BoxDecoration(
@@ -333,6 +334,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ],
             ),
           ),
+        );
+          },
         );
       },
     );

@@ -12,37 +12,162 @@ class TourService {
   // Cache for immediate updates
   final Map<String, Tour> _tourCache = {};
 
-  /// Update a tour in cache and trigger refresh
-  void updateTourInCache(String tourId, int newRemainingSeats) {
-    if (_tourCache.containsKey(tourId)) {
-      final oldTour = _tourCache[tourId]!;
-      // Create updated tour with new remaining seats
-      final updatedTour = Tour(
-        id: oldTour.id,
-        name: oldTour.name,
-        imageUrl: oldTour.imageUrl,
-        startDate: oldTour.startDate,
-        totalSeats: oldTour.totalSeats,
-        remainingSeats: newRemainingSeats,
-        price: oldTour.price,
-        description: oldTour.description,
-        photos: oldTour.photos,
-        category: oldTour.category,
-        startLocation: oldTour.startLocation,
-        lastJoiningTime: oldTour.lastJoiningTime,
-        endTime: oldTour.endTime,
-        endLocation: oldTour.endLocation,
-        route: oldTour.route,
-        operatorName: oldTour.operatorName,
-        whatsIncluded: oldTour.whatsIncluded,
-        tourFeatures: oldTour.tourFeatures,
-        firstBookedUserId: oldTour.firstBookedUserId,
-        bookedUserIds: oldTour.bookedUserIds,
-      );
-      _tourCache[tourId] = updatedTour;
-      debugPrint(
-        '✅ Updated tour cache: $tourId remainingSeats=$newRemainingSeats',
-      );
+  /// Live set of tour IDs that have at least one booking document.
+  Stream<Set<String>> streamTourIdsWithBookings() {
+    return _firestore.collection('bookings').snapshots().map((snapshot) {
+      final ids = <String>{};
+      for (final doc in snapshot.docs) {
+        final tourId = (doc.data()['tourId'] ?? '').toString();
+        if (tourId.isNotEmpty) ids.add(tourId);
+      }
+      return ids;
+    });
+  }
+
+  Tour _mergeWithCache(Tour parsed) {
+    final cached = _tourCache[parsed.id];
+    if (cached == null) return parsed;
+
+    final cacheIsNewer =
+        cached.bookedSeats > parsed.bookedSeats ||
+        cached.bookedUserIds.length > parsed.bookedUserIds.length ||
+        cached.remainingSeats < parsed.remainingSeats;
+
+    return cacheIsNewer ? cached : parsed;
+  }
+
+  /// Update a tour in cache for immediate UI refresh after booking changes.
+  void updateTourInCache(
+    String tourId, {
+    required int newRemainingSeats,
+    int? newBookedSeats,
+    List<String>? bookedUserIds,
+    String? firstBookedUserId,
+    Tour? baseTour,
+  }) {
+    final oldTour = _tourCache[tourId] ?? baseTour;
+    if (oldTour == null) return;
+    final bookedSeats = newBookedSeats ?? oldTour.bookedSeats;
+    final userIds = bookedUserIds ?? oldTour.bookedUserIds;
+    final firstBooker = firstBookedUserId ?? oldTour.firstBookedUserId;
+
+    final totalSeats = oldTour.totalSeats > 0
+        ? oldTour.totalSeats
+        : (newBookedSeats != null
+              ? newRemainingSeats + newBookedSeats
+              : newRemainingSeats);
+
+    _tourCache[tourId] = Tour(
+      id: oldTour.id,
+      name: oldTour.name,
+      imageUrl: oldTour.imageUrl,
+      startDate: oldTour.startDate,
+      totalSeats: totalSeats,
+      remainingSeats: newRemainingSeats,
+      price: oldTour.price,
+      description: oldTour.description,
+      photos: oldTour.photos,
+      category: oldTour.category,
+      startLocation: oldTour.startLocation,
+      lastJoiningTime: oldTour.lastJoiningTime,
+      endTime: oldTour.endTime,
+      endLocation: oldTour.endLocation,
+      route: oldTour.route,
+      operatorName: oldTour.operatorName,
+      whatsIncluded: oldTour.whatsIncluded,
+      tourFeatures: oldTour.tourFeatures,
+      firstBookedUserId: firstBooker,
+      bookedUserIds: userIds,
+      bookedSeats: bookedSeats,
+    );
+    debugPrint(
+      '✅ Updated tour cache: $tourId remaining=$newRemainingSeats booked=$bookedSeats',
+    );
+  }
+
+  void clearCache() {
+    _tourCache.clear();
+    debugPrint('🗑️ TourService cache cleared');
+  }
+
+  /// Reconcile tour seat/booking fields from the bookings collection so every
+  /// account sees the same idle/active status after login or account switch.
+  Future<void> syncTourStatusesFromBookings() async {
+    try {
+      final bookingsSnapshot = await _firestore.collection('bookings').get();
+      final bookedSeatsByTour = <String, int>{};
+      final userIdsByTour = <String, Set<String>>{};
+
+      for (final doc in bookingsSnapshot.docs) {
+        final data = doc.data();
+        final tourId = (data['tourId'] ?? '').toString();
+        if (tourId.isEmpty) continue;
+
+        final totalPersons = _intFrom(data['totalPersons']);
+        bookedSeatsByTour[tourId] =
+            (bookedSeatsByTour[tourId] ?? 0) + totalPersons;
+
+        final userId = (data['userId'] ?? '').toString();
+        if (userId.isNotEmpty) {
+          userIdsByTour.putIfAbsent(tourId, () => {}).add(userId);
+        }
+      }
+
+      for (final entry in bookedSeatsByTour.entries) {
+        final tourId = entry.key;
+        final totalBooked = entry.value;
+        if (totalBooked <= 0) continue;
+
+        final tourRef = _firestore.collection('tours').doc(tourId);
+        final tourDoc = await tourRef.get();
+        if (!tourDoc.exists) continue;
+
+        final tourData = tourDoc.data() ?? {};
+        final currentBookedSeats = _intFrom(tourData['bookedSeats']);
+        final remaining = _intFrom(
+          tourData['available_seats'] ?? tourData['remainingSeats'],
+        );
+        var total = _intFrom(tourData['totalSeats']);
+        final bookedUserIds = _toStringList(tourData['bookedUserIds']);
+        final firstBookedUserId =
+            (tourData['firstBookedUserId'] ?? '').toString();
+
+        final hasBookingMarkers =
+            currentBookedSeats > 0 ||
+            bookedUserIds.isNotEmpty ||
+            firstBookedUserId.isNotEmpty;
+        final appearsIdle = total > 0 && remaining >= total;
+        final needsSync =
+            !hasBookingMarkers ||
+            appearsIdle ||
+            currentBookedSeats != totalBooked;
+
+        if (!needsSync) continue;
+
+        if (total <= 0) {
+          total = remaining > 0 ? remaining + totalBooked : totalBooked;
+        }
+        final newAvailable = (total - totalBooked).clamp(0, total);
+        final userIds = userIdsByTour[tourId]?.toList() ?? bookedUserIds;
+
+        final update = <String, dynamic>{
+          'totalSeats': total,
+          'bookedSeats': totalBooked,
+          'available_seats': newAvailable,
+          'remainingSeats': newAvailable,
+          'bookedUserIds': userIds,
+        };
+        if (firstBookedUserId.isEmpty && userIds.isNotEmpty) {
+          update['firstBookedUserId'] = userIds.first;
+        }
+
+        await tourRef.update(update);
+        debugPrint(
+          '✅ Synced tour $tourId from bookings: $totalBooked/$total seats booked',
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error syncing tour statuses from bookings: $e');
     }
   }
 
@@ -127,7 +252,7 @@ class TourService {
               final tours = snapshot.docs
                   .map((doc) {
                     try {
-                      return parseTour(doc.data(), doc.id);
+                      return _mergeWithCache(parseTour(doc.data(), doc.id));
                     } catch (e) {
                       debugPrint('⚠️ Error parsing tour ${doc.id}: $e');
                       return null;
@@ -304,9 +429,20 @@ class TourService {
       ]);
     }
 
+    final bookedUserIds = _toStringList(
+      _pick(map, ['bookedUserIds', 'booked_user_ids', 'bookedUsers']),
+    );
+    final firstBookedUserId = _stringFrom(
+      _pick(map, ['firstBookedUserId', 'first_booked_user_id']),
+    );
+
     final bookedSeats = bookedSeatsField != null
         ? _intFrom(bookedSeatsField)
-        : 0;
+        : bookedUserIds.length;
+    final hasBookings =
+        bookedSeats > 0 ||
+        bookedUserIds.isNotEmpty ||
+        firstBookedUserId.isNotEmpty;
 
     final parsedRemainingSeats = remainingSeatsField != null
         ? _intFrom(remainingSeatsField)
@@ -331,16 +467,26 @@ class TourService {
       resolvedRemainingSeats = totalSeats;
     }
 
-    // IMPORTANT FIX: If totalSeats was not explicitly set in Firestore but available_seats exists,
-    // use available_seats as the INITIAL total capacity (it should never change after this)
+    // IMPORTANT FIX: If totalSeats was not explicitly set in Firestore but
+    // available_seats exists, use available_seats only before any booking.
+    // After a booking, available_seats has already been reduced, so capacity
+    // must be reconstructed from available + booked seats when possible.
     if (!hadExplicitTotalSeats && resolvedRemainingSeats > 0) {
-      debugPrint(
-        '   🔧 INIT: totalSeats not in Firestore but available_seats=$resolvedRemainingSeats - setting totalSeats=$resolvedRemainingSeats',
-      );
-      totalSeats = resolvedRemainingSeats;
-
-      // Write totalSeats back to Firestore so it persists and this only happens once
-      _writeInitialTotalSeatsToFirestore(docId, totalSeats);
+      if (bookedSeats > 0) {
+        totalSeats = resolvedRemainingSeats + bookedSeats;
+        debugPrint(
+          '   🔧 RECOVER: totalSeats missing after booking - setting totalSeats=$totalSeats from available + booked',
+        );
+        _writeInitialTotalSeatsToFirestore(docId, totalSeats);
+      } else if (!hasBookings && totalSeats <= 0) {
+        // Only establish capacity for brand-new tours. Never shrink totalSeats
+        // down to remaining — that makes booked tours look idle.
+        debugPrint(
+          '   🔧 INIT: totalSeats not in Firestore but available_seats=$resolvedRemainingSeats - setting totalSeats=$resolvedRemainingSeats',
+        );
+        totalSeats = resolvedRemainingSeats;
+        _writeInitialTotalSeatsToFirestore(docId, totalSeats);
+      }
     }
 
     if (totalSeats <= 0) {
@@ -349,11 +495,11 @@ class TourService {
     }
 
     // FIX: If remainingSeats was missing or 0, but totalSeats is set and no one has actually booked, default to totalSeats
-    if ((remainingSeatsField == null || resolvedRemainingSeats == 0) &&
-        bookedSeats == 0 &&
+    if (remainingSeatsField == null &&
+        !hasBookings &&
         totalSeats > 0) {
       debugPrint(
-        '   🔧 FIX: remainingSeats was missing/0 but totalSeats=$totalSeats and no bookings - defaulting remainingSeats to totalSeats',
+        '   🔧 FIX: remainingSeats was missing but totalSeats=$totalSeats and no bookings - defaulting remainingSeats to totalSeats',
       );
       resolvedRemainingSeats = totalSeats;
     }
@@ -407,12 +553,9 @@ class TourService {
       tourFeatures: _toStringList(
         _pick(map, ['tourFeatures', 'features', 'highlights']),
       ),
-      firstBookedUserId: _stringFrom(
-        _pick(map, ['firstBookedUserId', 'first_booked_user_id']),
-      ),
-      bookedUserIds: _toStringList(
-        _pick(map, ['bookedUserIds', 'booked_user_ids', 'bookedUsers']),
-      ),
+      firstBookedUserId: firstBookedUserId,
+      bookedUserIds: bookedUserIds,
+      bookedSeats: bookedSeats,
     );
   }
 

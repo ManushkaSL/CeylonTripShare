@@ -5,6 +5,7 @@ class DynamicLinkService {
   // Your Vercel redirect handler endpoint - detects app and opens it
   static const String _redirectBase =
       'https://ceylon-trip-share-ytdf.vercel.app/api/tour-link';
+  static const String _appDomain = 'https://ceylon-trip-share-ytdf.vercel.app';
 
   /// Generate a shareable link for a tour
   Future<String> generateTourShareLink(Tour tour) async {

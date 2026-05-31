@@ -88,22 +88,39 @@ class Booking {
 
   /// Create from Firestore document data
   factory Booking.fromMap(Map<String, dynamic> map, Tour tour) {
-    final passengersList = (map['passengers'] as List<dynamic>? ?? [])
-        .map((p) => PassengerInfo.fromMap(p as Map<String, dynamic>))
-        .toList();
+    // Parse passengers with defensive error handling
+    final passengersList = <PassengerInfo>[];
+    try {
+      final passengersData = map['passengers'] as List<dynamic>? ?? [];
+      for (final p in passengersData) {
+        if (p is Map<String, dynamic>) {
+          try {
+            passengersList.add(PassengerInfo.fromMap(p));
+          } catch (e) {
+            // Skip malformed passenger entries instead of crashing
+            print('⚠️ Failed to parse passenger entry: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error parsing passengers list: $e');
+      // Continue with empty list if parsing fails
+    }
 
     return Booking(
       id: map['id'] ?? '',
       userId: map['userId'] ?? '',
       tour: tour,
-      bookedAt: DateTime.parse(map['bookedAt'] as String),
-      adults: map['adults'] ?? 0,
-      kids6to12: map['kids6to12'] ?? 0,
-      kidsUnder6: map['kidsUnder6'] ?? 0,
+      bookedAt: DateTime.parse(
+        map['bookedAt'] as String? ?? DateTime.now().toIso8601String(),
+      ),
+      adults: (map['adults'] as num?)?.toInt() ?? 0,
+      kids6to12: (map['kids6to12'] as num?)?.toInt() ?? 0,
+      kidsUnder6: (map['kidsUnder6'] as num?)?.toInt() ?? 0,
       pickupLocation: map['pickupLocation'] ?? '',
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0.0,
-      totalPersons: map['totalPersons'] ?? 0,
-      cardHolderName: map['cardHolderName'],
+      totalPersons: (map['totalPersons'] as num?)?.toInt() ?? 0,
+      cardHolderName: map['cardHolderName'] as String?,
       phoneNumber: map['phoneNumber'] ?? '',
       passengers: passengersList,
     );
