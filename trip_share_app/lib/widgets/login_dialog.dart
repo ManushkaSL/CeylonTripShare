@@ -53,7 +53,9 @@ class _LoginDialogState extends State<LoginDialog> {
           content: Text(error),
           backgroundColor: DesignColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
       return;
@@ -76,7 +78,9 @@ class _LoginDialogState extends State<LoginDialog> {
           content: Text(error),
           backgroundColor: DesignColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -189,17 +193,27 @@ class _LoginDialogState extends State<LoginDialog> {
                             fillColor: const Color(0xFFFBF8F4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.divider),
+                              borderSide: const BorderSide(
+                                color: DesignColors.divider,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.divider),
+                              borderSide: const BorderSide(
+                                color: DesignColors.divider,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.primary, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: DesignColors.primary,
+                                width: 1.5,
+                              ),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 16,
+                            ),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -255,17 +269,27 @@ class _LoginDialogState extends State<LoginDialog> {
                             fillColor: const Color(0xFFFBF8F4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.divider),
+                              borderSide: const BorderSide(
+                                color: DesignColors.divider,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.divider),
+                              borderSide: const BorderSide(
+                                color: DesignColors.divider,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: const BorderSide(color: DesignColors.primary, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: DesignColors.primary,
+                                width: 1.5,
+                              ),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 16,
+                            ),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -286,7 +310,10 @@ class _LoginDialogState extends State<LoginDialog> {
                           child: Container(
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [DesignColors.primary, DesignColors.primaryDark],
+                                colors: [
+                                  DesignColors.primary,
+                                  DesignColors.primaryDark,
+                                ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -300,7 +327,9 @@ class _LoginDialogState extends State<LoginDialog> {
                               ],
                             ),
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _loginWithEmailPassword,
+                              onPressed: _isLoading
+                                  ? null
+                                  : _loginWithEmailPassword,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 shadowColor: Colors.transparent,
@@ -337,7 +366,11 @@ class _LoginDialogState extends State<LoginDialog> {
                   // Divider
                   Row(
                     children: [
-                      Expanded(child: Divider(color: DesignColors.divider.withOpacity(0.8))),
+                      Expanded(
+                        child: Divider(
+                          color: DesignColors.divider.withOpacity(0.8),
+                        ),
+                      ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Text(
@@ -349,7 +382,11 @@ class _LoginDialogState extends State<LoginDialog> {
                           ),
                         ),
                       ),
-                      Expanded(child: Divider(color: DesignColors.divider.withOpacity(0.8))),
+                      Expanded(
+                        child: Divider(
+                          color: DesignColors.divider.withOpacity(0.8),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -393,7 +430,10 @@ class _LoginDialogState extends State<LoginDialog> {
                         shadowColor: Colors.transparent,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: DesignColors.divider, width: 1.2),
+                          side: const BorderSide(
+                            color: DesignColors.divider,
+                            width: 1.2,
+                          ),
                         ),
                       ),
                     ),
@@ -415,7 +455,10 @@ class _LoginDialogState extends State<LoginDialog> {
                       GestureDetector(
                         onTap: _isLoading ? null : _openRegisterScreen,
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
                           child: Text(
                             'Sign Up',
                             style: TextStyle(
