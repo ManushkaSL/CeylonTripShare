@@ -31,6 +31,7 @@ class Booking {
   final String id;
   final String userId;
   final Tour tour;
+  final DateTime tourDate;
   final DateTime bookedAt;
   final int adults;
   final int kids6to12;
@@ -46,6 +47,7 @@ class Booking {
     required this.id,
     required this.userId,
     required this.tour,
+    DateTime? tourDate,
     required this.bookedAt,
     required this.adults,
     required this.kids6to12,
@@ -56,7 +58,7 @@ class Booking {
     this.cardHolderName,
     required this.phoneNumber,
     this.passengers = const [],
-  });
+  }) : tourDate = tourDate ?? tour.startDate;
 
   /// Convert to Firestore document data
   Map<String, dynamic> toMap() {
@@ -71,7 +73,7 @@ class Booking {
       'userId': userId,
       'tourId': tour.id,
       'tourName': tour.name,
-      'tourDate': tour.startDate.toIso8601String(),
+      'tourDate': tourDate.toIso8601String(),
       'bookedAt': bookedAt.toIso8601String(),
       'adults': adults,
       'kids6to12': kids6to12,
@@ -107,10 +109,20 @@ class Booking {
       // Continue with empty list if parsing fails
     }
 
+    DateTime parsedTourDate;
+    try {
+      parsedTourDate = map['tourDate'] != null
+          ? DateTime.parse(map['tourDate'] as String)
+          : tour.startDate;
+    } catch (_) {
+      parsedTourDate = tour.startDate;
+    }
+
     return Booking(
       id: map['id'] ?? '',
       userId: map['userId'] ?? '',
       tour: tour,
+      tourDate: parsedTourDate,
       bookedAt: DateTime.parse(
         map['bookedAt'] as String? ?? DateTime.now().toIso8601String(),
       ),

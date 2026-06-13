@@ -224,12 +224,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                    color: DesignColors.primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.directions_bus,
-                    color: Color(0xFF1B5E20),
+                    color: DesignColors.primary,
                     size: 26,
                   ),
                 ),
@@ -244,7 +244,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF333333),
+                          color: DesignColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -254,7 +254,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             width: 8,
                             height: 8,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF4CAF50),
+                              color: DesignColors.success,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -265,7 +265,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                                 : 'Live',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: DesignColors.textSecondary,
                             ),
                           ),
                         ],
@@ -279,20 +279,20 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                    color: DesignColors.success.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.circle, size: 8, color: Color(0xFF4CAF50)),
-                      SizedBox(width: 6),
-                      Text(
+                      Icon(Icons.circle, size: 8, color: DesignColors.success),
+                      const SizedBox(width: 6),
+                      const Text(
                         'LIVE',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF4CAF50),
+                          color: DesignColors.success,
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -307,12 +307,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.1),
+                    color: DesignColors.divider.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.location_off,
-                    color: Colors.grey,
+                    color: DesignColors.textSecondary,
                     size: 26,
                   ),
                 ),
@@ -322,18 +322,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      const Text(
                         'Driver is offline',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF333333),
+                          color: DesignColors.textPrimary,
                         ),
                       ),
                       SizedBox(height: 4),
-                      Text(
+                      const Text(
                         'Location sharing is not active yet',
-                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DesignColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),

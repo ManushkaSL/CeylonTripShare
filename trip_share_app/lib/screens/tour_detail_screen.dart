@@ -59,28 +59,34 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     return Scaffold(
       backgroundColor: DesignColors.background,
       body: CustomScrollView(
-        physics: const ClampingScrollPhysics(),
+        physics: const BouncingScrollPhysics(),
         slivers: [
           // Photo gallery header
           SliverAppBar(
-            expandedHeight: 320,
+            expandedHeight: 330,
             pinned: true,
+            stretch: true,
             backgroundColor: DesignColors.background,
-            leading: IconButton(
-              icon: const CircleAvatar(
-                backgroundColor: Color(0xAA0D1424),
-                child: Icon(Icons.arrow_back, color: Color(0xFFE8F1EC)),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            title: Text(
-              tour.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFFE8F1EC),
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+            surfaceTintColor: Colors.transparent,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: IconButton(
+                icon: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ),
             flexibleSpace: FlexibleSpaceBar(
@@ -97,55 +103,57 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         photos[index],
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
-                          color: DesignColors.textPrimary.withOpacity(0.08),
+                          color: DesignColors.divider,
                           child: const Center(
                             child: Icon(
-                              Icons.landscape,
-                              size: 60,
-                              color: Color(0xFF7A8A80),
+                              Icons.landscape_rounded,
+                              size: 64,
+                              color: DesignColors.textTertiary,
                             ),
                           ),
                         ),
                       );
                     },
                   ),
-                  // Gradient overlay at bottom
+                  // Gradient overlay at bottom of photo slider for elegant overlay blending
                   Positioned(
-                    bottom: 0,
+                    bottom: -1,
                     left: 0,
                     right: 0,
-                    height: 80,
+                    height: 90,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: [
-                            DesignColors.background.withOpacity(0.72),
-                            Colors.transparent,
+                            DesignColors.background,
+                            DesignColors.background.withOpacity(0.0),
                           ],
                         ),
                       ),
                     ),
                   ),
-                  // Photo indicators
+                  // Luxurious Photo indicators
                   if (photos.length > 1)
                     Positioned(
-                      bottom: 16,
+                      bottom: 24,
                       left: 0,
                       right: 0,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(photos.length, (i) {
-                          return Container(
-                            width: _currentPhoto == i ? 20 : 8,
-                            height: 8,
+                          final isActive = _currentPhoto == i;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            width: isActive ? 22 : 6,
+                            height: 6,
                             margin: const EdgeInsets.symmetric(horizontal: 3),
                             decoration: BoxDecoration(
-                              color: _currentPhoto == i
-                                  ? DesignColors.textPrimary
-                                  : DesignColors.textPrimary.withOpacity(0.54),
-                              borderRadius: BorderRadius.circular(4),
+                              color: isActive
+                                  ? DesignColors.primary
+                                  : DesignColors.surface.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(3),
                             ),
                           );
                         }),
@@ -156,82 +164,106 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
             ),
           ),
 
-          // Content
+          // Main body content (Luxury Alabaster White background panel)
           SliverToBoxAdapter(
             child: Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Color(0xFF070B17),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+              decoration: BoxDecoration(
+                color: DesignColors.surface,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF2C2219).withOpacity(0.04),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Tour name
+                  // Category Badge & Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (tour.category.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: DesignColors.secondary.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: DesignColors.primary.withOpacity(0.15),
+                            ),
+                          ),
+                          child: Text(
+                            tour.category.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: DesignColors.primaryDark,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                      _buildStatusBadge(status),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Tour Name Title
                   Text(
                     tour.name,
                     style: const TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFE8F1EC),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: DesignColors.textPrimary,
+                      letterSpacing: -0.3,
+                      height: 1.25,
                     ),
                   ),
-                  if (tour.category.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: DesignColors.surface,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        tour.category,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFC49A3A),
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
 
-                  // Status badge & operator
-                  Row(
-                    children: [
-                      _buildStatusBadge(status),
-                      if (tour.operatorName.isNotEmpty) ...[
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            'by ${tour.operatorName}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF7A8A80),
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                  // Operator Description Label
+                  if (tour.operatorName.isNotEmpty)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.shield_outlined,
+                          size: 14,
+                          color: DesignColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Operated by ${tour.operatorName}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: DesignColors.textSecondary,
                           ),
                         ),
                       ],
-                    ],
+                    ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18),
+                    child: Divider(color: DesignColors.divider),
                   ),
-                  const SizedBox(height: 16),
 
-                  // Info cards row
+                  // Elegant Grid Details Chips
                   Row(
                     children: [
                       _buildInfoChip(
-                        Icons.attach_money,
-                        '\$${tour.price.toInt()}/person',
+                        Icons.attach_money_rounded,
+                        '\$${tour.price.toInt()} / person',
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       _buildInfoChip(
-                        Icons.event_seat,
-                        '${tour.remainingSeats} of ${tour.totalSeats} seats',
+                        Icons.people_outline_rounded,
+                        '${tour.remainingSeats}/${tour.totalSeats} seats left',
                       ),
                     ],
                   ),
@@ -239,100 +271,103 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   Row(
                     children: [
                       _buildInfoChip(
-                        Icons.calendar_today,
+                        Icons.calendar_month_rounded,
                         _formatDate(tour.startDate),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       _buildInfoChip(
-                        Icons.access_time,
+                        Icons.access_time_rounded,
                         _formatTime(tour.startDate),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
 
-                  // Start / End / Last Joining
-                  _buildSectionTitle('Schedule'),
+                  // Schedule Card Details
+                  _buildSectionTitle('SCHEDULE DETAIL'),
                   const SizedBox(height: 10),
                   _buildDetailCard([
                     _buildDetailRow(
-                      Icons.play_circle_outline,
-                      'Start',
-                      '${_formatTime(tour.startDate)} at ${tour.startLocation}',
+                      Icons.play_arrow_rounded,
+                      'Start Departure',
+                      '${_formatTime(tour.startDate)} from ${tour.startLocation}',
                     ),
                     if (tour.lastJoiningTime != null)
                       _buildDetailRow(
-                        Icons.schedule,
-                        'Last Joining',
+                        Icons.hourglass_bottom_rounded,
+                        'Last Booking',
                         '${_formatTime(tour.lastJoiningTime!)} on ${_formatDate(tour.lastJoiningTime!)}',
                       ),
                     if (tour.endTime.isNotEmpty)
                       _buildDetailRow(
-                        Icons.stop_circle_outlined,
-                        'End',
+                        Icons.flag_rounded,
+                        'Arrival Destination',
                         '${tour.endTime} at ${tour.endLocation}',
                       ),
                   ]),
                   const SizedBox(height: 24),
 
-                  // Description
-                  _buildSectionTitle('About This Tour'),
+                  // Tour Description About
+                  _buildSectionTitle('ABOUT THE ADVENTURE'),
                   const SizedBox(height: 10),
                   Text(
                     tour.description.isNotEmpty
                         ? tour.description
-                        : 'No description available for this tour yet.',
+                        : 'Experience a signature wildlife tour curated by our team, introducing high-end premium hospitality and sightseeing.',
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       height: 1.6,
-                      color: DesignColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      color: DesignColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 24),
 
-                  // Route
+                  // Timeline Stopover Map
                   if (tour.route.isNotEmpty) ...[
-                    _buildSectionTitle('Route'),
-                    const SizedBox(height: 10),
+                    _buildSectionTitle('TOUR ROUTE TIMELINE'),
+                    const SizedBox(height: 12),
                     _buildRouteTimeline(),
                     const SizedBox(height: 24),
                   ],
 
-                  // What's Included
+                  // What's Included Card
                   if (tour.whatsIncluded.isNotEmpty) ...[
-                    _buildSectionTitle("What's Included"),
-                    const SizedBox(height: 10),
-                    _buildChipList(
+                    _buildSectionTitle("WHAT'S INCLUDED"),
+                    const SizedBox(height: 12),
+                    _buildCheckList(
                       tour.whatsIncluded,
-                      Icons.check_circle,
+                      Icons.check_circle_rounded,
+                      DesignColors.success,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Highlights / Special Features
+                  if (tour.tourFeatures.isNotEmpty) ...[
+                    _buildSectionTitle('TOUR HIGHLIGHTS'),
+                    const SizedBox(height: 12),
+                    _buildCheckList(
+                      tour.tourFeatures,
+                      Icons.star_rounded,
                       DesignColors.accent,
                     ),
                     const SizedBox(height: 24),
                   ],
 
-                  // Tour Features
-                  if (tour.tourFeatures.isNotEmpty) ...[
-                    _buildSectionTitle('Tour Features'),
-                    const SizedBox(height: 10),
-                    _buildChipList(
-                      tour.tourFeatures,
-                      Icons.star_rounded,
-                      DesignColors.accentSecondary,
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Photo gallery section
+                  // Dynamic Thumbnail slide indicators
                   if (photos.length > 1) ...[
-                    _buildSectionTitle('Photos'),
-                    const SizedBox(height: 10),
+                    _buildSectionTitle('PHOTO GALLERY'),
+                    const SizedBox(height: 12),
                     SizedBox(
-                      height: 100,
+                      height: 80,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: photos.length,
+                        physics: const BouncingScrollPhysics(),
                         separatorBuilder: (_, _) => const SizedBox(width: 10),
                         itemBuilder: (context, index) {
+                          final isSelected = _currentPhoto == index;
                           return GestureDetector(
                             onTap: () {
                               _pageController.animateToPage(
@@ -342,26 +377,30 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                               );
                             },
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               child: Container(
-                                width: 130,
+                                width: 110,
                                 decoration: BoxDecoration(
-                                  border: _currentPhoto == index
+                                  border: isSelected
                                       ? Border.all(
-                                          color: DesignColors.accent,
-                                          width: 2,
+                                          color: DesignColors.primary,
+                                          width: 2.5,
                                         )
-                                      : null,
-                                  borderRadius: BorderRadius.circular(10),
+                                      : Border.all(
+                                          color: DesignColors.divider
+                                              .withOpacity(0.5),
+                                          width: 1,
+                                        ),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Image.network(
                                   photos[index],
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, _, _) => Container(
-                                    color: Colors.white.withValues(alpha: 0.08),
+                                    color: DesignColors.divider,
                                     child: const Icon(
                                       Icons.landscape,
-                                      color: DesignColors.textSecondary,
+                                      color: DesignColors.textTertiary,
                                     ),
                                   ),
                                 ),
@@ -371,164 +410,167 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(height: 24),
                   ],
-
-                  // Operator
-                  if (tour.operatorName.isNotEmpty) ...[
-                    _buildSectionTitle('Operator'),
-                    const SizedBox(height: 10),
-                    _buildDetailCard([
-                      _buildDetailRow(
-                        Icons.business,
-                        'Operated by',
-                        tour.operatorName,
-                      ),
-                    ]),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Bottom spacing for the button
-                  const SizedBox(height: 60),
                 ],
               ),
             ),
           ),
+
+          // bottom buffer space
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
-      // Bottom Join/Start button
+      // Sticky Call-to-action bar
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
         decoration: BoxDecoration(
-          color: const Color(0xFF0D1424),
+          color: DesignColors.surface,
+          border: Border(
+            top: BorderSide(
+              color: DesignColors.divider.withOpacity(0.8),
+              width: 1,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 14,
-              offset: const Offset(0, -2),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
             ),
           ],
         ),
         child: _isUserBooked
-            ? Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+            ? Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: DesignColors.success.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: DesignColors.success.withOpacity(0.3),
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16342A),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF44D38E),
-                      width: 1,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      size: 20,
+                      color: DesignColors.success,
                     ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline,
-                        size: 18,
-                        color: Color(0xFF44D38E),
+                    SizedBox(width: 8),
+                    Text(
+                      'You booked this adventure!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: DesignColors.success,
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'You are already booked',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF44D38E),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               )
             : tour.canBook
             ? Row(
                 children: [
-                  // Price summary
+                  // Total price indicator
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Price',
+                          'TOTAL PRICE',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFFAFB6C8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: DesignColors.textTertiary,
+                            letterSpacing: 0.8,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          '\$${tour.price.toInt()} per person',
+                          '\$${tour.price.toInt()} / person',
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: DesignColors.primary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // Join button
-                  SizedBox(
-                    height: 48,
+                  // Luxury gradient confirm button
+                  Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          DesignColors.primary,
+                          DesignColors.primaryDark,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: DesignColors.primary.withOpacity(0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
                     child: ElevatedButton(
                       onPressed: _onJoinPressed,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF246CF6),
-                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        padding: const EdgeInsets.symmetric(horizontal: 36),
                       ),
                       child: Text(
-                        status == TourStatus.idle ? 'Start Tour' : 'Join Tour',
+                        status == TourStatus.idle
+                            ? 'Start Tour'
+                            : 'Join Safari',
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
                         ),
                       ),
                     ),
                   ),
                 ],
               )
-            : Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+            : Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: DesignColors.error.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: DesignColors.error.withOpacity(0.3),
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3D1720),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFFF7D9D),
-                      width: 1,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.info_rounded,
+                      size: 20,
+                      color: DesignColors.error,
                     ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Color(0xFFFF7D9D),
+                    SizedBox(width: 8),
+                    Text(
+                      'This tour is fully booked',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: DesignColors.error,
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'This tour is fully booked',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFFFF7D9D),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
       ),
@@ -539,26 +581,34 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     final (String label, Color bg, Color fg) = switch (status) {
       TourStatus.fullBooked => (
         'Fully Booked',
+        DesignColors.accentSecondary.withOpacity(0.15),
         DesignColors.accentSecondary,
-        DesignColors.textPrimary,
       ),
-      TourStatus.idle => ('Idle', DesignColors.primary, DesignColors.accent),
+      TourStatus.idle => (
+        'Idle Available',
+        DesignColors.primary.withOpacity(0.15),
+        DesignColors.primaryDark,
+      ),
       TourStatus.active => (
-        'Active',
-        DesignColors.surface,
-        DesignColors.accent,
+        'Active Safari',
+        DesignColors.success.withOpacity(0.15),
+        DesignColors.success,
       ),
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg),
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          color: fg,
+        ),
       ),
     );
   }
@@ -566,23 +616,28 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
   Widget _buildInfoChip(IconData icon, String text) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: DesignColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DesignColors.textPrimary.withOpacity(0.08)),
+          color: DesignColors.background.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: DesignColors.divider.withOpacity(0.6),
+            width: 1.2,
+          ),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: DesignColors.accent),
+            Icon(icon, size: 16, color: DesignColors.primary),
             const SizedBox(width: 8),
-            Flexible(
+            Expanded(
               child: Text(
                 text,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                   color: DesignColors.textPrimary,
                 ),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -593,23 +648,30 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w900,
+          color: DesignColors.textSecondary,
+          letterSpacing: 1.2,
+        ),
       ),
     );
   }
 
   Widget _buildDetailCard(List<Widget> children) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F1628),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: DesignColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: DesignColors.divider.withOpacity(0.8),
+          width: 1.2,
+        ),
       ),
       child: Column(children: children),
     );
@@ -621,23 +683,27 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF57D4FF)),
-          const SizedBox(width: 10),
+          Icon(icon, size: 18, color: DesignColors.primary),
+          const SizedBox(width: 12),
           SizedBox(
-            width: 90,
+            width: 110,
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFFAFB6C8),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: DesignColors.textSecondary,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 13, color: Color(0xFFD6DEEF)),
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: DesignColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -648,11 +714,14 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
   Widget _buildRouteTimeline() {
     final stops = widget.tour.route;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F1628),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: DesignColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: DesignColors.divider.withOpacity(0.8),
+          width: 1.2,
+        ),
       ),
       child: Column(
         children: List.generate(stops.length, (i) {
@@ -662,7 +731,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Timeline dots & line
+                // Vertical elegant gold timeline bar
                 SizedBox(
                   width: 24,
                   child: Column(
@@ -672,11 +741,11 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         height: 12,
                         decoration: BoxDecoration(
                           color: i == 0 || isLast
-                              ? const Color(0xFF57D4FF)
-                              : const Color(0xFF0F1628),
+                              ? DesignColors.primary
+                              : DesignColors.surface,
                           border: Border.all(
-                            color: const Color(0xFF57D4FF),
-                            width: 2,
+                            color: DesignColors.primary,
+                            width: 2.2,
                           ),
                           shape: BoxShape.circle,
                         ),
@@ -684,37 +753,37 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                       if (!isLast)
                         Expanded(
                           child: Container(
-                            width: 2,
-                            color: const Color(
-                              0xFF57D4FF,
-                            ).withValues(alpha: 0.3),
+                            width: 2.2,
+                            color: DesignColors.primary.withOpacity(0.3),
                           ),
                         ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                // Stop details
+                const SizedBox(width: 12),
+                // Location metadata
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: 20),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
                           child: Text(
                             stop.location,
                             style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFFD6DEEF),
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: DesignColors.textPrimary,
                             ),
                           ),
                         ),
                         Text(
                           stop.time,
                           style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF57D4FF),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: DesignColors.primary,
                           ),
                         ),
                       ],
@@ -729,26 +798,25 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     );
   }
 
-  Widget _buildChipList(List<String> items, IconData icon, Color iconColor) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+  Widget _buildCheckList(List<String> items, IconData icon, Color iconColor) {
+    return Column(
       children: items.map((item) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F1628),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 6),
-              Text(
-                item,
-                style: const TextStyle(fontSize: 13, color: Color(0xFFD6DEEF)),
+              Icon(icon, size: 18, color: iconColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  item,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: DesignColors.textSecondary,
+                  ),
+                ),
               ),
             ],
           ),

@@ -27,6 +27,7 @@ class Tour {
   final String firstBookedUserId; // ID of the first user who booked this tour
   final List<String> bookedUserIds; // List of all booked user IDs
   final int bookedSeats; // Total seats already booked across all users
+  final double rating; // Rating of the tour (0-5 stars)
 
   const Tour({
     required this.id,
@@ -50,6 +51,7 @@ class Tour {
     this.firstBookedUserId = '',
     this.bookedUserIds = const [],
     this.bookedSeats = 0,
+    this.rating = 4.5,
   });
 
   /// Creates an empty tour instance (useful for placeholders)
@@ -61,6 +63,7 @@ class Tour {
     totalSeats: 0,
     remainingSeats: 0,
     price: 0.0,
+    rating: 4.5,
   );
 
   bool get canBook => remainingSeats > 0;
@@ -87,6 +90,7 @@ class Tour {
     String? firstBookedUserId,
     List<String>? bookedUserIds,
     int? bookedSeats,
+    double? rating,
   }) {
     return Tour(
       id: id ?? this.id,
@@ -110,6 +114,7 @@ class Tour {
       firstBookedUserId: firstBookedUserId ?? this.firstBookedUserId,
       bookedUserIds: bookedUserIds ?? this.bookedUserIds,
       bookedSeats: bookedSeats ?? this.bookedSeats,
+      rating: rating ?? this.rating,
     );
   }
 

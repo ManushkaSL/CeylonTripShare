@@ -34,12 +34,13 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     return Scaffold(
       backgroundColor: DesignColors.background,
       appBar: AppBar(
-        backgroundColor: DesignColors.surface.withOpacity(0.8),
+        backgroundColor: DesignColors.surface.withOpacity(0.95),
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Chats',
           style: TextStyle(
-            color: Color(0xFFE8F1EC),
+            color: DesignColors.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 20,
           ),
@@ -94,12 +95,12 @@ class _ChatsListBodyState extends State<ChatsListBody> {
             const SizedBox(height: 12),
             const Text(
               'Login required',
-              style: TextStyle(fontSize: 16, color: Color(0xFF7A8A80)),
+              style: TextStyle(fontSize: 16, color: DesignColors.textSecondary),
             ),
             const SizedBox(height: 4),
             const Text(
               'Sign in to view your chats',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(fontSize: 13, color: DesignColors.textSecondary),
             ),
           ],
         ),
@@ -125,17 +126,23 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                 Icon(
                   Icons.chat_bubble_outline,
                   size: 64,
-                  color: Colors.grey.withValues(alpha: 0.4),
+                  color: DesignColors.textSecondary.withOpacity(0.4),
                 ),
                 const SizedBox(height: 12),
                 const Text(
                   'No chats yet',
-                  style: TextStyle(fontSize: 16, color: Color(0xFF7A8A80)),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: DesignColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
                   'Join a tour to chat with passengers',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF7A8A80)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DesignColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -149,7 +156,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFE8F1EC),
+                  color: DesignColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 10),
@@ -187,15 +194,15 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                     placeholder: (context, url) => Container(
                       width: 50,
                       height: 50,
-                      color: DesignColors.primary.withOpacity(0.1),
+                      color: DesignColors.primary.withOpacity(0.08),
                     ),
                     errorWidget: (context, url, error) => Container(
                       width: 50,
                       height: 50,
-                      color: DesignColors.primary.withOpacity(0.1),
+                      color: DesignColors.primary.withOpacity(0.08),
                       child: const Icon(
                         Icons.landscape,
-                        color: Color(0xFF1B5E20),
+                        color: DesignColors.primary,
                         size: 24,
                       ),
                     ),
@@ -211,7 +218,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFE8F1EC),
+                          color: DesignColors.textPrimary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -227,7 +234,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                             '$count ${count == 1 ? 'passenger' : 'passengers'}',
                             style: const TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: DesignColors.textSecondary,
                             ),
                           );
                         },
@@ -238,7 +245,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                 const Icon(
                   Icons.chat_bubble,
                   size: 20,
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.primary,
                 ),
               ],
             ),

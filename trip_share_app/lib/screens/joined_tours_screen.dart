@@ -223,28 +223,28 @@ class _JoinedTourCard extends StatelessWidget {
                           const Icon(
                             Icons.calendar_today,
                             size: 13,
-                            color: Colors.grey,
+                            color: DesignColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             _formatDate(tour.startDate),
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.grey,
+                              color: DesignColors.textSecondary,
                             ),
                           ),
                           const SizedBox(width: 10),
                           const Icon(
                             Icons.access_time,
                             size: 13,
-                            color: Colors.grey,
+                            color: DesignColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             _formatTime(tour.startDate),
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.grey,
+                              color: DesignColors.textSecondary,
                             ),
                           ),
                         ],
@@ -256,14 +256,36 @@ class _JoinedTourCard extends StatelessWidget {
                           const Icon(
                             Icons.people_outline,
                             size: 13,
-                            color: Colors.grey,
+                            color: DesignColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${joinedTour.persons} person(s) booked',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.grey,
+                              color: DesignColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Seats left
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.event_seat,
+                            size: 13,
+                            color: DesignColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            tour.remainingSeats > 0
+                                ? '${tour.remainingSeats} seats left'
+                                : 'Fully booked',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: DesignColors.textSecondary,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -277,8 +299,8 @@ class _JoinedTourCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: joinedTour.isLiveLocationAvailable
-                              ? const Color(0xFFE8F5E9)
-                              : const Color(0xFFFFF8E1),
+                              ? DesignColors.success.withOpacity(0.12)
+                              : DesignColors.warning.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -289,8 +311,8 @@ class _JoinedTourCard extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: joinedTour.isLiveLocationAvailable
-                                ? const Color(0xFF2E7D32)
-                                : const Color(0xFFF57F17),
+                                ? DesignColors.success
+                                : DesignColors.accentSecondary,
                           ),
                         ),
                       ),
@@ -312,7 +334,8 @@ class _JoinedTourCard extends StatelessWidget {
                                             content: Text(
                                               'Opening live location...',
                                             ),
-                                            backgroundColor: Color(0xFF1B5E20),
+                                            backgroundColor:
+                                                DesignColors.primary,
                                             duration: Duration(seconds: 1),
                                           ),
                                         );
@@ -323,7 +346,7 @@ class _JoinedTourCard extends StatelessWidget {
                                   size: 13,
                                   color: joinedTour.isLiveLocationAvailable
                                       ? Colors.white
-                                      : Colors.grey,
+                                      : DesignColors.textSecondary,
                                 ),
                                 label: Text(
                                   joinedTour.isLiveLocationAvailable
@@ -334,14 +357,15 @@ class _JoinedTourCard extends StatelessWidget {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
                                       joinedTour.isLiveLocationAvailable
-                                      ? const Color(0xFF1B5E20)
+                                      ? DesignColors.primary
                                       : Colors.grey.shade300,
                                   foregroundColor:
                                       joinedTour.isLiveLocationAvailable
                                       ? Colors.white
-                                      : Colors.grey,
+                                      : DesignColors.textSecondary,
                                   disabledBackgroundColor: Colors.grey.shade200,
-                                  disabledForegroundColor: Colors.grey,
+                                  disabledForegroundColor:
+                                      DesignColors.textSecondary,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -373,7 +397,7 @@ class _JoinedTourCard extends StatelessWidget {
                                   style: TextStyle(fontSize: 10),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1B5E20),
+                                  backgroundColor: DesignColors.primary,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),

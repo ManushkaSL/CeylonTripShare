@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 
 class DesignColors {
-  // Core Palette - Premium & Refined
-  static const Color primary = Color(0xFF1a4d3a); // Deep Teal Green
-  static const Color primaryVariant = Color(0xFF0f3d2f);
-  static const Color secondary = Color(0xFF2a5a46); // Rich Moss
-  static const Color background = Color(0xFF0d1513); // Deep Charcoal
-  static const Color surface = Color(0xFF1a2a22); // Subtle Dark Surface
-  static const Color accent = Color(0xFFd4a155); // Warm Gold
-  static const Color accentSecondary = Color(0xFFe8956f); // Warm Coral
-  static const Color error = Color(0xFFc44569);
-  static const Color success = Color(0xFF6ec38b);
-  static const Color warning = Color(0xFFf4a460);
-  static const Color textPrimary = Color(0xFFe8f1ec);
-  static const Color textSecondary = Color(0xFF95a89d);
-  static const Color textTertiary = Color(0xFF637367);
-  static const Color glass = Color(0x80FFFFFF);
-  static const Color divider = Color(0xFF2a3a30);
+  // Core Palette - Luxury Safari Theme
+  static const Color primary = Color(0xFF8A5E38); // Deep Antique Bronze
+  static const Color primaryDark = Color(0xFF5A3C22); // Dark Walnut
+  static const Color primaryLight = Color(0xFFD4A373); // Sunset Amber
+  static const Color primaryVariant = Color(0xFF7A512E);
+  static const Color secondary = Color(0xFFE6DCD2); // Soft Warm Sand Cream
+  static const Color background = Color(0xFFFAF6F2); // Premium Cream Sand
+  static const Color surface = Color(0xFFFFFFFF); // Alabaster White
+  static const Color accent = Color(0xFFC59B6D); // Radiant Sand Gold
+  static const Color accentSecondary = Color(0xFFE07A5F); // Terracotta Coral
+  static const Color error = Color(0xFFC94A4A);
+  static const Color success = Color(0xFF4E8D6B);
+  static const Color warning = Color(0xFFE5A93B);
+  static const Color textPrimary = Color(0xFF2C2219); // Deep Luxury Charcoal
+  static const Color textSecondary = Color(0xFF6E6053); // Muted Earth Gray
+  static const Color textTertiary = Color(0xFFA5978B); // Warm Taupe
+  static const Color glass = Color(0xCCFFFFFF);
+  static const Color divider = Color(0xFFEDE6DF);
+  static const Color heroOverlay = Color(0x66000000); // Overlay gradient color
 }
 
 class Spacing {

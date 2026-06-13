@@ -6,6 +6,7 @@ import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/location_service.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 
 /// Driver dashboard accessible from Profile → "Driver Dashboard".
 /// Shows tours the driver is assigned to (guideId == current user)
@@ -45,7 +46,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Stopped sharing location for "$tourName"'),
-            backgroundColor: Colors.orange,
+            backgroundColor: DesignColors.warning,
           ),
         );
       }
@@ -61,16 +62,16 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Sharing location for "$tourName"'),
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: DesignColors.primary,
             ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
+            SnackBar(
+              content: const Text(
                 'Could not start sharing. Check location permissions.',
               ),
-              backgroundColor: Colors.red,
+              backgroundColor: DesignColors.error,
             ),
           );
         }
@@ -79,9 +80,9 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       // Already sharing on a different tour
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Stop sharing on the current tour first.'),
-            backgroundColor: Colors.orange,
+          SnackBar(
+            content: const Text('Stop sharing on the current tour first.'),
+            backgroundColor: DesignColors.warning,
           ),
         );
       }
@@ -142,7 +143,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error opening chat: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: DesignColors.error,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -160,7 +161,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: DesignColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () async {
@@ -170,7 +174,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 Navigator.of(dialogContext).pop();
               }
             },
-            child: const Text('Log Out', style: TextStyle(color: Colors.red)),
+            child: Text('Log Out', style: TextStyle(color: DesignColors.error)),
           ),
         ],
       ),
@@ -182,7 +186,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     final userEmail = _auth.userEmail;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DesignColors.background,
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
@@ -190,20 +194,20 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
             child: AppBar(
-              backgroundColor: Colors.white.withValues(alpha: 0.6),
+              backgroundColor: DesignColors.surface.withOpacity(0.95),
               elevation: 0,
               automaticallyImplyLeading: false,
               title: const Text(
                 'Driver Dashboard',
                 style: TextStyle(
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
                 ),
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.logout, color: Color(0xFF1B5E20)),
+                  icon: Icon(Icons.logout, color: DesignColors.primary),
                   onPressed: _showLogoutDialog,
                 ),
               ],
@@ -226,9 +230,9 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           : _buildDriverProfileSection(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        indicatorColor: const Color(0xFF1B5E20).withValues(alpha: 0.16),
+        backgroundColor: DesignColors.surface,
+        surfaceTintColor: DesignColors.surface,
+        indicatorColor: DesignColors.primary.withOpacity(0.16),
         onDestinationSelected: (index) {
           setState(() {
             _selectedIndex = index;
@@ -263,11 +267,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DesignColors.surface,
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity(0.05),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -277,7 +281,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
             children: [
               CircleAvatar(
                 radius: 32,
-                backgroundColor: const Color(0xFF1B5E20).withValues(alpha: 0.1),
+                backgroundColor: DesignColors.primary.withOpacity(0.12),
                 backgroundImage: _auth.photoUrl.isNotEmpty
                     ? NetworkImage(_auth.photoUrl)
                     : null,
@@ -286,10 +290,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                         _auth.userName.isNotEmpty
                             ? _auth.userName[0].toUpperCase()
                             : 'D',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B5E20),
+                          color: DesignColors.primary,
                         ),
                       )
                     : null,
@@ -304,13 +308,16 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1B5E20),
+                        color: DesignColors.primary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _auth.userEmail,
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: DesignColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -322,10 +329,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: DesignColors.surface,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -333,13 +340,13 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1B5E20),
+                  color: DesignColors.primary,
                 ),
               ),
               SizedBox(height: 8),
               Text(
                 'Use Assigned Tours to share live location and chat with passengers in tours already assigned to you.',
-                style: TextStyle(fontSize: 13, color: Colors.black87),
+                style: TextStyle(fontSize: 13, color: DesignColors.textPrimary),
               ),
             ],
           ),
@@ -349,13 +356,16 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           height: 48,
           child: OutlinedButton.icon(
             onPressed: _showLogoutDialog,
-            icon: const Icon(Icons.logout, color: Colors.red),
-            label: const Text(
+            icon: Icon(Icons.logout, color: DesignColors.error),
+            label: Text(
               'Log Out',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: DesignColors.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red),
+              side: BorderSide(color: DesignColors.error),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -374,14 +384,17 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: _isSharing
-                ? [const Color(0xFF1B5E20), const Color(0xFF2E7D32)]
-                : [const Color(0xFF424242), const Color(0xFF616161)],
+                ? [DesignColors.primary, DesignColors.primaryDark]
+                : [DesignColors.textSecondary, DesignColors.divider],
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: (_isSharing ? const Color(0xFF1B5E20) : Colors.grey)
-                  .withValues(alpha: 0.3),
+              color:
+                  (_isSharing
+                          ? DesignColors.primary
+                          : DesignColors.textSecondary)
+                      .withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -393,7 +406,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -423,7 +436,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                         ? 'Passengers can see your vehicle on the map'
                         : 'Tap a tour below to start sharing',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: Colors.white.withOpacity(0.85),
                       fontSize: 13,
                     ),
                   ),
@@ -435,11 +448,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 width: 12,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: Colors.greenAccent,
+                  color: DesignColors.success,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.greenAccent.withValues(alpha: 0.6),
+                      color: DesignColors.success.withOpacity(0.6),
                       blurRadius: 8,
                     ),
                   ],
@@ -463,14 +476,14 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           return Center(
             child: Text(
               'Error loading assigned tours: ${snapshot.error}',
-              style: const TextStyle(color: Colors.red),
+              style: TextStyle(color: DesignColors.error),
             ),
           );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF1B5E20)),
+          return Center(
+            child: CircularProgressIndicator(color: DesignColors.primary),
           );
         }
 
@@ -486,21 +499,24 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   Icon(
                     Icons.directions_bus_outlined,
                     size: 64,
-                    color: Colors.grey.withValues(alpha: 0.4),
+                    color: DesignColors.textSecondary.withOpacity(0.4),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No assigned tours',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey,
+                      color: DesignColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Assigned bookings will appear here.',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: DesignColors.textSecondary,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -549,7 +565,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+        side: BorderSide(color: Colors.grey.withOpacity(0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -564,10 +580,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                     children: [
                       Text(
                         tourName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B5E20),
+                          color: DesignColors.success,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -626,11 +642,11 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isSharingThis
-                          ? const Color(0xFF1B5E20)
-                          : Colors.grey.withValues(alpha: 0.15),
+                          ? DesignColors.success
+                          : Colors.grey.withOpacity(0.15),
                       foregroundColor: isSharingThis
                           ? Colors.white
-                          : const Color(0xFF1B5E20),
+                          : DesignColors.success,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -652,10 +668,8 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(
-                        0xFF1B5E20,
-                      ).withValues(alpha: 0.15),
-                      foregroundColor: const Color(0xFF1B5E20),
+                      backgroundColor: DesignColors.success.withOpacity(0.15),
+                      foregroundColor: DesignColors.success,
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),

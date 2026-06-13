@@ -43,17 +43,17 @@ class MyApp extends StatelessWidget {
         overscroll: false,
       ),
       theme: ThemeData(
-        colorScheme: const ColorScheme.dark(
+        colorScheme: const ColorScheme.light(
           primary: DesignColors.primary,
           secondary: DesignColors.accent,
           surface: DesignColors.surface,
           background: DesignColors.background,
           error: DesignColors.error,
-          onPrimary: DesignColors.textPrimary,
+          onPrimary: Colors.white,
           onSecondary: DesignColors.textPrimary,
           onSurface: DesignColors.textPrimary,
           onBackground: DesignColors.textPrimary,
-          onError: DesignColors.textPrimary,
+          onError: Colors.white,
         ),
         useMaterial3: true,
       ),

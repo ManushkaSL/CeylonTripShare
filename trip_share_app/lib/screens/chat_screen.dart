@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:trip_share_app/theme/design_system.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/chat_service.dart';
 import 'package:trip_share_app/services/auth_service.dart';
@@ -112,12 +113,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: DesignColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
+        backgroundColor: DesignColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B5E20)),
+          icon: const Icon(Icons.arrow_back, color: DesignColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
@@ -126,7 +128,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               widget.tour.name,
               style: const TextStyle(
-                color: Color(0xFF1B5E20),
+                color: DesignColors.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -143,7 +145,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     final count = snapshot.data ?? 0;
                     return Text(
                       '$count ${count == 1 ? 'passenger' : 'passengers'}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: DesignColors.textSecondary,
+                      ),
                     );
                   },
                 );
@@ -153,7 +158,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.location_on, color: Color(0xFF1B5E20)),
+            icon: const Icon(Icons.location_on, color: DesignColors.primary),
             tooltip: 'Track Driver',
             onPressed: () {
               Navigator.of(context).push(
@@ -259,7 +264,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          // Input bar
+          // Input bar aligned to design system
           Container(
             padding: EdgeInsets.fromLTRB(
               12,
@@ -268,10 +273,10 @@ class _ChatScreenState extends State<ChatScreen> {
               8 + MediaQuery.of(context).padding.bottom,
             ),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: DesignColors.surface,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 8,
                   offset: const Offset(0, -2),
                 ),
@@ -283,18 +288,22 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0F0F0),
+                      color: DesignColors.divider.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: TextField(
                       controller: _messageController,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Type a message...',
-                        hintStyle: TextStyle(color: Colors.grey),
+                        hintStyle: const TextStyle(
+                          color: DesignColors.textSecondary,
+                        ),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ),
@@ -306,7 +315,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     width: 42,
                     height: 42,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF1B5E20),
+                      color: DesignColors.primary,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -344,13 +353,13 @@ class _ChatScreenState extends State<ChatScreen> {
             if (!isMe)
               CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFF1B5E20).withValues(alpha: 0.2),
+                backgroundColor: DesignColors.primary.withOpacity(0.18),
                 child: Text(
                   userInitial,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B5E20),
+                    color: DesignColors.primary,
                   ),
                 ),
               ),
@@ -384,9 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: isMe
-                          ? const Color(0xFF1B5E20)
-                          : Colors.grey.shade200,
+                      color: isMe ? DesignColors.primary : DesignColors.surface,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
@@ -395,7 +402,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
+                          color: Colors.black.withOpacity(0.06),
                           blurRadius: 3,
                           offset: const Offset(0, 1),
                         ),
@@ -405,7 +412,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       msg.text,
                       style: TextStyle(
                         fontSize: 15,
-                        color: isMe ? Colors.white : Colors.black87,
+                        color: isMe ? Colors.white : DesignColors.textPrimary,
                         height: 1.3,
                       ),
                     ),

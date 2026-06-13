@@ -231,24 +231,24 @@ class _ProfileBodyState extends State<ProfileBody> {
                       },
                       child: const Text(
                         'Log Out',
-                        style: TextStyle(color: Colors.red),
+                        style: TextStyle(color: DesignColors.error),
                       ),
                     ),
                   ],
                 ),
               );
             },
-            icon: const Icon(Icons.logout_rounded, color: Colors.red),
+            icon: const Icon(Icons.logout_rounded, color: DesignColors.error),
             label: const Text(
               'Log Out',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Colors.red,
+                color: DesignColors.error,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red, width: 1.2),
+              side: const BorderSide(color: DesignColors.error, width: 1.2),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -267,7 +267,7 @@ class _ProfileBodyState extends State<ProfileBody> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
-        color: Colors.white,
+        color: DesignColors.surface,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -276,18 +276,22 @@ class _ProfileBodyState extends State<ProfileBody> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                Icon(icon, color: const Color(0xFF1B5E20), size: 22),
+                Icon(icon, color: DesignColors.primary, size: 22),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     title,
                     style: const TextStyle(
                       fontSize: 15,
-                      color: Color(0xFF333333),
+                      color: DesignColors.textPrimary,
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                const Icon(
+                  Icons.chevron_right,
+                  color: DesignColors.textSecondary,
+                  size: 20,
+                ),
               ],
             ),
           ),

@@ -196,6 +196,64 @@ class JoinedTourService extends ChangeNotifier {
         '🗑️ Booking deletion detected: $bookingId (tour: $tourId, refunding $totalPersons seats)',
       );
 
+      // If this booking belonged to an instance, refund seats to that instance
+      final instanceId = cachedData['instanceId'] as String?;
+      if (instanceId != null && instanceId.isNotEmpty) {
+        final instRef = _firestore.collection('tour_instances').doc(instanceId);
+        final instDoc = await instRef.get();
+        final instData = instDoc.data();
+        if (instData == null) {
+          debugPrint('⚠️ Instance not found: $instanceId');
+          return;
+        }
+
+        final firestoreAvailableSeats = _toInt(
+          instData['available_seats'] ?? instData['remainingSeats'],
+        );
+        final firestoreTotalSeats = _toInt(instData['totalSeats']);
+        final firestoreBookedSeats = _toInt(instData['bookedSeats']);
+
+        final actualAvailable = firestoreAvailableSeats;
+        final actualTotal = firestoreTotalSeats > 0
+            ? firestoreTotalSeats
+            : actualAvailable + firestoreBookedSeats;
+
+        final newAvailable = (actualAvailable + totalPersons)
+            .clamp(0, actualTotal)
+            .toInt();
+        final newBookedSeats = (firestoreBookedSeats - totalPersons)
+            .clamp(0, actualTotal)
+            .toInt();
+
+        debugPrint(
+          '   Calculation (instance): $actualAvailable + $totalPersons = $newAvailable (clamped 0-$actualTotal)',
+        );
+
+        final instUpdate = <String, dynamic>{
+          'totalSeats': actualTotal,
+          'available_seats': newAvailable,
+          'remainingSeats': newAvailable,
+          'bookedSeats': newBookedSeats,
+        };
+        if (bookedUserId != null && bookedUserId.isNotEmpty) {
+          instUpdate['bookedUserIds'] = FieldValue.arrayRemove([bookedUserId]);
+        }
+        await instRef.update(instUpdate);
+
+        debugPrint(
+          '✅ Refunded $totalPersons seats to instance $instanceId: available_seats now = $newAvailable',
+        );
+
+        await Future.delayed(const Duration(milliseconds: 300));
+        final updatedInst = await instRef.get();
+        final verifiedAvailable = updatedInst.data()?['available_seats'];
+        debugPrint(
+          '✅ VERIFIED from Firestore (instance): available_seats=$verifiedAvailable',
+        );
+        return;
+      }
+
+      // Return seats to the main tour as a fallback
       // Return seats to the tour (increment available_seats)
       final tourRef = _firestore.collection('tours').doc(tourId);
       final realTour = await tourRef.get();
@@ -474,47 +532,93 @@ class JoinedTourService extends ChangeNotifier {
           price: 0.0,
         );
 
-        // Try to fetch full tour details with booking close time
+        // Prefer instance data if booking references an instance; otherwise
+        // fetch the canonical tour doc.
         try {
-          final tourDoc = await _firestore
-              .collection('tours')
-              .doc(tourId)
-              .get();
-          if (tourDoc.exists) {
-            final tourData = tourDoc.data() ?? {};
-
-            // Parse booking close time from three fields
-            final lastJoiningTime = _parseBookingCloseDateTime(tourData);
-
-            tour = Tour(
-              id: tourId,
-              name: tourData['name'] ?? data['tourName'] ?? '',
-              imageUrl: tourData['imageUrl'] ?? tourData['image'] ?? '',
-              startDate: DateTime.parse(
-                tourData['startDate'] as String? ??
-                    data['tourDate'] ??
-                    DateTime.now().toIso8601String(),
-              ),
-              totalSeats: tourData['totalSeats'] ?? 0,
-              remainingSeats:
-                  tourData['available_seats'] ??
-                  tourData['remainingSeats'] ??
-                  0,
-              price: (tourData['price'] as num?)?.toDouble() ?? 0.0,
-              description: tourData['description'] ?? '',
-              photos: List<String>.from(tourData['photos'] ?? []),
-              category: tourData['category'] ?? '',
-              startLocation: tourData['startLocation'] ?? '',
-              lastJoiningTime: lastJoiningTime,
-              endTime: tourData['endTime'] ?? '',
-              endLocation: tourData['endLocation'] ?? '',
-              operatorName: tourData['operatorName'] ?? '',
-              whatsIncluded: List<String>.from(tourData['whatsIncluded'] ?? []),
-              tourFeatures: List<String>.from(tourData['tourFeatures'] ?? []),
-              firstBookedUserId: tourData['firstBookedUserId'] ?? '',
-              bookedUserIds: List<String>.from(tourData['bookedUserIds'] ?? []),
-              bookedSeats: _toInt(tourData['bookedSeats']),
-            );
+          final instanceId = data['instanceId'] as String?;
+          if (instanceId != null && instanceId.isNotEmpty) {
+            try {
+              final instDoc = await _firestore
+                  .collection('tour_instances')
+                  .doc(instanceId)
+                  .get();
+              if (instDoc.exists) {
+                final inst = instDoc.data() ?? {};
+                final lastJoiningTime = _parseBookingCloseDateTime(inst);
+                tour = Tour(
+                  id: tourId,
+                  name: inst['name'] ?? data['tourName'] ?? '',
+                  imageUrl: inst['imageUrl'] ?? '',
+                  startDate: DateTime.parse(
+                    inst['startDate'] as String? ??
+                        data['tourDate'] ??
+                        DateTime.now().toIso8601String(),
+                  ),
+                  totalSeats: _toInt(inst['totalSeats']),
+                  remainingSeats: _toInt(
+                    inst['available_seats'] ?? inst['remainingSeats'],
+                  ),
+                  price: (inst['price'] as num?)?.toDouble() ?? 0.0,
+                  description: inst['description'] ?? '',
+                  photos: List<String>.from(inst['photos'] ?? []),
+                  category: inst['category'] ?? '',
+                  startLocation: inst['startLocation'] ?? '',
+                  lastJoiningTime: lastJoiningTime,
+                  endTime: inst['endTime'] ?? '',
+                  endLocation: inst['endLocation'] ?? '',
+                  operatorName: inst['operatorName'] ?? '',
+                  whatsIncluded: List<String>.from(inst['whatsIncluded'] ?? []),
+                  tourFeatures: List<String>.from(inst['tourFeatures'] ?? []),
+                  firstBookedUserId: inst['firstBookedUserId'] ?? '',
+                  bookedUserIds: List<String>.from(inst['bookedUserIds'] ?? []),
+                  bookedSeats: _toInt(inst['bookedSeats']),
+                );
+              }
+            } catch (e) {
+              debugPrint('⚠️ Error fetching tour instance $instanceId: $e');
+            }
+          } else {
+            final tourDoc = await _firestore
+                .collection('tours')
+                .doc(tourId)
+                .get();
+            if (tourDoc.exists) {
+              final tourData = tourDoc.data() ?? {};
+              final lastJoiningTime = _parseBookingCloseDateTime(tourData);
+              tour = Tour(
+                id: tourId,
+                name: tourData['name'] ?? data['tourName'] ?? '',
+                imageUrl: tourData['imageUrl'] ?? tourData['image'] ?? '',
+                startDate: DateTime.parse(
+                  tourData['startDate'] as String? ??
+                      data['tourDate'] ??
+                      DateTime.now().toIso8601String(),
+                ),
+                totalSeats: tourData['totalSeats'] ?? 0,
+                remainingSeats:
+                    tourData['available_seats'] ??
+                    tourData['remainingSeats'] ??
+                    0,
+                price: (tourData['price'] as num?)?.toDouble() ?? 0.0,
+                description: tourData['description'] ?? '',
+                photos: List<String>.from(tourData['photos'] ?? []),
+                category: tourData['category'] ?? '',
+                startLocation: tourData['startLocation'] ?? '',
+                lastJoiningTime: lastJoiningTime,
+                endTime: tourData['endTime'] ?? '',
+                endLocation: tourData['endLocation'] ?? '',
+                operatorName: tourData['operatorName'] ?? '',
+                whatsIncluded: List<String>.from(
+                  tourData['whatsIncluded'] ?? [],
+                ),
+                tourFeatures: List<String>.from(tourData['tourFeatures'] ?? []),
+                firstBookedUserId: tourData['firstBookedUserId'] ?? '',
+                bookedUserIds: List<String>.from(
+                  tourData['bookedUserIds'] ?? [],
+                ),
+                bookedSeats: _toInt(tourData['bookedSeats']),
+              );
+            }
           }
         } catch (e) {
           debugPrint('⚠️ Error fetching full tour details for $tourId: $e');
@@ -523,11 +627,12 @@ class JoinedTourService extends ChangeNotifier {
         final booking = Booking.fromMap(data, tour);
         _bookings.add(booking);
 
-        // Cache booking details for deletion detection
+        // Cache booking details for deletion detection (include instance if present)
         _bookingCache[doc.id] = {
           'tourId': tourId,
           'totalPersons': data['totalPersons'] as int? ?? 0,
           'userId': data['userId'] as String?,
+          'instanceId': (data['instanceId'] as String?) ?? '',
         };
 
         // Add to joined tours
@@ -576,6 +681,7 @@ class JoinedTourService extends ChangeNotifier {
   /// If a booking already exists for this tour, add the new passenger to the passengers array
   Future<bool> joinTour({
     required Tour tour,
+    DateTime? tourDate,
     required int adults,
     required int kids6to12,
     required int kidsUnder6,
@@ -688,6 +794,7 @@ class JoinedTourService extends ChangeNotifier {
         id: bookingId,
         userId: userId,
         tour: completeTour,
+        tourDate: tourDate ?? completeTour.startDate,
         bookedAt: DateTime.now(),
         adults: adults,
         kids6to12: kids6to12,
@@ -722,111 +829,147 @@ class JoinedTourService extends ChangeNotifier {
         '📊 Before update - Tour ${completeTour.id}: remainingSeats=${completeTour.remainingSeats}, totalSeats=${completeTour.totalSeats}, totalPersons=$totalPersons',
       );
 
-      // Update tour's available_seats (decrement by totalPersons)
+      // Create or update an active "instance" for this tour + date instead of
+      // modifying the original `tours` document. This preserves the idle tour
+      // while moving only the booked occurrence into the active instances.
       try {
-        final tourRef = _firestore.collection('tours').doc(completeTour.id);
-        debugPrint(
-          '🔄 Attempting tour update for tour ID: ${completeTour.id}...',
-        );
+        final instanceCollection = _firestore.collection('tour_instances');
+        final instanceDateIso = booking.toMap()['tourDate'] as String;
 
-        // IMPORTANT: Fetch the real tour data from Firestore to get accurate available_seats
-        final realTour = await tourRef.get();
-        final realTourData = realTour.data();
+        // Try to find an existing instance for this tour+date
+        final existing = await instanceCollection
+            .where('tourId', isEqualTo: completeTour.id)
+            .where('startDate', isEqualTo: instanceDateIso)
+            .limit(1)
+            .get();
 
-        if (realTourData == null) {
-          debugPrint(
-            '⚠️ Tour not found in Firestore: ${completeTour.id}. Skipping seat update (booking was already saved).',
-          );
-          // Don't throw - booking was already saved, just skip the seat update
-        } else {
-          final firestoreAvailableSeats = _toInt(
-            realTourData['available_seats'] ?? realTourData['remainingSeats'],
-          );
-          final firestoreTotalSeats = _toInt(realTourData['totalSeats']);
-          final firestoreBookedSeats = _toInt(realTourData['bookedSeats']);
+        String instanceId;
+        int newAvailable = 0;
 
-          debugPrint(
-            '   📥 Real from Firestore: available_seats=$firestoreAvailableSeats, totalSeats=$firestoreTotalSeats',
-          );
-
-          final actualAvailable = firestoreAvailableSeats > 0
-              ? firestoreAvailableSeats
-              : tour.remainingSeats;
-          final actualTotal = firestoreTotalSeats > 0
-              ? firestoreTotalSeats
+        if (existing.docs.isNotEmpty) {
+          final doc = existing.docs.first;
+          final data = doc.data();
+          final firestoreAvailable = _toInt(data['available_seats']) > 0
+              ? _toInt(data['available_seats'])
+              : _toInt(data['remainingSeats']);
+          final firestoreTotal = _toInt(data['totalSeats']) > 0
+              ? _toInt(data['totalSeats'])
               : (completeTour.totalSeats > 0
                     ? completeTour.totalSeats
-                    : actualAvailable + firestoreBookedSeats);
+                    : firestoreAvailable + _toInt(data['bookedSeats']));
 
-          // Calculate new available seats
-          final newAvailable = (actualAvailable - totalPersons)
-              .clamp(0, actualTotal)
+          newAvailable = (firestoreAvailable - totalPersons)
+              .clamp(0, firestoreTotal)
               .toInt();
-          final newBookedSeats = (firestoreBookedSeats + totalPersons)
-              .clamp(0, actualTotal)
-              .toInt();
-          debugPrint(
-            '   Calculation: $actualAvailable - $totalPersons = $newAvailable (clamped 0-$actualTotal)',
-          );
 
-          // Update shared tour status fields in Firestore so every account
-          // sees this tour as active after the booking.
-          final tourUpdate = <String, dynamic>{
-            'totalSeats': actualTotal,
+          final newBookedSeats = (_toInt(data['bookedSeats']) + totalPersons)
+              .clamp(0, firestoreTotal)
+              .toInt();
+
+          instanceId = doc.id;
+
+          await instanceCollection.doc(instanceId).update({
+            'totalSeats': firestoreTotal,
             'available_seats': newAvailable,
             'remainingSeats': newAvailable,
             'bookedSeats': newBookedSeats,
             'bookedUserIds': FieldValue.arrayUnion([userId]),
+          });
+        } else {
+          // Create new instance doc
+          final instanceRef = instanceCollection.doc();
+          instanceId = instanceRef.id;
+          final totalForInstance = completeTour.totalSeats > 0
+              ? completeTour.totalSeats
+              : totalPersons;
+          newAvailable = (totalForInstance - totalPersons)
+              .clamp(0, totalForInstance)
+              .toInt();
+
+          final instanceData = <String, dynamic>{
+            'tourId': completeTour.id,
+            'name': completeTour.name,
+            'imageUrl': completeTour.imageUrl,
+            'startDate': instanceDateIso,
+            'totalSeats': totalForInstance,
+            'available_seats': newAvailable,
+            'remainingSeats': newAvailable,
+            'bookedSeats': totalPersons,
+            'bookedUserIds': [userId],
+            'firstBookedUserId': userId,
           };
-          if ((realTourData['firstBookedUserId'] ?? '').toString().isEmpty) {
-            tourUpdate['firstBookedUserId'] = userId;
-          }
-          await tourRef.update(tourUpdate);
 
-          debugPrint('✅ Updated available_seats to: $newAvailable');
-
-          // Verify the update
-          await Future.delayed(const Duration(milliseconds: 300));
-          final updatedTour = await tourRef.get();
-          final verifiedAvailable = updatedTour.data()?['available_seats'];
-          debugPrint(
-            '✅ VERIFIED from Firestore: available_seats=$verifiedAvailable',
-          );
-
-          // Update tour cache for immediate UI refresh
-          _tourService.updateTourInCache(completeTour.id, newAvailable);
-
-          // Log tour status change
-          final tourStatus = newAvailable == actualTotal ? 'IDLE' : 'ACTIVE';
-          debugPrint(
-            '🎯 Tour status changed to: $tourStatus (${actualTotal - newAvailable}/$actualTotal booked)',
-          );
+          await instanceRef.set(instanceData);
         }
-      } catch (updateError) {
+
         debugPrint(
-          '⚠️ Warning: Could not update tour available_seats for ${completeTour.id}: $updateError',
+          '✅ Upserted tour instance $instanceId available=$newAvailable',
         );
-        // Don't throw - booking was saved successfully, just log the warning
-        // The seats will be synced when the tour is reloaded
+
+        // Update booking doc to reference instance and instance availability
+        try {
+          await _firestore.collection('bookings').doc(bookingId).update({
+            'instanceId': instanceId,
+            'instanceAvailable': newAvailable,
+            'instanceTotalSeats': completeTour.totalSeats,
+          });
+        } catch (e) {
+          debugPrint('⚠️ Could not update booking with instance metadata: $e');
+        }
+
+        // Update cache for deletion/refund handling
+        _bookingCache[bookingId] = {
+          'tourId': completeTour.id,
+          'totalPersons': totalPersons,
+          'userId': userId,
+          'instanceId': instanceId,
+        };
+
+        // Add to in-memory joined tours as an instance-aware Tour
+        _joinedTours.add(
+          JoinedTour(
+            tour: Tour(
+              id: completeTour.id,
+              name: completeTour.name,
+              imageUrl: completeTour.imageUrl,
+              startDate: booking.tourDate,
+              totalSeats: completeTour.totalSeats,
+              remainingSeats: newAvailable,
+              price: completeTour.price,
+              description: completeTour.description,
+              photos: completeTour.photos,
+              category: completeTour.category,
+              startLocation: completeTour.startLocation,
+              lastJoiningTime: completeTour.lastJoiningTime,
+              endTime: completeTour.endTime,
+              endLocation: completeTour.endLocation,
+              route: completeTour.route,
+              operatorName: completeTour.operatorName,
+              whatsIncluded: completeTour.whatsIncluded,
+              tourFeatures: completeTour.tourFeatures,
+              firstBookedUserId: userId,
+              bookedUserIds: [userId],
+              bookedSeats: totalPersons,
+            ),
+            joinedAt: DateTime.now(),
+            persons: totalPersons,
+          ),
+        );
+      } catch (e) {
+        debugPrint('❌ Error creating/updating tour instance: $e');
       }
 
-      // Add to in-memory storage
-      _joinedTours.add(
-        JoinedTour(
-          tour: completeTour,
-          joinedAt: DateTime.now(),
-          persons: totalPersons,
-        ),
-      );
-
+      // Ensure booking is tracked in-memory
       _bookings.add(booking);
 
-      // Cache booking details for deletion detection
-      _bookingCache[bookingId] = {
-        'tourId': completeTour.id,
-        'totalPersons': totalPersons,
-        'userId': userId,
-      };
+      // Ensure cache entry exists (if instance upsert failed earlier)
+      _bookingCache[bookingId] =
+          _bookingCache[bookingId] ??
+          {
+            'tourId': completeTour.id,
+            'totalPersons': totalPersons,
+            'userId': userId,
+          };
 
       notifyListeners();
       debugPrint('✅ Booking completed successfully: $bookingId');
@@ -898,71 +1041,115 @@ class JoinedTourService extends ChangeNotifier {
         // Don't fail the booking cancellation if chat deletion fails
       }
 
-      // Return seats to the tour (increment available_seats)
+      // Return seats to the instance if one exists, else to the canonical tour
       try {
-        final tourRef = _firestore.collection('tours').doc(tourId);
-        final realTour = await tourRef.get();
-        final realTourData = realTour.data();
+        final instanceId = bookingData?['instanceId'] as String?;
+        if (instanceId != null && instanceId.isNotEmpty) {
+          final instRef = _firestore
+              .collection('tour_instances')
+              .doc(instanceId);
+          final instDoc = await instRef.get();
+          final instData = instDoc.data();
 
-        if (realTourData == null) {
-          throw Exception('Tour not found in Firestore: $tourId');
+          if (instData == null) {
+            throw Exception('Instance not found in Firestore: $instanceId');
+          }
+
+          final firestoreAvailableSeats = _toInt(
+            instData['available_seats'] ?? instData['remainingSeats'],
+          );
+          final firestoreTotalSeats = _toInt(instData['totalSeats']);
+          final firestoreBookedSeats = _toInt(instData['bookedSeats']);
+
+          debugPrint(
+            '   📥 Real from Firestore (instance): available_seats=$firestoreAvailableSeats, totalSeats=$firestoreTotalSeats',
+          );
+
+          final actualAvailable = firestoreAvailableSeats;
+          final actualTotal = firestoreTotalSeats > 0
+              ? firestoreTotalSeats
+              : actualAvailable + firestoreBookedSeats;
+
+          final newAvailable = (actualAvailable + totalPersons)
+              .clamp(0, actualTotal)
+              .toInt();
+          final newBookedSeats = (firestoreBookedSeats - totalPersons)
+              .clamp(0, actualTotal)
+              .toInt();
+
+          debugPrint(
+            '   Calculation (instance): $actualAvailable + $totalPersons = $newAvailable (clamped 0-$actualTotal)',
+          );
+
+          await instRef.update({
+            'totalSeats': actualTotal,
+            'available_seats': newAvailable,
+            'remainingSeats': newAvailable,
+            'bookedSeats': newBookedSeats,
+            'bookedUserIds': FieldValue.arrayRemove([bookingData?['userId']]),
+          });
+
+          debugPrint(
+            '✅ Refunded seats to instance: available_seats updated to $newAvailable',
+          );
+        } else {
+          final tourRef = _firestore.collection('tours').doc(tourId);
+          final realTour = await tourRef.get();
+          final realTourData = realTour.data();
+
+          if (realTourData == null) {
+            throw Exception('Tour not found in Firestore: $tourId');
+          }
+
+          final firestoreAvailableSeats = _toInt(
+            realTourData['available_seats'] ?? realTourData['remainingSeats'],
+          );
+          final firestoreTotalSeats = _toInt(realTourData['totalSeats']);
+          final firestoreBookedSeats = _toInt(realTourData['bookedSeats']);
+
+          debugPrint(
+            '   📥 Real from Firestore: available_seats=$firestoreAvailableSeats, totalSeats=$firestoreTotalSeats',
+          );
+
+          final actualAvailable = firestoreAvailableSeats;
+          final actualTotal = firestoreTotalSeats > 0
+              ? firestoreTotalSeats
+              : actualAvailable + firestoreBookedSeats;
+
+          final newAvailable = (actualAvailable + totalPersons)
+              .clamp(0, actualTotal)
+              .toInt();
+          final newBookedSeats = (firestoreBookedSeats - totalPersons)
+              .clamp(0, actualTotal)
+              .toInt();
+          debugPrint(
+            '   Calculation: $actualAvailable + $totalPersons = $newAvailable (clamped 0-$actualTotal)',
+          );
+
+          await tourRef.update({
+            'totalSeats': actualTotal,
+            'available_seats': newAvailable,
+            'remainingSeats': newAvailable,
+            'bookedSeats': newBookedSeats,
+            'bookedUserIds': FieldValue.arrayRemove([bookingData?['userId']]),
+          });
+
+          debugPrint(
+            '✅ Refunded seats to tour: available_seats updated to $newAvailable',
+          );
+
+          await Future.delayed(const Duration(milliseconds: 300));
+          final updatedTour = await tourRef.get();
+          final verifiedAvailable = updatedTour.data()?['available_seats'];
+          debugPrint(
+            '✅ VERIFIED from Firestore: available_seats=$verifiedAvailable',
+          );
+
+          _tourService.updateTourInCache(
+            tourId,
+            newRemainingSeats: newAvailable,
+          );
         }
-
-        final firestoreAvailableSeats = _toInt(
-          realTourData['available_seats'] ?? realTourData['remainingSeats'],
-        );
-        final firestoreTotalSeats = _toInt(realTourData['totalSeats']);
-        final firestoreBookedSeats = _toInt(realTourData['bookedSeats']);
-
-        debugPrint(
-          '   📥 Real from Firestore: available_seats=$firestoreAvailableSeats, totalSeats=$firestoreTotalSeats',
-        );
-
-        final actualAvailable = firestoreAvailableSeats;
-        final actualTotal = firestoreTotalSeats > 0
-            ? firestoreTotalSeats
-            : actualAvailable + firestoreBookedSeats;
-
-        // Calculate new available seats (add back the cancelled seats)
-        final newAvailable = (actualAvailable + totalPersons)
-            .clamp(0, actualTotal)
-            .toInt();
-        final newBookedSeats = (firestoreBookedSeats - totalPersons)
-            .clamp(0, actualTotal)
-            .toInt();
-        debugPrint(
-          '   Calculation: $actualAvailable + $totalPersons = $newAvailable (clamped 0-$actualTotal)',
-        );
-
-        // Update available_seats in Firestore
-        await tourRef.update({
-          'totalSeats': actualTotal,
-          'available_seats': newAvailable,
-          'remainingSeats': newAvailable,
-          'bookedSeats': newBookedSeats,
-          'bookedUserIds': FieldValue.arrayRemove([bookingData?['userId']]),
-        });
-
-        debugPrint(
-          '✅ Refunded seats to tour: available_seats updated to $newAvailable',
-        );
-
-        // Verify the update
-        await Future.delayed(const Duration(milliseconds: 300));
-        final updatedTour = await tourRef.get();
-        final verifiedAvailable = updatedTour.data()?['available_seats'];
-        debugPrint(
-          '✅ VERIFIED from Firestore: available_seats=$verifiedAvailable',
-        );
-
-        // Update tour cache for immediate UI refresh
-        _tourService.updateTourInCache(tourId, newAvailable);
-
-        // Log tour status change
-        final tourStatus = newAvailable == actualTotal ? 'IDLE' : 'ACTIVE';
-        debugPrint(
-          '🎯 Tour status after cancellation: $tourStatus (${actualTotal - newAvailable}/${actualTotal} booked)',
-        );
       } catch (updateError) {
         debugPrint('❌ Error updating tour available_seats: $updateError');
         throw Exception('Failed to return seats to tour: $updateError');
@@ -1002,13 +1189,13 @@ class JoinedTourService extends ChangeNotifier {
             final tour = Tour(
               id: data['tourId'] ?? '',
               name: data['tourName'] ?? '',
-              imageUrl: '',
+              imageUrl: data['imageUrl'] ?? '',
               startDate: DateTime.parse(
                 data['tourDate'] as String? ?? DateTime.now().toIso8601String(),
               ),
-              totalSeats: 0,
-              remainingSeats: 0,
-              price: 0.0,
+              totalSeats: (data['instanceTotalSeats'] as num?)?.toInt() ?? 0,
+              remainingSeats: (data['instanceAvailable'] as num?)?.toInt() ?? 0,
+              price: (data['price'] as num?)?.toDouble() ?? 0.0,
             );
 
             joinedTours.add(
