@@ -102,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final activeTourIds = _joinedTourService.joinedTours
         .map((jt) => jt.tour.id)
         .toSet();
+
     return tours
         .where(
           (t) => t.status == TourStatus.idle && !activeTourIds.contains(t.id),
@@ -114,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final activeTourIds = _joinedTourService.joinedTours
         .map((jt) => jt.tour.id)
         .toSet();
+
     return tours
         .where(
           (t) => t.status != TourStatus.idle || activeTourIds.contains(t.id),

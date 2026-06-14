@@ -763,6 +763,118 @@ class JoinedTourService extends ChangeNotifier {
       // NO EXISTING BOOKING - CREATE NEW BOOKING
       debugPrint('📝 Creating new booking for tour ${tour.id}...');
 
+      // If booking an idle canonical tour, clone it into a new active
+      // tour document so the original idle tour remains unchanged.
+      String targetTourId = completeTour.id;
+      try {
+        if (completeTour.status == TourStatus.idle) {
+          final toursCol = _firestore.collection('tours');
+          // Attempt to read canonical tour data to preserve all fields
+          Map<String, dynamic>? sourceData;
+          try {
+            final srcDoc = await toursCol.doc(completeTour.id).get();
+            sourceData = srcDoc.exists ? srcDoc.data() : null;
+          } catch (_) {
+            sourceData = null;
+          }
+
+          // Build clone data from either fetched source or from the in-memory Tour
+          final int totalForClone = completeTour.totalSeats;
+          final int bookedSeatsForClone = totalPersons;
+          final int availableForClone = (totalForClone > 0)
+              ? (totalForClone - bookedSeatsForClone).clamp(0, totalForClone)
+              : 0;
+
+          final cloneData = <String, dynamic>{
+            'name': completeTour.name,
+            'imageUrl': completeTour.imageUrl,
+            'startDate': completeTour.startDate.toIso8601String(),
+            'totalSeats': totalForClone,
+            'available_seats': availableForClone,
+            'remainingSeats': availableForClone,
+            'price': completeTour.price,
+            'description': completeTour.description,
+            'photos': completeTour.photos,
+            'category': completeTour.category,
+            'startLocation': completeTour.startLocation,
+            'endTime': completeTour.endTime,
+            'endLocation': completeTour.endLocation,
+            'operatorName': completeTour.operatorName,
+            'whatsIncluded': completeTour.whatsIncluded,
+            'tourFeatures': completeTour.tourFeatures,
+            'firstBookedUserId': userId,
+            'bookedUserIds': [userId],
+            'bookedSeats': bookedSeatsForClone,
+          };
+
+          // Copy any extra source fields if available (preserve custom fields)
+          if (sourceData != null) {
+            for (final entry in sourceData.entries) {
+              if (!cloneData.containsKey(entry.key))
+                cloneData[entry.key] = entry.value;
+            }
+          }
+
+          // Create the cloned tour doc
+          final newDocRef = await _firestore.collection('tours').add(cloneData);
+          targetTourId = newDocRef.id;
+          debugPrint(
+            '🔁 Cloned idle tour ${completeTour.id} -> new active tour $targetTourId',
+          );
+
+          // Replace completeTour with a version that points to the clone
+          completeTour = completeTour.copyWith(
+            id: targetTourId,
+            firstBookedUserId: userId,
+            bookedUserIds: [userId],
+            bookedSeats: bookedSeatsForClone,
+            remainingSeats: availableForClone,
+          );
+
+          // Immediately update TourService cache so UI shows the cloned active
+          // tour without waiting for the Firestore stream to refresh.
+          try {
+            final baseTour = Tour(
+              id: targetTourId,
+              name: cloneData['name'] as String? ?? completeTour.name,
+              imageUrl:
+                  cloneData['imageUrl'] as String? ?? completeTour.imageUrl,
+              startDate:
+                  DateTime.tryParse(
+                    (cloneData['startDate'] as String?) ?? '',
+                  ) ??
+                  completeTour.startDate,
+              totalSeats: totalForClone,
+              remainingSeats: availableForClone,
+              price:
+                  (cloneData['price'] as num?)?.toDouble() ??
+                  completeTour.price,
+            );
+            try {
+              TourService().updateTourInCache(
+                targetTourId,
+                newRemainingSeats: availableForClone,
+                newBookedSeats: bookedSeatsForClone,
+                bookedUserIds: [userId],
+                firstBookedUserId: userId,
+                baseTour: baseTour,
+              );
+              debugPrint(
+                '✅ TourService cache primed for cloned tour $targetTourId',
+              );
+            } catch (e) {
+              debugPrint('⚠️ Could not update TourService cache for clone: $e');
+            }
+          } catch (e) {
+            debugPrint('⚠️ Error preparing base tour for cache priming: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Could not clone idle tour: $e');
+        // Fall back to using canonical tour id
+        targetTourId = completeTour.id;
+      }
+
       final bookingId = DateTime.now().millisecondsSinceEpoch.toString();
 
       // Get current user data

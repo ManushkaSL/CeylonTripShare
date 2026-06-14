@@ -25,8 +25,69 @@ void main() async {
   // Initialize chat cache service
   await ChatCacheService().init();
 
-  runApp(
-    ChangeNotifierProvider(create: (_) => AuthService(), child: const MyApp()),
+  // Show errors on screen instead of a white/blank screen.
+  // Build a simple error widget so uncaught Flutter errors are visible.
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'An unexpected error occurred',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      details.exceptionAsString(),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Preserve default behavior (prints to console) and also surface the
+    // error via the error widget above.
+    FlutterError.presentError(details);
+  };
+
+  // Run the app inside a guarded zone to catch async errors as well.
+  runZonedGuarded(
+    () {
+      runApp(
+        ChangeNotifierProvider(
+          create: (_) => AuthService(),
+          child: const MyApp(),
+        ),
+      );
+    },
+    (error, stack) {
+      debugPrint('🛑 Uncaught error (zone): $error');
+      debugPrintStack(stackTrace: stack);
+    },
   );
 }
 
