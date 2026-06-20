@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import '../theme/design_system.dart';
 
 class CustomCard extends StatelessWidget {
@@ -42,10 +43,12 @@ class CustomCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: card,
-      ),
+      child: kIsWeb
+          ? card
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: card,
+            ),
     );
   }
 }

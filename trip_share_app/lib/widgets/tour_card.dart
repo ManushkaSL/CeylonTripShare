@@ -315,6 +315,50 @@ class TourCard extends StatelessWidget {
                         if (!isFull) const SizedBox(width: 6),
 
                         SizedBox(
+                          width: 58,
+                          height: 32,
+                          child: CustomButton(
+                            onPressed: () async {
+                              try {
+                                final message = await DynamicLinkService()
+                                    .getTourShareMessage(tour);
+                                await SharePlus.instance.share(
+                                  ShareParams(text: message),
+                                );
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to share: $e'),
+                                      backgroundColor: DesignColors.error,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            backgroundColor: DesignColors.surface.withOpacity(
+                              0.4,
+                            ),
+                            border: Border.all(
+                              color: DesignColors.textPrimary.withOpacity(0.1),
+                              width: 0.8,
+                            ),
+                            textColor: DesignColors.textPrimary,
+                            borderRadius: 8,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: const Text(
+                              'Share',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 6),
+
+                        SizedBox(
                           width: 32,
                           height: 32,
                           child: CustomButton(
@@ -331,61 +375,6 @@ class TourCard extends StatelessWidget {
                             padding: EdgeInsets.zero,
                             child: const Icon(
                               Icons.info_outline,
-                              size: 16,
-                              color: DesignColors.textPrimary,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 6),
-
-                        SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: CustomButton(
-                            onPressed: () async {
-                              // Show loading indicator
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Generating share link...'),
-                                  backgroundColor: DesignColors.primary,
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-
-                              try {
-                                // Generate share message with dynamic link
-                                final dynamicLinkService = DynamicLinkService();
-                                final message = await dynamicLinkService
-                                    .getTourShareMessage(tour);
-
-                                // Share using share_plus
-                                await SharePlus.instance.share(
-                                  ShareParams(text: message),
-                                );
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Failed to share: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                            backgroundColor: DesignColors.surface.withOpacity(
-                              0.4,
-                            ),
-                            border: Border.all(
-                              color: DesignColors.textPrimary.withOpacity(0.1),
-                              width: 0.8,
-                            ),
-                            textColor: DesignColors.textPrimary,
-                            borderRadius: 8,
-                            padding: EdgeInsets.zero,
-                            child: const Icon(
-                              Icons.share_outlined,
                               size: 16,
                               color: DesignColors.textPrimary,
                             ),

@@ -48,6 +48,7 @@ class JoinedTourService extends ChangeNotifier {
   final Map<String, int> _lastSeenBookings = {}; // Track booking IDs we've seen
   final Map<String, Map<String, dynamic>> _bookingCache =
       {}; // Cache: bookingId -> {tourId, totalPersons}
+  String? lastError;
 
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
   List<Booking> get bookings => List.unmodifiable(_bookings);
@@ -677,9 +678,209 @@ class JoinedTourService extends ChangeNotifier {
     }
   }
 
-  /// Save booking to Firestore and in-memory storage
-  /// If a booking already exists for this tour, add the new passenger to the passengers array
+  /// Creates one active instance from an idle template, or books seats on an
+  /// existing active instance. The instance and booking are written atomically.
   Future<bool> joinTour({
+    required Tour tour,
+    DateTime? tourDate,
+    required int adults,
+    required int kids6to12,
+    required int kidsUnder6,
+    required String pickupLocation,
+    required double totalPrice,
+    String? cardHolderName,
+    required String phoneNumber,
+  }) async {
+    final totalPersons = adults + kids6to12 + kidsUnder6;
+    final userId = _authService.userId;
+    lastError = null;
+
+    try {
+      if (userId.isEmpty) {
+        throw StateError('Please sign in to complete the booking');
+      }
+      if (tour.id.isEmpty || tour.name.isEmpty) {
+        throw StateError('Invalid tour information');
+      }
+      if (totalPersons <= 0) {
+        throw StateError('Select at least one passenger');
+      }
+
+      String userName = 'User';
+      String userEmail = '';
+      try {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        final userData = userDoc.data();
+        userName = (userData?['displayName'] ?? userData?['name'] ?? 'User')
+            .toString();
+        userEmail = (userData?['email'] ?? '').toString();
+      } catch (_) {
+        // Booking can continue with the authenticated user's id.
+      }
+
+      final passenger = PassengerInfo(
+        userId: userId,
+        name: userName,
+        email: userEmail,
+        phone: phoneNumber,
+      );
+      final isIdleTemplate = tour.sourceIdleTourId.isEmpty;
+      final sourceIdleTourId = isIdleTemplate ? tour.id : tour.sourceIdleTourId;
+      final scheduledDate = isIdleTemplate
+          ? (tourDate ?? tour.startDate)
+          : tour.startDate;
+      final instanceRef = isIdleTemplate
+          ? _firestore.collection('tour_instances').doc()
+          : _firestore.collection('tour_instances').doc(tour.id);
+      final bookingRef = _firestore.collection('bookings').doc();
+      final bookedAt = DateTime.now();
+
+      late Tour bookedTour;
+      late Booking booking;
+
+      await _firestore.runTransaction((transaction) async {
+        var totalSeats = tour.totalSeats;
+        var remainingSeats = tour.remainingSeats;
+        var bookedSeats = tour.bookedSeats;
+        var bookedUserIds = List<String>.from(tour.bookedUserIds);
+        var firstBookedUserId = tour.firstBookedUserId;
+
+        if (!isIdleTemplate) {
+          final instanceSnapshot = await transaction.get(instanceRef);
+          if (!instanceSnapshot.exists) {
+            throw StateError('This active tour no longer exists');
+          }
+
+          final data = instanceSnapshot.data() ?? <String, dynamic>{};
+          totalSeats = _toInt(data['totalSeats'], fallback: totalSeats);
+          remainingSeats = _toInt(
+            data['available_seats'] ?? data['remainingSeats'],
+            fallback: remainingSeats,
+          );
+          bookedSeats = _toInt(data['bookedSeats'], fallback: bookedSeats);
+          bookedUserIds = List<String>.from(data['bookedUserIds'] ?? const []);
+          firstBookedUserId = (data['firstBookedUserId'] ?? firstBookedUserId)
+              .toString();
+        }
+
+        if (totalSeats <= 0) {
+          throw StateError('Tour capacity is not configured');
+        }
+        if (remainingSeats < totalPersons) {
+          throw StateError(
+            'Only $remainingSeats seat${remainingSeats == 1 ? '' : 's'} available',
+          );
+        }
+
+        final newRemainingSeats = remainingSeats - totalPersons;
+        final newBookedSeats = bookedSeats + totalPersons;
+        if (!bookedUserIds.contains(userId)) {
+          bookedUserIds.add(userId);
+        }
+        if (firstBookedUserId.isEmpty) {
+          firstBookedUserId = userId;
+        }
+
+        bookedTour = tour.copyWith(
+          id: instanceRef.id,
+          startDate: scheduledDate,
+          totalSeats: totalSeats,
+          remainingSeats: newRemainingSeats,
+          bookedSeats: newBookedSeats,
+          bookedUserIds: bookedUserIds,
+          firstBookedUserId: firstBookedUserId,
+          sourceIdleTourId: sourceIdleTourId,
+        );
+
+        if (isIdleTemplate) {
+          transaction.set(instanceRef, {
+            'tourId': instanceRef.id,
+            'sourceIdleTourId': sourceIdleTourId,
+            'name': tour.name,
+            'imageUrl': tour.imageUrl,
+            'startDate': scheduledDate.toIso8601String(),
+            'totalSeats': totalSeats,
+            'available_seats': newRemainingSeats,
+            'remainingSeats': newRemainingSeats,
+            'bookedSeats': newBookedSeats,
+            'bookedUserIds': bookedUserIds,
+            'firstBookedUserId': firstBookedUserId,
+            'price': tour.price,
+            'description': tour.description,
+            'photos': tour.photos,
+            'category': tour.category,
+            'startLocation': tour.startLocation,
+            'lastJoiningTime': tour.lastJoiningTime?.toIso8601String(),
+            'endTime': tour.endTime,
+            'endLocation': tour.endLocation,
+            'route': tour.route
+                .map((stop) => {'location': stop.location, 'time': stop.time})
+                .toList(),
+            'operatorName': tour.operatorName,
+            'whatsIncluded': tour.whatsIncluded,
+            'tourFeatures': tour.tourFeatures,
+            'rating': tour.rating,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          transaction.update(instanceRef, {
+            'available_seats': newRemainingSeats,
+            'remainingSeats': newRemainingSeats,
+            'bookedSeats': newBookedSeats,
+            'bookedUserIds': bookedUserIds,
+            'firstBookedUserId': firstBookedUserId,
+          });
+        }
+
+        booking = Booking(
+          id: bookingRef.id,
+          userId: userId,
+          tour: bookedTour,
+          tourDate: scheduledDate,
+          bookedAt: bookedAt,
+          adults: adults,
+          kids6to12: kids6to12,
+          kidsUnder6: kidsUnder6,
+          pickupLocation: pickupLocation,
+          totalPrice: totalPrice,
+          totalPersons: totalPersons,
+          cardHolderName: cardHolderName,
+          phoneNumber: phoneNumber,
+          passengers: [passenger],
+        );
+        final bookingData = booking.toMap()
+          ..addAll({
+            'instanceId': instanceRef.id,
+            'templateTourId': sourceIdleTourId,
+          });
+        transaction.set(bookingRef, bookingData);
+      });
+
+      _bookings.add(booking);
+      _joinedTours.add(
+        JoinedTour(tour: bookedTour, joinedAt: bookedAt, persons: totalPersons),
+      );
+      _bookingCache[bookingRef.id] = {
+        'tourId': bookedTour.id,
+        'totalPersons': totalPersons,
+        'userId': userId,
+        'instanceId': bookedTour.id,
+      };
+
+      notifyListeners();
+      return true;
+    } catch (e, stackTrace) {
+      lastError = e is StateError ? e.message.toString() : e.toString();
+      debugPrint('Booking failed: $e');
+      debugPrintStack(stackTrace: stackTrace, label: 'joinTour error');
+      return false;
+    }
+  }
+
+  /// Legacy booking implementation retained temporarily for migration
+  /// reference. New bookings use [joinTour] above.
+  // ignore: unused_element
+  Future<bool> _legacyJoinTour({
     required Tour tour,
     DateTime? tourDate,
     required int adults,
@@ -695,22 +896,26 @@ class JoinedTourService extends ChangeNotifier {
 
     try {
       if (userId.isEmpty) {
+        lastError = 'No user logged in';
         debugPrint('❌ No user logged in - cannot save booking');
         return false;
       }
 
       // Validate critical tour data (id is required)
       if (tour.id.isEmpty) {
+        lastError = 'Invalid tour id';
         debugPrint('❌ Invalid tour: tour.id is empty');
         return false;
       }
 
       if (tour.name.isEmpty) {
+        lastError = 'Invalid tour name';
         debugPrint('❌ Invalid tour: tour.name is empty');
         return false;
       }
 
       if (totalPersons <= 0) {
+        lastError = 'No passengers selected for booking';
         debugPrint('❌ No passengers selected for booking');
         return false;
       }
@@ -805,6 +1010,7 @@ class JoinedTourService extends ChangeNotifier {
             'firstBookedUserId': userId,
             'bookedUserIds': [userId],
             'bookedSeats': bookedSeatsForClone,
+            'sourceIdleTourId': completeTour.id,
           };
 
           // Copy any extra source fields if available (preserve custom fields)
@@ -849,6 +1055,7 @@ class JoinedTourService extends ChangeNotifier {
               price:
                   (cloneData['price'] as num?)?.toDouble() ??
                   completeTour.price,
+              sourceIdleTourId: completeTour.id,
             );
             try {
               TourService().updateTourInCache(
@@ -870,9 +1077,18 @@ class JoinedTourService extends ChangeNotifier {
           }
         }
       } catch (e) {
-        debugPrint('⚠️ Could not clone idle tour: $e');
-        // Fall back to using canonical tour id
-        targetTourId = completeTour.id;
+        // If we cannot clone the canonical `tours` doc (often due to
+        // Firestore security rules for client SDKs), don't fail the whole
+        // booking. Fall back to using the canonical tour id and create an
+        // instance under `tour_instances` instead. This allows bookings to
+        // succeed even when clients aren't permitted to write to `tours`.
+        lastError =
+            'Could not clone idle tour: $e - falling back to instance creation';
+        debugPrint(
+          '⚠️ Could not clone idle tour: $e. Falling back to instance creation.',
+        );
+        // Keep `completeTour` as-is and continue — `targetTourId` remains
+        // the canonical tour id assigned earlier.
       }
 
       final bookingId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -932,6 +1148,7 @@ class JoinedTourService extends ChangeNotifier {
             .doc(bookingId)
             .set(bookingMapData);
       } catch (e) {
+        lastError = 'Error writing booking to Firestore: $e';
         debugPrint('❌ Error writing booking to Firestore: $e');
         rethrow;
       }
@@ -986,6 +1203,7 @@ class JoinedTourService extends ChangeNotifier {
             'remainingSeats': newAvailable,
             'bookedSeats': newBookedSeats,
             'bookedUserIds': FieldValue.arrayUnion([userId]),
+            'sourceIdleTourId': completeTour.id,
           });
         } else {
           // Create new instance doc
@@ -1009,6 +1227,7 @@ class JoinedTourService extends ChangeNotifier {
             'bookedSeats': totalPersons,
             'bookedUserIds': [userId],
             'firstBookedUserId': userId,
+            'sourceIdleTourId': completeTour.id,
           };
 
           await instanceRef.set(instanceData);
@@ -1068,6 +1287,7 @@ class JoinedTourService extends ChangeNotifier {
           ),
         );
       } catch (e) {
+        lastError = 'Error creating/updating tour instance: $e';
         debugPrint('❌ Error creating/updating tour instance: $e');
       }
 
@@ -1083,10 +1303,12 @@ class JoinedTourService extends ChangeNotifier {
             'userId': userId,
           };
 
+      lastError = null;
       notifyListeners();
       debugPrint('✅ Booking completed successfully: $bookingId');
       return true;
     } catch (e, stackTrace) {
+      lastError = e.toString();
       debugPrint('❌ Error saving booking: $e');
       debugPrint(
         '📋 Tour ID: ${tour.id}, User ID: $userId, Total Persons: $totalPersons',

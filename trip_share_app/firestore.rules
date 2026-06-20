@@ -1,4 +1,4 @@
-(rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
@@ -12,7 +12,11 @@ service cloud.firestore {
     // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
     match /tours/{tourId} {
       allow read; // Public access - everyone can read tours
-      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
+      allow create: if request.auth != null && (
+        request.auth.uid == request.resource.data.guideId || 
+        isAdmin() ||
+        (request.resource.data.keys().hasAll(['sourceIdleTourId']) && request.resource.data.sourceIdleTourId != '')
+      );
       allow update: if request.auth != null; // Any authenticated user can update (for seat count during bookings)
       allow delete: if request.auth != null && isAdmin();
 
@@ -23,6 +27,13 @@ service cloud.firestore {
                       request.resource.data.userId == request.auth.uid;
         allow update, delete: if request.auth != null;
       }
+    }
+
+    // Active booked occurrences are visible to everyone.
+    match /tour_instances/{instanceId} {
+      allow read;
+      allow create, update: if request.auth != null;
+      allow delete: if isAdmin();
     }
 
     // Users collection - each user has a profile
@@ -48,8 +59,7 @@ service cloud.firestore {
     // ROOT-LEVEL BOOKINGS COLLECTION
     match /bookings/{bookingId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && 
-                    request.resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null;
       allow update, delete: if request.auth != null;
     }
 

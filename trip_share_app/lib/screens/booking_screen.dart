@@ -1,7 +1,10 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -120,6 +123,22 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      // Require authentication for booking. If not logged in, show login dialog.
+      if (AuthService().userId.isEmpty) {
+        final loggedIn = await LoginDialog.show(context);
+        if (!loggedIn) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Please sign in to complete booking'),
+                backgroundColor: DesignColors.error,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+      }
       final fullPhoneNumber = '$_countryCode${_phoneController.text.trim()}';
       final success = await JoinedTourService().joinTour(
         tour: widget.tour,
@@ -136,10 +155,13 @@ class _BookingScreenState extends State<BookingScreen> {
       if (!mounted) return;
 
       if (!success) {
+        final reason = JoinedTourService().lastError;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-              'Booking could not be completed. Please try again.',
+            content: Text(
+              reason == null || reason.isEmpty
+                  ? 'Booking could not be completed. Please try again.'
+                  : 'Booking failed: $reason',
             ),
             backgroundColor: DesignColors.error,
             behavior: SnackBarBehavior.floating,
@@ -152,9 +174,8 @@ class _BookingScreenState extends State<BookingScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: AlertDialog(
+        builder: (_) {
+          final dialog = AlertDialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -222,8 +243,19 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
               ),
             ],
-          ),
-        ),
+          );
+
+          if (kIsWeb) {
+            // Some web renderers can throw engine assertions when using
+            // ImageFilter/BackdropFilter. Use a simple dialog without blur on web.
+            return dialog;
+          }
+
+          return BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: dialog,
+          );
+        },
       );
     } finally {
       if (mounted) {

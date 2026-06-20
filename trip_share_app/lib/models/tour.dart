@@ -28,6 +28,7 @@ class Tour {
   final List<String> bookedUserIds; // List of all booked user IDs
   final int bookedSeats; // Total seats already booked across all users
   final double rating; // Rating of the tour (0-5 stars)
+  final String sourceIdleTourId; // ID of the original idle tour if this is a clone
 
   const Tour({
     required this.id,
@@ -52,6 +53,7 @@ class Tour {
     this.bookedUserIds = const [],
     this.bookedSeats = 0,
     this.rating = 4.5,
+    this.sourceIdleTourId = '',
   });
 
   /// Creates an empty tour instance (useful for placeholders)
@@ -91,6 +93,7 @@ class Tour {
     List<String>? bookedUserIds,
     int? bookedSeats,
     double? rating,
+    String? sourceIdleTourId,
   }) {
     return Tour(
       id: id ?? this.id,
@@ -115,6 +118,7 @@ class Tour {
       bookedUserIds: bookedUserIds ?? this.bookedUserIds,
       bookedSeats: bookedSeats ?? this.bookedSeats,
       rating: rating ?? this.rating,
+      sourceIdleTourId: sourceIdleTourId ?? this.sourceIdleTourId,
     );
   }
 
@@ -125,6 +129,8 @@ class Tour {
         firstBookedUserId.isNotEmpty) {
       return TourStatus.active;
     }
+    // Clones of idle tours should never revert to idle status
+    if (sourceIdleTourId.isNotEmpty) return TourStatus.active;
     if (totalSeats > 0 && remainingSeats == totalSeats) return TourStatus.idle;
     return TourStatus.active;
   }

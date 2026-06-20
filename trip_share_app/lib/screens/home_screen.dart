@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/dynamic_link_service.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/widgets/skeleton_loader.dart';
 import 'package:trip_share_app/theme/design_system.dart';
@@ -93,34 +95,34 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _shareTour(BuildContext context, Tour tour) async {
+    try {
+      final message = await DynamicLinkService().getTourShareMessage(tour);
+      await SharePlus.instance.share(ShareParams(text: message));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share tour: $e'),
+          backgroundColor: DesignColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   List<Tour> _filterTours(List<Tour> tours) {
     if (_selectedCategory == 'All') return tours;
     return tours.where((t) => t.category == _selectedCategory).toList();
   }
 
   List<Tour> _idleTours(List<Tour> tours) {
-    final activeTourIds = _joinedTourService.joinedTours
-        .map((jt) => jt.tour.id)
-        .toSet();
-
-    return tours
-        .where(
-          (t) => t.status == TourStatus.idle && !activeTourIds.contains(t.id),
-        )
-        .toList()
+    return tours.where((t) => t.sourceIdleTourId.isEmpty).toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
   }
 
   List<Tour> _activeTours(List<Tour> tours) {
-    final activeTourIds = _joinedTourService.joinedTours
-        .map((jt) => jt.tour.id)
-        .toSet();
-
-    return tours
-        .where(
-          (t) => t.status != TourStatus.idle || activeTourIds.contains(t.id),
-        )
-        .toList()
+    return tours.where((t) => t.sourceIdleTourId.isNotEmpty).toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
   }
 
@@ -1718,50 +1720,85 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
-                        // Custom styled detail button
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                DesignColors.primary,
-                                DesignColors.primaryDark,
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: DesignColors.primary.withOpacity(0.15),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Details',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: 0.3,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _shareTour(context, tour),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: DesignColors.secondary,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: DesignColors.primary.withOpacity(
+                                      0.18,
+                                    ),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.share_outlined,
+                                      size: 13,
+                                      color: DesignColors.primary,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Share',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: DesignColors.primary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              SizedBox(width: 4),
-                              Icon(
-                                Icons.chevron_right_rounded,
-                                size: 14,
-                                color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
                               ),
-                            ],
-                          ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    DesignColors.primary,
+                                    DesignColors.primaryDark,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Details',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  SizedBox(width: 2),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 13,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1871,6 +1908,19 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _toursStream,
       builder: (context, snapshot) {
         final loadedTours = snapshot.data ?? const <Tour>[];
+        debugPrint(
+          '🏠 Home Screen - snapshot state=${snapshot.connectionState} loaded=${loadedTours.length}',
+        );
+        if (loadedTours.isNotEmpty)
+          debugPrint(
+            '🏠 Home - tour ids: ${loadedTours.map((t) => t.id).take(10).toList()}',
+          );
+        // Debug: print per-tour booking/status info to diagnose active filtering
+        for (final t in loadedTours) {
+          debugPrint(
+            '🏷️ Tour debug: id=${t.id} sourceIdle=${t.sourceIdleTourId} bookedSeats=${t.bookedSeats} bookedUserIds=${t.bookedUserIds.length} status=${t.status} remaining=${t.remainingSeats} total=${t.totalSeats}',
+          );
+        }
         final filteredTours = _applyFilters(loadedTours);
         final tours = <Tour>[...filteredTours];
         final idleTours = _idleTours(tours);

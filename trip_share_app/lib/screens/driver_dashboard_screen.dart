@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/services/auth_service.dart';
@@ -191,28 +192,48 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: AppBar(
-              backgroundColor: DesignColors.surface.withOpacity(0.95),
-              elevation: 0,
-              automaticallyImplyLeading: false,
-              title: const Text(
-                'Driver Dashboard',
-                style: TextStyle(
-                  color: DesignColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
+          child: kIsWeb
+              ? AppBar(
+                  backgroundColor: DesignColors.surface.withOpacity(0.95),
+                  elevation: 0,
+                  automaticallyImplyLeading: false,
+                  title: const Text(
+                    'Driver Dashboard',
+                    style: TextStyle(
+                      color: DesignColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  actions: [
+                    IconButton(
+                      icon: Icon(Icons.logout, color: DesignColors.primary),
+                      onPressed: _showLogoutDialog,
+                    ),
+                  ],
+                )
+              : BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: AppBar(
+                    backgroundColor: DesignColors.surface.withOpacity(0.95),
+                    elevation: 0,
+                    automaticallyImplyLeading: false,
+                    title: const Text(
+                      'Driver Dashboard',
+                      style: TextStyle(
+                        color: DesignColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: Icon(Icons.logout, color: DesignColors.primary),
+                        onPressed: _showLogoutDialog,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              actions: [
-                IconButton(
-                  icon: Icon(Icons.logout, color: DesignColors.primary),
-                  onPressed: _showLogoutDialog,
-                ),
-              ],
-            ),
-          ),
         ),
       ),
       body: _selectedIndex == 0

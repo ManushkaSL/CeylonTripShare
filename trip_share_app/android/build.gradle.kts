@@ -5,7 +5,6 @@ allprojects {
     }
 }
 
-ext["kotlin_version"] = "2.1.10"
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory

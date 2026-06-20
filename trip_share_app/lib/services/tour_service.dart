@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:trip_share_app/models/tour.dart';
 
 class TourService {
@@ -79,6 +79,7 @@ class TourService {
       firstBookedUserId: firstBooker,
       bookedUserIds: userIds,
       bookedSeats: bookedSeats,
+      sourceIdleTourId: oldTour.sourceIdleTourId,
     );
     debugPrint(
       '✅ Updated tour cache: $tourId remaining=$newRemainingSeats booked=$bookedSeats',
@@ -129,8 +130,8 @@ class TourService {
         );
         var total = _intFrom(tourData['totalSeats']);
         final bookedUserIds = _toStringList(tourData['bookedUserIds']);
-        final firstBookedUserId =
-            (tourData['firstBookedUserId'] ?? '').toString();
+        final firstBookedUserId = (tourData['firstBookedUserId'] ?? '')
+            .toString();
 
         final hasBookingMarkers =
             currentBookedSeats > 0 ||
@@ -228,74 +229,179 @@ class TourService {
   }
 
   Stream<List<Tour>> streamTours() {
-    debugPrint('📡 Starting tour stream... Firestore instance: $_firestore');
+    debugPrint(
+      '📡 Starting combined tours+instances stream... Firestore: $_firestore',
+    );
 
-    try {
-      final stream = _firestore.collection('tours').snapshots();
-      debugPrint('📡 Collection reference created successfully');
+    final controller = StreamController<List<Tour>>.broadcast();
+    QuerySnapshot<Map<String, dynamic>>? latestToursSnap;
+    QuerySnapshot<Map<String, dynamic>>? latestInstSnap;
+    Set<String> latestBookedTourIds = {};
+    void emitCombinedLatest() {
+      try {
+        final toursDocs =
+            latestToursSnap?.docs ??
+            <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        final instDocs =
+            latestInstSnap?.docs ??
+            <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
-      return stream
-          .map((snapshot) {
-            try {
-              debugPrint(
-                '📥 Received snapshot with ${snapshot.docs.length} tour documents',
-              );
-              debugPrint(
-                '📥 Snapshot metadata - source: ${snapshot.metadata.hasPendingWrites ? "pending" : "server"}',
-              );
+        final tours = toursDocs
+            .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
+            .whereType<Tour>()
+            .toList(growable: false);
 
-              if (snapshot.docs.isEmpty) {
-                debugPrint('⚠️ Tours collection is empty!');
-                return const <Tour>[];
-              }
+        final instances = instDocs
+            .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
+            .whereType<Tour>()
+            .toList(growable: false);
 
-              final tours = snapshot.docs
-                  .map((doc) {
-                    try {
-                      return _mergeWithCache(parseTour(doc.data(), doc.id));
-                    } catch (e) {
-                      debugPrint('⚠️ Error parsing tour ${doc.id}: $e');
-                      return null;
-                    }
-                  })
-                  .whereType<Tour>()
-                  .toList(growable: false);
+        final instanceSourceIds = instances
+            .map((tour) => tour.sourceIdleTourId)
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        final visibleTours = tours
+            .where(
+              (tour) =>
+                  tour.sourceIdleTourId.isEmpty ||
+                  !instanceSourceIds.contains(tour.id),
+            )
+            .toList(growable: false);
 
-              // Populate cache for immediate updates after bookings
-              for (final tour in tours) {
-                _tourCache[tour.id] = tour;
-              }
+        // If instances are unavailable (permission denied), synthesize
+        // active markers for tours that have bookings so UI still shows
+        // them as active.
+        List<Tour> effectiveTours = visibleTours;
+        if (instDocs.isEmpty && latestBookedTourIds.isNotEmpty) {
+          effectiveTours = visibleTours
+              .map((t) {
+                if (latestBookedTourIds.contains(t.id)) {
+                  // Ensure the tour appears active by marking at least one booked
+                  // seat and a bookedUserIds entry. This doesn't modify Firestore.
+                  return t.copyWith(
+                    bookedSeats: t.bookedSeats > 0 ? t.bookedSeats : 1,
+                    bookedUserIds: t.bookedUserIds.isNotEmpty
+                        ? t.bookedUserIds
+                        : ['_booked'],
+                    firstBookedUserId: t.firstBookedUserId.isNotEmpty
+                        ? t.firstBookedUserId
+                        : '_booked',
+                  );
+                }
+                return t;
+              })
+              .toList(growable: false);
+          debugPrint(
+            '🔧 Synthesized active markers for booked tours: ${latestBookedTourIds.toList()}',
+          );
+        }
 
-              debugPrint(
-                '✅ Successfully loaded ${tours.length} tours out of ${snapshot.docs.length} documents',
-              );
+        final combined = [...effectiveTours, ...instances]
+          ..sort((a, b) => a.startDate.compareTo(b.startDate));
 
-              final sortedTours = [...tours]
-                ..sort((a, b) => a.startDate.compareTo(b.startDate));
-              return sortedTours;
-            } catch (e, st) {
-              debugPrint('❌ Error mapping tour data: $e');
-              debugPrint('📍 Stack trace: $st');
-              rethrow;
-            }
-          })
-          .handleError((error, stackTrace) {
-            debugPrint('❌ ==== STREAM ERROR ====');
-            debugPrint('❌ Error: $error');
-            debugPrint('❌ Error type: ${error.runtimeType}');
-            if (error is FirebaseException) {
-              debugPrint('🔥 Firebase error code: ${error.code}');
-              debugPrint('🔥 Firebase error message: ${error.message}');
-            }
-            debugPrint('❌ Stack trace: $stackTrace');
-            debugPrint('❌ ==== END STREAM ERROR ====');
-            throw error;
-          });
-    } catch (e, st) {
-      debugPrint('❌ Fatal error creating stream: $e');
-      debugPrint('📍 Stack trace: $st');
-      rethrow;
+        for (final tour in combined) {
+          _tourCache[tour.id] = tour;
+        }
+
+        debugPrint(
+          '📣 Emitting combined tours+instances: count=${combined.length} ids=${combined.map((t) => t.id).take(8).toList()}',
+        );
+        controller.add(combined);
+      } catch (e, st) {
+        debugPrint('❌ Error combining tours and instances: $e');
+        debugPrint('📍 $st');
+        controller.addError(e, st);
+      }
     }
+
+    final toursSub = _firestore
+        .collection('tours')
+        .snapshots()
+        .listen(
+          (tSnap) {
+            latestToursSnap = tSnap as QuerySnapshot<Map<String, dynamic>>;
+            emitCombinedLatest();
+          },
+          onError: (e, st) {
+            final errStr = e?.toString() ?? '$e';
+            if (errStr.contains('permission-denied')) {
+              debugPrint(
+                '⚠️ Tours stream permission denied: $e — continuing without tours snapshots',
+              );
+              latestToursSnap = null;
+              // Emit whatever we have (likely instances only)
+              emitCombinedLatest();
+            } else {
+              debugPrint('❌ Tours stream error: $e');
+              controller.addError(e, st);
+            }
+          },
+        );
+
+    final instSub = _firestore
+        .collection('tour_instances')
+        .snapshots()
+        .listen(
+          (iSnap) {
+            latestInstSnap = iSnap as QuerySnapshot<Map<String, dynamic>>;
+            emitCombinedLatest();
+          },
+          onError: (e, st) {
+            final errStr = e?.toString() ?? '$e';
+            if (errStr.contains('permission-denied')) {
+              debugPrint(
+                '⚠️ Instances stream permission denied: $e — hiding instances and continuing',
+              );
+              latestInstSnap = null;
+              emitCombinedLatest();
+            } else {
+              debugPrint('❌ Instances stream error: $e');
+              controller.addError(e, st);
+            }
+          },
+        );
+
+    // Also listen to bookings to infer which tours have active bookings when
+    // `tour_instances` cannot be read by the client. This allows the UI to
+    // show booked tours as active even under restrictive Firestore rules.
+    Set<String> bookedIds = {};
+    final bookingsSub = _firestore
+        .collection('bookings')
+        .snapshots()
+        .listen(
+          (bSnap) {
+            try {
+              bookedIds = bSnap.docs
+                  .map((d) => (d.data()['tourId'] ?? '').toString())
+                  .where((id) => id.isNotEmpty)
+                  .toSet();
+            } catch (e) {
+              bookedIds = {};
+            }
+            latestBookedTourIds = bookedIds;
+            emitCombinedLatest();
+          },
+          onError: (e, st) {
+            final errStr = e?.toString() ?? '$e';
+            if (errStr.contains('permission-denied')) {
+              debugPrint(
+                '⚠️ Bookings stream permission denied: $e — cannot infer booked tours',
+              );
+              latestBookedTourIds = {};
+              emitCombinedLatest();
+            } else {
+              debugPrint('❌ Bookings stream error: $e');
+            }
+          },
+        );
+
+    controller.onCancel = () async {
+      await toursSub.cancel();
+      await instSub.cancel();
+      await bookingsSub.cancel();
+    };
+
+    return controller.stream;
   }
 
   Tour parseTour(Map<String, dynamic> map, String docId) {
@@ -495,9 +601,7 @@ class TourService {
     }
 
     // FIX: If remainingSeats was missing or 0, but totalSeats is set and no one has actually booked, default to totalSeats
-    if (remainingSeatsField == null &&
-        !hasBookings &&
-        totalSeats > 0) {
+    if (remainingSeatsField == null && !hasBookings && totalSeats > 0) {
       debugPrint(
         '   🔧 FIX: remainingSeats was missing but totalSeats=$totalSeats and no bookings - defaulting remainingSeats to totalSeats',
       );
@@ -556,6 +660,9 @@ class TourService {
       firstBookedUserId: firstBookedUserId,
       bookedUserIds: bookedUserIds,
       bookedSeats: bookedSeats,
+      sourceIdleTourId: _stringFrom(
+        _pick(map, ['sourceIdleTourId', 'source_idle_tour_id']),
+      ),
     );
   }
 
