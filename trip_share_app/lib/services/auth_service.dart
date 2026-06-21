@@ -308,8 +308,20 @@ class AuthService extends ChangeNotifier {
           if (signInError.code == 'invalid-credential' ||
               signInError.code == 'wrong-password' ||
               signInError.code == 'user-not-found') {
-            return 'This email is already registered. Please sign in with the '
-                'existing password or use a different email.';
+            try {
+              await _auth.sendPasswordResetEmail(email: trimmedEmail);
+              return 'This invited email already has a login account. A '
+                  'password reset link was sent to $trimmedEmail. Set the '
+                  'password from that email, then sign in to activate the '
+                  'driver account.';
+            } on FirebaseAuthException catch (resetError) {
+              debugPrint(
+                'Password reset failed: ${resetError.code} - '
+                '${resetError.message}',
+              );
+              return 'This invited email already has a login account. Please '
+                  'sign in with its existing password or use Forgot Password.';
+            }
           }
           rethrow;
         }

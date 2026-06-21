@@ -286,11 +286,13 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _buildInfoChip(
-                        Icons.calendar_month_rounded,
-                        _formatDate(tour.startDate),
-                      ),
-                      const SizedBox(width: 12),
+                      if (status != TourStatus.idle) ...[
+                        _buildInfoChip(
+                          Icons.calendar_month_rounded,
+                          _formatDate(tour.startDate),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       _buildInfoChip(
                         Icons.access_time_rounded,
                         _formatTime(tour.startDate),
@@ -559,33 +561,31 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   ),
                 ],
               )
-            : Container(
+            : SizedBox(
                 height: 52,
-                decoration: BoxDecoration(
-                  color: DesignColors.error.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: DesignColors.error.withOpacity(0.3),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.info_rounded,
-                      size: 20,
-                      color: DesignColors.error,
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.lock_rounded, size: 19),
+                  label: const Text(
+                    'Filled',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'This tour is fully booked',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: DesignColors.error,
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    disabledBackgroundColor: DesignColors.error.withOpacity(
+                      0.14,
+                    ),
+                    disabledForegroundColor: DesignColors.error,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(
+                        color: DesignColors.error.withOpacity(0.3),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
       ),

@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _filterAvailability =
       'Any'; // 'Any','Available','Limited','FullyBooked'
   double _filterMinRating = 0.0;
+  DateTime? _filterDate;
 
   @override
   void initState() {
@@ -280,6 +281,60 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 8),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
+                  onTap: _selectHomeFilterDate,
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: _filterDate == null
+                          ? DesignColors.secondary
+                          : DesignColors.accent,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _filterDate == null
+                            ? DesignColors.primary.withOpacity(0.18)
+                            : DesignColors.accent.withOpacity(0.5),
+                      ),
+                    ),
+                    child: Icon(
+                      _filterDate == null
+                          ? Icons.calendar_month_outlined
+                          : Icons.event_available_rounded,
+                      color: _filterDate == null
+                          ? DesignColors.primary
+                          : Colors.white,
+                      size: 21,
+                    ),
+                  ),
+                ),
+                if (_filterDate != null)
+                  Positioned(
+                    top: -6,
+                    right: -5,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _filterDate = null),
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: const BoxDecoration(
+                          color: DesignColors.error,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 7),
             // Luxury equalizer filter button (clickable)
             GestureDetector(
               onTap: _showFilterSheet,
@@ -313,6 +368,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _selectHomeFilterDate() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _filterDate ?? now,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (date != null && mounted) {
+      setState(() => _filterDate = date);
+    }
   }
 
   // Hero banner shown at the top of Home
@@ -644,6 +712,19 @@ class _HomeScreenState extends State<HomeScreen> {
     // Rating
     if (_filterMinRating > 0) {
       results = results.where((t) => (t.rating >= _filterMinRating)).toList();
+    }
+
+    // Start date
+    if (_filterDate != null) {
+      final selectedDate = _filterDate!;
+      results = results
+          .where(
+            (t) =>
+                t.startDate.year == selectedDate.year &&
+                t.startDate.month == selectedDate.month &&
+                t.startDate.day == selectedDate.day,
+          )
+          .toList();
     }
 
     // Search query (name, location, category)
@@ -1689,7 +1770,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '$bookedSeats/${tour.totalSeats} seats booked',
+                                  isActiveTour
+                                      ? '$bookedSeats/${tour.totalSeats} seats booked'
+                                      : 'Total seat count: ${tour.totalSeats}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: DesignColors.textSecondary,
@@ -1698,42 +1781,45 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ],
                             ),
-                            Text(
-                              '${tour.remainingSeats} left',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: tour.remainingSeats <= 2
-                                    ? DesignColors.accentSecondary
-                                    : DesignColors.success,
-                                fontWeight: FontWeight.w800,
+                            if (isActiveTour)
+                              Text(
+                                '${tour.remainingSeats} left',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: tour.remainingSeats <= 2
+                                      ? DesignColors.accentSecondary
+                                      : DesignColors.success,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 5),
-                        // Sleek custom linear loading meter
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            height: 4,
-                            width: double.infinity,
-                            color: DesignColors.divider,
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: fillRatio,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      DesignColors.primaryLight,
-                                      DesignColors.primary,
-                                    ],
+                        if (isActiveTour) ...[
+                          const SizedBox(height: 5),
+                          // Sleek custom linear loading meter
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              height: 4,
+                              width: double.infinity,
+                              color: DesignColors.divider,
+                              child: FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: fillRatio,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        DesignColors.primaryLight,
+                                        DesignColors.primary,
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
 

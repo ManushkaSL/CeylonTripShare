@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/screens/chat_screen.dart';
 import 'package:trip_share_app/screens/driver_tour_details_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/theme/design_system.dart';
@@ -15,6 +17,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _auth = AuthService();
   int _selectedIndex = 0;
+  DateTime? _selectedDate;
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +41,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         index: _selectedIndex,
         children: [
           _buildDashboard(),
-          _buildPlaceholder(
-            Icons.chat_bubble_outline_rounded,
-            'Driver Chat',
-            'Chat details will be added next.',
-          ),
+          _buildDriverChats(),
           _buildProfile(),
         ],
       ),
@@ -91,29 +90,94 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
           );
         }
 
-        final assignments = _groupAssignedTours(snapshot.data!.docs);
-        if (assignments.isEmpty) {
+        final allAssignments = _groupAssignedTours(snapshot.data!.docs);
+        if (allAssignments.isEmpty) {
           return _messageState(
             Icons.assignment_outlined,
             'No assigned tours',
             'Tours assigned to your driver account will appear here.',
           );
         }
+        final assignments = _filterAssignments(allAssignments);
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
           children: [
-            Text(
-              '${assignments.length} assigned '
-              '${assignments.length == 1 ? 'tour' : 'tours'}',
-              style: const TextStyle(
-                color: DesignColors.textSecondary,
-                fontWeight: FontWeight.w700,
+            _buildDateFilter(),
+            const SizedBox(height: 14),
+            if (assignments.isEmpty)
+              _inlineEmptyState(
+                Icons.event_busy_outlined,
+                'No tours assigned on ${_formatDate(_selectedDate!)}',
+              )
+            else ...[
+              Text(
+                '${assignments.length} assigned '
+                '${assignments.length == 1 ? 'tour' : 'tours'}',
+                style: const TextStyle(
+                  color: DesignColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            for (final assignment in assignments)
-              _buildTourCard(assignment),
+              const SizedBox(height: 12),
+              for (final assignment in assignments)
+                _buildTourCard(assignment),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDriverChats() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _firestore.collection('bookings').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _messageState(
+            Icons.error_outline_rounded,
+            'Could not load chats',
+            snapshot.error.toString(),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: DesignColors.primary),
+          );
+        }
+
+        final allAssignments = _groupAssignedTours(snapshot.data!.docs);
+        if (allAssignments.isEmpty) {
+          return _messageState(
+            Icons.chat_bubble_outline_rounded,
+            'No group chats yet',
+            'A tour chat will appear automatically when a tour is assigned to you.',
+          );
+        }
+        final assignments = _filterAssignments(allAssignments);
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          children: [
+            _buildDateFilter(),
+            const SizedBox(height: 14),
+            if (assignments.isEmpty)
+              _inlineEmptyState(
+                Icons.event_busy_outlined,
+                'No chats available on ${_formatDate(_selectedDate!)}',
+              )
+            else ...[
+              const Text(
+                'Assigned tour chats',
+                style: TextStyle(
+                  color: DesignColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final assignment in assignments)
+                _buildChatCard(assignment),
+            ],
           ],
         );
       },
@@ -173,6 +237,91 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     final result = grouped.values.toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
     return result;
+  }
+
+  List<_DriverTourAssignment> _filterAssignments(
+    List<_DriverTourAssignment> assignments,
+  ) {
+    final selectedDate = _selectedDate;
+    if (selectedDate == null) return assignments;
+
+    return assignments
+        .where(
+          (assignment) =>
+              assignment.startDate.year == selectedDate.year &&
+              assignment.startDate.month == selectedDate.month &&
+              assignment.startDate.day == selectedDate.day,
+        )
+        .toList();
+  }
+
+  Widget _buildDateFilter() {
+    return InkWell(
+      onTap: _selectFilterDate,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: DesignColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _selectedDate == null
+                ? DesignColors.divider
+                : DesignColors.primary.withOpacity(0.45),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.filter_alt_outlined,
+              color: DesignColors.primary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _selectedDate == null
+                    ? 'Filter by date'
+                    : 'Showing ${_formatDate(_selectedDate!)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: _selectedDate == null
+                      ? DesignColors.textSecondary
+                      : DesignColors.primary,
+                ),
+              ),
+            ),
+            if (_selectedDate != null)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Clear date filter',
+                onPressed: () => setState(() => _selectedDate = null),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: DesignColors.textSecondary,
+                ),
+              )
+            else
+              const Icon(
+                Icons.calendar_month_rounded,
+                color: DesignColors.primary,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectFilterDate() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? now,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (date != null && mounted) {
+      setState(() => _selectedDate = date);
+    }
   }
 
   String _passengerName(Map<String, dynamic> data) {
@@ -271,6 +420,79 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
+  Widget _buildChatCard(_DriverTourAssignment assignment) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      color: DesignColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: DesignColors.divider),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ChatScreen(tour: assignment.toTour()),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: DesignColors.primary.withOpacity(0.11),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.forum_rounded,
+                  color: DesignColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_formatDate(assignment.startDate)}: '
+                      '${assignment.tourName}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: DesignColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${assignment.passengerCount} '
+                      '${assignment.passengerCount == 1 ? 'passenger' : 'passengers'}',
+                      style: const TextStyle(
+                        color: DesignColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: DesignColors.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _cardInfo(IconData icon, String text) {
     return Row(
       children: [
@@ -340,6 +562,30 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
   Widget _buildPlaceholder(IconData icon, String title, String subtitle) {
     return _messageState(icon, title, subtitle);
+  }
+
+  Widget _inlineEmptyState(IconData icon, String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+      decoration: BoxDecoration(
+        color: DesignColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 42, color: DesignColors.textSecondary),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: DesignColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _messageState(IconData icon, String title, String subtitle) {
@@ -424,6 +670,24 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         '${hour == 0 ? 12 : hour}:${date.minute.toString().padLeft(2, '0')} '
         '$period';
   }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
 }
 
 class _DriverTourAssignment {
@@ -440,4 +704,18 @@ class _DriverTourAssignment {
     required this.tourName,
     required this.startDate,
   });
+
+  Tour toTour() {
+    return Tour(
+      id: instanceId,
+      name: tourName,
+      imageUrl: '',
+      startDate: startDate,
+      totalSeats: passengerCount,
+      remainingSeats: 0,
+      price: 0,
+      bookedSeats: passengerCount,
+      sourceIdleTourId: templateTourId,
+    );
+  }
 }

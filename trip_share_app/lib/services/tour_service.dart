@@ -245,6 +245,41 @@ class TourService {
     }
   }
 
+  DateTime? _parseAdminStartDateTime(Map<String, dynamic> map) {
+    final directDate = _dateTimeFrom(
+      _pick(map, ['startDate', 'start_date', 'date']),
+    );
+    final rawTime = _pick(map, ['start_time', 'startTime']);
+    final rawPeriod = _stringFrom(
+      _pick(map, ['start_time_period', 'startTimePeriod']),
+    ).toUpperCase();
+
+    // Idle templates do not have a scheduled date. Use today's date only as a
+    // temporary carrier for the admin-defined time; the customer-selected date
+    // replaces the year/month/day when the booking is confirmed.
+    final now = DateTime.now();
+    final day = directDate ?? DateTime(now.year, now.month, now.day);
+
+    final timeValue = rawTime?.toString().trim() ?? '';
+    if (timeValue.isEmpty) return directDate ?? day;
+
+    final match = RegExp(
+      r'^(\d{1,2})(?::(\d{1,2}))?\s*([AaPp][Mm])?$',
+    ).firstMatch(timeValue);
+    if (match == null) return directDate ?? day;
+
+    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    final minute = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final period = (match.group(3) ?? rawPeriod).toUpperCase();
+    if (period == 'PM' && hour < 12) {
+      hour += 12;
+    } else if (period == 'AM' && hour == 12) {
+      hour = 0;
+    }
+
+    return DateTime(day.year, day.month, day.day, hour, minute);
+  }
+
   Stream<List<Tour>> streamTours() {
     debugPrint(
       '📡 Starting combined tours+instances stream... Firestore: $_firestore',
@@ -269,10 +304,31 @@ class TourService {
             .whereType<Tour>()
             .toList(growable: false);
 
-        final parsedInstances = instDocs
+        final rawInstances = instDocs
             .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
             .whereType<Tour>()
             .toList(growable: false);
+        final templatesById = {
+          for (final tour in tours) tour.id: tour,
+        };
+        final parsedInstances = rawInstances.map((instance) {
+          final template = templatesById[instance.sourceIdleTourId];
+          if (template == null) return instance;
+
+          // The booked occurrence controls the date, while the reusable idle
+          // template controls the administrator-defined start time.
+          final adminTime = template.startDate;
+          return instance.copyWith(
+            startDate: DateTime(
+              instance.startDate.year,
+              instance.startDate.month,
+              instance.startDate.day,
+              adminTime.hour,
+              adminTime.minute,
+              adminTime.second,
+            ),
+          );
+        }).toList(growable: false);
         final instances = bookingsSnapshotAvailable
             ? parsedInstances
                   .where((tour) => latestBookedTourIds.contains(tour.id))
@@ -652,9 +708,7 @@ class TourService {
       imageUrl: imageUrl.isNotEmpty
           ? imageUrl
           : (photos.isNotEmpty ? photos.first : ''),
-      startDate:
-          _dateTimeFrom(_pick(map, ['startDate', 'start_date', 'date'])) ??
-          DateTime.now(),
+      startDate: _parseAdminStartDateTime(map) ?? DateTime.now(),
       totalSeats: totalSeats,
       remainingSeats: resolvedRemainingSeats,
       price: _doubleFrom(_pick(map, ['price', 'cost', 'amount'])),

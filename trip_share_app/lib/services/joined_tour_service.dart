@@ -149,12 +149,28 @@ class JoinedTourService extends ChangeNotifier {
             }
 
             // Find deleted bookings by comparing with last seen bookings
+            var deletedCurrentUserBooking = false;
             for (final deletedId in _lastSeenBookings.keys) {
               if (!currentBookingIds.contains(deletedId)) {
+                final cachedData = _bookingCache[deletedId];
+                if (cachedData?['userId'] == _authService.userId) {
+                  deletedCurrentUserBooking = true;
+                  _bookings.removeWhere((booking) => booking.id == deletedId);
+                  _joinedTours.removeWhere(
+                    (joinedTour) => joinedTour.bookingId == deletedId,
+                  );
+                }
                 // This booking was deleted! Use cached data to refund seats
                 _handleDeletedBooking(deletedId);
                 _bookingCache.remove(deletedId); // Clean up cache
               }
+            }
+
+            if (deletedCurrentUserBooking) {
+              // Remove deleted-tour cards and chats immediately. Reload once
+              // more from Firestore to keep passenger-linked bookings in sync.
+              notifyListeners();
+              loadBookings();
             }
 
             // Update last seen bookings

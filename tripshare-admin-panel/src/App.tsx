@@ -8,11 +8,51 @@ import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, L
 import { motion, AnimatePresence } from 'motion/react';
 import { Tour, Booking, Driver } from './types';
 import { db, auth } from './firebase';
-import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, getDoc, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  getDocs,
+  getDoc,
+  query,
+  serverTimestamp,
+  updateDoc,
+  setDoc,
+  writeBatch,
+  type DocumentData,
+  type DocumentReference,
+} from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase';
 
 const SUPABASE_BUCKET = 'images';
+const FIRESTORE_DELETE_BATCH_SIZE = 400;
+
+function chunkValues<T>(values: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += chunkSize) {
+    chunks.push(values.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+async function deleteDocumentRefsInBatches(
+  refs: Iterable<DocumentReference<DocumentData>>,
+) {
+  const uniqueRefs = new Map<string, DocumentReference<DocumentData>>();
+  for (const ref of refs) {
+    uniqueRefs.set(ref.path, ref);
+  }
+
+  const refsToDelete = Array.from(uniqueRefs.values());
+  for (const refsChunk of chunkValues(refsToDelete, FIRESTORE_DELETE_BATCH_SIZE)) {
+    const batch = writeBatch(db);
+    refsChunk.forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
+}
 
 function extractSupabasePathFromUrl(imageUrl: string, bucket: string) {
   try {
@@ -824,6 +864,9 @@ export default function App() {
   const deleteBooking = async (bookingId: string) => {
     if (!confirm('Are you sure you want to delete this booking?')) return;
     try {
+      const bookingDoc = await getDoc(doc(db, 'bookings', bookingId));
+      const bookingData = bookingDoc.data();
+
       // Get the booking from state
       const booking = bookings.find(b => b.id === bookingId);
       
@@ -847,6 +890,47 @@ export default function App() {
           });
 
           console.log(`Booking deleted: restored ${numberOfPeople} seats`);
+        }
+      }
+
+      if (bookingData) {
+        const chatId = (
+          bookingData.instanceId ||
+          bookingData.instance_id ||
+          bookingData.tourId ||
+          bookingData.tour_id ||
+          ''
+        ).toString();
+        const bookingDate = (
+          bookingData.tourDate ||
+          bookingData.tour_date ||
+          ''
+        ).toString().slice(0, 10);
+
+        if (chatId) {
+          const messagesSnapshot = await getDocs(collection(db, 'messages'));
+          const chatMessageRefs = messagesSnapshot.docs
+            .filter(messageDoc => {
+              const messageData = messageDoc.data();
+              const messageChatId = (
+                messageData.instanceId ||
+                messageData.instance_id ||
+                messageData.tourId ||
+                messageData.tour_id ||
+                ''
+              ).toString();
+              if (messageChatId !== chatId) return false;
+
+              const messageDate = (
+                messageData.tourDate ||
+                messageData.tour_date ||
+                ''
+              ).toString().slice(0, 10);
+              return !bookingDate || !messageDate || messageDate === bookingDate;
+            })
+            .map(messageDoc => messageDoc.ref);
+
+          await deleteDocumentRefsInBatches(chatMessageRefs);
         }
       }
 
@@ -1265,22 +1349,166 @@ export default function App() {
   };
 
   const handleDeleteTour = async (id: string, images: string[]) => {
-    if (!confirm('Are you sure you want to delete this tour?')) return;
+    if (!confirm(
+      'Are you sure you want to delete this idle tour? All related active tours, bookings, chats, and driver locations will also be permanently deleted.',
+    )) return;
+
     try {
+      const childRefs = new Map<string, DocumentReference<DocumentData>>();
+      const relatedTourRefs = new Map<string, DocumentReference<DocumentData>>();
+      const addChildRef = (ref: DocumentReference<DocumentData>) => {
+        childRefs.set(ref.path, ref);
+      };
+      const addRelatedTourRef = (ref: DocumentReference<DocumentData>) => {
+        relatedTourRefs.set(ref.path, ref);
+      };
+
+      // Load the relationship collections once, then follow all linked IDs.
+      // Some older bookings point idle -> cloned tour -> instance, so a
+      // one-level query from the idle ID is not sufficient.
+      const [
+        toursSnapshot,
+        instancesSnapshot,
+        bookingsSnapshot,
+        messagesSnapshot,
+        joinedToursSnapshot,
+      ] = await Promise.all([
+        getDocs(collection(db, 'tours')),
+        getDocs(collection(db, 'tour_instances')),
+        getDocs(collection(db, 'bookings')),
+        getDocs(collection(db, 'messages')),
+        getDocs(collection(db, 'joinedTours')),
+      ]);
+
+      const relatedTourIds = new Set<string>([id]);
+      const relationFields = [
+        'sourceIdleTourId',
+        'source_idle_tour_id',
+        'templateTourId',
+        'template_tour_id',
+        'instanceId',
+        'instance_id',
+        'tourId',
+        'tour_id',
+      ];
+      const documentRelationIds = (data: DocumentData) =>
+        relationFields
+          .map(field => data[field])
+          .filter((value): value is string =>
+            typeof value === 'string' && value.trim().length > 0,
+          );
+      const isRelated = (data: DocumentData) =>
+        documentRelationIds(data).some(relatedId => relatedTourIds.has(relatedId));
+      const addDocumentRelationIds = (data: DocumentData) => {
+        let changed = false;
+        documentRelationIds(data).forEach(relatedId => {
+          if (!relatedTourIds.has(relatedId)) {
+            relatedTourIds.add(relatedId);
+            changed = true;
+          }
+        });
+        return changed;
+      };
+
+      let foundMoreRelations = true;
+      while (foundMoreRelations) {
+        foundMoreRelations = false;
+
+        toursSnapshot.docs.forEach(tourDoc => {
+          if (tourDoc.id === id || !isRelated(tourDoc.data())) return;
+          if (!relatedTourIds.has(tourDoc.id)) {
+            relatedTourIds.add(tourDoc.id);
+            foundMoreRelations = true;
+          }
+          addRelatedTourRef(tourDoc.ref);
+          if (addDocumentRelationIds(tourDoc.data())) {
+            foundMoreRelations = true;
+          }
+        });
+
+        instancesSnapshot.docs.forEach(instanceDoc => {
+          if (!isRelated(instanceDoc.data()) &&
+              !relatedTourIds.has(instanceDoc.id)) return;
+          if (!relatedTourIds.has(instanceDoc.id)) {
+            relatedTourIds.add(instanceDoc.id);
+            foundMoreRelations = true;
+          }
+          addRelatedTourRef(instanceDoc.ref);
+          if (addDocumentRelationIds(instanceDoc.data())) {
+            foundMoreRelations = true;
+          }
+        });
+
+        bookingsSnapshot.docs.forEach(bookingDoc => {
+          if (!isRelated(bookingDoc.data())) return;
+          addChildRef(bookingDoc.ref);
+          if (addDocumentRelationIds(bookingDoc.data())) {
+            foundMoreRelations = true;
+          }
+        });
+
+        joinedToursSnapshot.docs.forEach(joinedTourDoc => {
+          if (!isRelated(joinedTourDoc.data())) return;
+          addChildRef(joinedTourDoc.ref);
+          if (addDocumentRelationIds(joinedTourDoc.data())) {
+            foundMoreRelations = true;
+          }
+        });
+      }
+
+      // Messages are leaves in the relationship graph. Collect them after all
+      // clone, instance, and booking IDs have been discovered.
+      messagesSnapshot.docs.forEach(messageDoc => {
+        if (isRelated(messageDoc.data())) {
+          addChildRef(messageDoc.ref);
+        }
+      });
+
+      // Firestore does not automatically delete subcollections when their
+      // parent is deleted, so remove any legacy nested booking records too.
+      const relatedIds = Array.from(relatedTourIds);
+      const nestedBookingSnapshots = await Promise.all(
+        relatedIds.flatMap(relatedId => [
+          getDocs(collection(db, 'tours', relatedId, 'bookings')),
+          getDocs(collection(db, 'tour_instances', relatedId, 'bookings')),
+        ]),
+      );
+      nestedBookingSnapshots.forEach(snapshot => {
+        snapshot.docs.forEach(document => addChildRef(document.ref));
+      });
+
+      relatedIds.forEach(relatedId => {
+        addChildRef(doc(db, 'driver_locations', relatedId));
+      });
+
+      // Delete dependants first, then active occurrences, and finally the idle
+      // template. This makes the operation safe to retry after an interruption.
+      await deleteDocumentRefsInBatches(childRefs.values());
+      await deleteDocumentRefsInBatches(relatedTourRefs.values());
+      await deleteDoc(doc(db, 'tours', id));
+
+      const failedImageDeletes: string[] = [];
       for (const imageUrl of images) {
         const imagePath = extractSupabasePathFromUrl(imageUrl, SUPABASE_BUCKET);
         if (imagePath) {
           const { error: removeError } = await supabase.storage.from(SUPABASE_BUCKET).remove([imagePath]);
           if (removeError) {
             console.warn('Failed to delete image from Supabase Storage:', removeError);
+            failedImageDeletes.push(imagePath);
           }
         }
       }
 
-      await deleteDoc(doc(db, 'tours', id));
-      setTours(tours.filter(t => t.id !== id));
-    } catch (error) {
+      await Promise.all([fetchTours(), fetchBookings()]);
+
+      if (failedImageDeletes.length > 0) {
+        alert(
+          `Tour data was deleted, but ${failedImageDeletes.length} image${failedImageDeletes.length === 1 ? '' : 's'} could not be removed from storage.`,
+        );
+      }
+    } catch (error: any) {
       console.error('Failed to delete tour:', error);
+      alert(`Failed to completely delete the tour: ${error?.message || 'Unknown error'}`);
     }
   };
 
@@ -2051,18 +2279,6 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour Start Day</label>
-                      <input
-                        type="date"
-                        value={newTour.start_day}
-                        onChange={e => setNewTour({ ...newTour, start_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      />
-                    </div>
-                  </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
                       <label className="block text-sm font-semibold text-stone-800 mb-1.5">Start Time</label>
                       <input
                         type="time"
@@ -2100,18 +2316,6 @@ export default function App() {
                         />
                       </div>
                     </div>
-                  </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Tour End Day</label>
-                      <input
-                        type="date"
-                        value={newTour.end_day}
-                        onChange={e => setNewTour({ ...newTour, end_day: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      />
-                    </div>
                     <div>
                       <label className="block text-sm font-semibold text-stone-800 mb-1.5">End Time</label>
                       <input
@@ -2131,43 +2335,6 @@ export default function App() {
                               ...newTour,
                               end_time: `${hour12}:${minutes}`,
                               end_time_period: isPM ? 'PM' : 'AM',
-                            });
-                          }
-                        }}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      />
-                    </div>
-                  </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Booking Close Date</label>
-                      <input
-                        type="date"
-                        value={newTour.booking_close_date}
-                        onChange={e => setNewTour({ ...newTour, booking_close_date: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Booking Close Time</label>
-                      <input
-                        type="time"
-                        value={
-                          newTour.booking_close_time
-                            ? convertTo24HourFormat(newTour.booking_close_time, newTour.booking_close_period || 'PM')
-                            : ''
-                        }
-                        onChange={e => {
-                          if (e.target.value) {
-                            const [hours, minutes] = e.target.value.split(':');
-                            const hour = parseInt(hours, 10);
-                            const isPM = hour >= 12;
-                            const hour12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                            setNewTour({
-                              ...newTour,
-                              booking_close_time: `${hour12}:${minutes}`,
-                              booking_close_period: isPM ? 'PM' : 'AM',
                             });
                           }
                         }}
