@@ -37,6 +37,24 @@ export interface PassengerInfo {
   phone: string;
 }
 
+export interface Driver {
+  id: string;
+  userId?: string;
+  uid?: string;
+  email: string;
+  name?: string;
+  status?: 'pending' | 'active' | 'inactive';
+  phone?: string;
+  phoneNumber?: string;
+  license_number?: string;
+  vehicle?: string;
+  rating?: number;
+  total_trips?: number;
+  completion_rate?: string;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
 export interface Booking {
   id: string;
   userId: string;

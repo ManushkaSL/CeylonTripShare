@@ -6,9 +6,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tour, Booking } from './types';
+import { Tour, Booking, Driver } from './types';
 import { db, auth } from './firebase';
-import { addDoc, collection, deleteDoc, doc, getDocs, getDoc, orderBy, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, getDoc, query, serverTimestamp, updateDoc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase';
 
@@ -239,6 +239,15 @@ function hasBookingClosePassed(
   }
 }
 
+function formatPhoneNumber(phone?: string) {
+  const value = (phone || '').trim();
+  if (!value) return 'N/A';
+  if (value.startsWith('+')) return value;
+  if (value.startsWith('94')) return `+${value}`;
+  if (value.startsWith('0')) return `+94 ${value.slice(1)}`;
+  return `+94 ${value}`;
+}
+
 function TourImageCarousel({ images, title }: { images: string[]; title: string }) {
   const [idx, setIdx] = useState(0);
   const [candidateIdx, setCandidateIdx] = useState(0);
@@ -391,11 +400,12 @@ export default function App() {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState<'tours' | 'drivers' | 'bookings'>('tours');
-  const [drivers, setDrivers] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverEmail, setDriverEmail] = useState('');
   const [addingDriver, setAddingDriver] = useState(false);
   const [driverError, setDriverError] = useState('');
   const [expandedDriverId, setExpandedDriverId] = useState<string | null>(null);
+  const [assigningTourId, setAssigningTourId] = useState<string | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
@@ -544,15 +554,49 @@ export default function App() {
 
   const fetchDrivers = async () => {
     try {
-      const q = query(collection(db, 'drivers'), orderBy('created_at', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const driversData = querySnapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id,
-      }));
+      const [driversSnapshot, usersSnapshot] = await Promise.all([
+        getDocs(collection(db, 'drivers')),
+        getDocs(collection(db, 'users')),
+      ]);
+
+      const usersByEmail = new Map(
+        usersSnapshot.docs
+          .map(userDoc => {
+            const data = userDoc.data();
+            return [
+              (data.email || '').toString().trim().toLowerCase(),
+              { id: userDoc.id, ...data },
+            ] as const;
+          })
+          .filter(([email]) => email.length > 0)
+      );
+
+      const driversData = driversSnapshot.docs
+        .map(driverDoc => {
+          const data = driverDoc.data();
+          const normalizedEmail = (data.email || '').toString().trim().toLowerCase();
+          const linkedUser = usersByEmail.get(normalizedEmail) as Record<string, any> | undefined;
+
+          return {
+            ...data,
+            id: driverDoc.id,
+            email: normalizedEmail,
+            userId: data.userId || data.uid || linkedUser?.id,
+            name: data.name || linkedUser?.displayName || linkedUser?.name || linkedUser?.fullName,
+            phone: data.phone || linkedUser?.phone || linkedUser?.phoneNumber || linkedUser?.mobile,
+            status: linkedUser ? 'active' : (data.status || 'pending'),
+          } as Driver;
+        })
+        .sort((a, b) => {
+          const aDate = (a.created_at as any)?.toMillis?.() || 0;
+          const bDate = (b.created_at as any)?.toMillis?.() || 0;
+          return bDate - aDate;
+        });
+
       setDrivers(driversData);
     } catch (error) {
       console.error('Failed to fetch drivers:', error);
+      setDriverError('Failed to load drivers. Please refresh and try again.');
     }
   };
 
@@ -573,15 +617,15 @@ export default function App() {
     setDriverError('');
 
     try {
-      const existingDriver = drivers.find(d => d.email === driverEmail.trim().toLowerCase());
+      const normalizedEmail = driverEmail.trim().toLowerCase();
+      const existingDriver = drivers.find(d => d.email === normalizedEmail);
       if (existingDriver) {
-        setDriverError('This email is already registered as a driver');
-        setAddingDriver(false);
+        setDriverError('This email is already registered as a driver.');
         return;
       }
 
       await addDoc(collection(db, 'drivers'), {
-        email: driverEmail.trim().toLowerCase(),
+        email: normalizedEmail,
         status: 'pending',
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
@@ -589,7 +633,7 @@ export default function App() {
 
       setDriverEmail('');
       await fetchDrivers();
-      alert('Driver email added successfully! They can now sign up with this email to access the driver dashboard.');
+      alert('Driver invitation added. They can now register in the app using this email.');
     } catch (error: any) {
       console.error('Failed to add driver:', error);
       console.error('Error code:', error.code);
@@ -858,23 +902,48 @@ export default function App() {
     }
   };
 
-  const assignDriverToBooking = async (bookingId: string, driverId: string) => {
+  const assignDriverToTour = async (tourId: string, driverId: string) => {
+    setAssigningTourId(tourId);
     try {
+      const tourBookings = bookings.filter(booking => booking.tourId === tourId);
+      if (tourBookings.length === 0) {
+        throw new Error('No bookings were found for this tour.');
+      }
+
+      if (!driverId) {
+        await Promise.all(
+          tourBookings.map(booking =>
+            updateDoc(doc(db, 'bookings', booking.id), {
+              driverId: deleteField(),
+              driverRecordId: deleteField(),
+              driverName: deleteField(),
+              driverEmail: deleteField(),
+              updatedAt: serverTimestamp()
+            })
+          )
+        );
+        await fetchBookings();
+        return;
+      }
+
       const selectedDriver = drivers.find(d => d.id === driverId);
-      if (!selectedDriver) return;
+      if (!selectedDriver) {
+        throw new Error('Selected driver could not be found.');
+      }
 
-      console.log('Attempting to assign driver...');
-      console.log('Booking ID:', bookingId);
-      console.log('Driver ID:', driverId);
-      console.log('Current user ID:', sessionStorage.getItem('admin_user_id'));
-      console.log('Current user email:', sessionStorage.getItem('admin_email'));
+      const driverAuthId = selectedDriver.userId || selectedDriver.uid || selectedDriver.id;
 
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        driverId: driverId,
-        driverName: selectedDriver.name || selectedDriver.email,
-        driverEmail: selectedDriver.email,
-        updatedAt: serverTimestamp()
-      });
+      await Promise.all(
+        tourBookings.map(booking =>
+          updateDoc(doc(db, 'bookings', booking.id), {
+            driverId: driverAuthId,
+            driverRecordId: selectedDriver.id,
+            driverName: selectedDriver.name || selectedDriver.email,
+            driverEmail: selectedDriver.email,
+            updatedAt: serverTimestamp()
+          })
+        )
+      );
       
       console.log('Driver assigned successfully');
       await fetchBookings();
@@ -884,11 +953,39 @@ export default function App() {
       console.error('Error message:', error.message);
       console.error('Failed to assign driver:', error);
       alert(`Failed to assign driver: ${error.message}`);
+    } finally {
+      setAssigningTourId(null);
     }
   };
 
   const getAssignedToursForDriver = (driverId: string) => {
-    return bookings.filter(b => b.driverId === driverId && b.status !== 'cancelled');
+    const driver = drivers.find(item => item.id === driverId);
+    const linkedId = driver?.userId || driver?.uid || driver?.id;
+    return bookings.filter(
+      booking =>
+        booking.status !== 'cancelled' &&
+        (
+          booking.driverId === linkedId ||
+          booking.driverEmail?.trim().toLowerCase() === driver?.email
+        )
+    );
+  };
+
+  const getBookingDriverRecordId = (booking: Booking) => {
+    return drivers.find(driver => {
+      const linkedId = driver.userId || driver.uid || driver.id;
+      return (
+        booking.driverId === linkedId ||
+        booking.driverEmail?.trim().toLowerCase() === driver.email
+      );
+    })?.id || '';
+  };
+
+  const getTourDriverRecordId = (tourBookings: Booking[]) => {
+    const assignedBooking = tourBookings.find(
+      booking => booking.driverId || booking.driverEmail
+    );
+    return assignedBooking ? getBookingDriverRecordId(assignedBooking) : '';
   };
 
   useEffect(() => {
@@ -1665,17 +1762,9 @@ export default function App() {
                 <div className="divide-y divide-zinc-100">
                   <AnimatePresence mode="popLayout">
                     {Object.entries(groupBookingsByTour()).map(([tourId, tourData]) => {
-                      const allPassengers = tourData.bookings.flatMap(b => {
-                        const names: string[] = [];
-                        if (b.userName) names.push(b.userName);
-                        if (b.passengers && b.passengers.length > 0) {
-                          names.push(...b.passengers.map(p => p.name));
-                        }
-                        return names;
-                      });
-                      
                       const totalPeople = tourData.bookings.reduce((sum, b) => sum + (b.numberOfPeople || 0), 0);
                       const totalPrice = tourData.bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+                      const assignedDriverId = getTourDriverRecordId(tourData.bookings);
                       
                       return (
                         <div key={tourId}>
@@ -1687,14 +1776,10 @@ export default function App() {
                             onClick={() => setExpandedTourId(expandedTourId === tourId ? null : tourId)}
                             className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer"
                           >
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Tour Name</p>
                                 <p className="font-medium text-stone-900 truncate">{tourData.tourTitle || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Booked By</p>
-                                <p className="font-medium text-stone-900 text-sm line-clamp-2">{allPassengers.join(', ') || 'N/A'}</p>
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Passengers</p>
@@ -1713,6 +1798,29 @@ export default function App() {
                               >
                                 <ChevronRight className="w-5 h-5 text-stone-400" />
                               </motion.div>
+                              <div
+                                className="relative"
+                                onClick={event => event.stopPropagation()}
+                              >
+                                <select
+                                  aria-label={`Assign driver to ${tourData.tourTitle}`}
+                                  value={assignedDriverId}
+                                  onChange={event => assignDriverToTour(tourId, event.target.value)}
+                                  disabled={assigningTourId === tourId}
+                                  className="w-44 sm:w-56 px-3 py-2 pr-8 bg-white border border-stone-300 rounded-lg text-sm text-stone-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none disabled:bg-stone-100"
+                                >
+                                  <option value="">Assign driver</option>
+                                  {drivers.map(driver => (
+                                    <option key={driver.id} value={driver.id}>
+                                      {driver.name || driver.email}
+                                      {driver.status === 'pending' ? ' (Pending)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                {assigningTourId === tourId && (
+                                  <Loader2 className="absolute right-8 top-2.5 w-4 h-4 animate-spin text-emerald-600" />
+                                )}
+                              </div>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1739,13 +1847,9 @@ export default function App() {
                                   <div>
                                     <h4 className="text-sm font-semibold text-stone-900 mb-4">People Who Booked This Tour</h4>
                                     <div className="space-y-3">
-                                      {tourData.bookings.map((booking, idx) => (
+                                      {tourData.bookings.map(booking => (
                                         <div key={booking.id} className="bg-white rounded-lg p-4 border border-stone-200">
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-3">
-                                            <div>
-                                              <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Booking ID</p>
-                                              <p className="text-sm font-mono font-medium text-stone-900">{booking.id}</p>
-                                            </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Name</p>
                                               <p className="text-sm font-medium text-stone-900">{booking.userName || 'N/A'}</p>
@@ -1756,7 +1860,7 @@ export default function App() {
                                             </div>
                                             <div>
                                               <p className="text-xs font-medium text-stone-600 uppercase tracking-wide mb-1">Phone</p>
-                                              <p className="text-sm font-medium text-stone-900">+94 {booking.userPhone || 'N/A'}</p>
+                                              <p className="text-sm font-medium text-stone-900">{formatPhoneNumber(booking.userPhone)}</p>
                                             </div>
                                             <div className="flex items-end">
                                               <button
@@ -1769,21 +1873,6 @@ export default function App() {
                                               </button>
                                             </div>
                                           </div>
-
-                                          {/* Passenger details */}
-                                          {booking.passengers && booking.passengers.length > 0 && (
-                                            <div className="border-t border-stone-200 pt-3 mt-3">
-                                              <p className="text-xs font-semibold text-stone-800 mb-2">Passengers:</p>
-                                              <div className="space-y-2">
-                                                {booking.passengers.map((passenger, pIdx) => (
-                                                  <div key={pIdx} className="text-xs bg-stone-100 rounded px-3 py-2">
-                                                    <p className="font-medium">{passenger.name}</p>
-                                                    <p className="text-stone-700">{passenger.email} • +94 {passenger.phone}</p>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
                                         </div>
                                       ))}
                                     </div>

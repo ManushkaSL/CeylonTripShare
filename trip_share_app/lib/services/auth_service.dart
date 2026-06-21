@@ -73,13 +73,19 @@ class AuthService extends ChangeNotifier {
 
     try {
       debugPrint('🔍 Checking driver status for: $userEmail');
+      final normalizedEmail = userEmail.trim().toLowerCase();
       final driversCollection = _firestore.collection('drivers');
       final querySnapshot = await driversCollection
-          .where('email', isEqualTo: userEmail)
+          .where('email', isEqualTo: normalizedEmail)
           .limit(1)
           .get();
 
-      final isDriver = querySnapshot.docs.isNotEmpty;
+      final isDriver = querySnapshot.docs.any((doc) {
+        final data = doc.data();
+        final status = (data['status'] ?? '').toString();
+        final linkedUserId = (data['userId'] ?? data['uid'] ?? '').toString();
+        return status == 'active' && linkedUserId == userId;
+      });
 
       if (_isDriver != isDriver) {
         _isDriver = isDriver;
@@ -93,6 +99,46 @@ class AuthService extends ChangeNotifier {
       _isDriver = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> _claimPendingDriverInvitation(
+    User user, {
+    String name = '',
+    String phoneNumber = '',
+  }) async {
+    final normalizedEmail = user.email?.trim().toLowerCase() ?? '';
+    if (normalizedEmail.isEmpty) return false;
+
+    final invitationQuery = await _firestore
+        .collection('drivers')
+        .where('email', isEqualTo: normalizedEmail)
+        .limit(1)
+        .get();
+
+    if (invitationQuery.docs.isEmpty) return false;
+
+    final invitation = invitationQuery.docs.first;
+    final invitationData = invitation.data();
+    final status = (invitationData['status'] ?? 'pending').toString();
+    final linkedUserId =
+        (invitationData['userId'] ?? invitationData['uid'] ?? '').toString();
+
+    if (status == 'active' && linkedUserId == user.uid) {
+      return true;
+    }
+    if (status != 'pending') return false;
+
+    await invitation.reference.update({
+      'userId': user.uid,
+      'uid': user.uid,
+      'name': name.trim().isNotEmpty
+          ? name.trim()
+          : user.displayName ?? normalizedEmail.split('@').first,
+      'phone': phoneNumber.trim(),
+      'status': 'active',
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+    return true;
   }
 
   /// Create or update user document in Firestore with default role "passenger"
@@ -110,13 +156,12 @@ class AuthService extends ChangeNotifier {
       if (user.email == 'admin@gmail.com') {
         userRole = 'admin';
       } else {
-        // Check if user is a driver
-        final driverQuery = await _firestore
-            .collection('drivers')
-            .where('email', isEqualTo: user.email)
-            .limit(1)
-            .get();
-        if (driverQuery.docs.isNotEmpty) {
+        final isDriver = await _claimPendingDriverInvitation(
+          user,
+          name: user.displayName ?? '',
+          phoneNumber: phoneNumber,
+        );
+        if (isDriver) {
           userRole = 'driver';
         }
       }
@@ -154,6 +199,10 @@ class AuthService extends ChangeNotifier {
         }
         debugPrint('✅ User login updated in Firestore with role: $userRole');
       }
+
+      _isDriver = userRole == 'driver';
+      _isCheckingDriver = false;
+      notifyListeners();
     } catch (e) {
       debugPrint('❌ Critical error creating/updating user in Firestore: $e');
       rethrow; // Re-throw so registration properly fails
@@ -238,11 +287,33 @@ class AuthService extends ChangeNotifier {
   }) async {
     try {
       debugPrint('Registering user: $email');
-      final trimmedEmail = email.trim();
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: trimmedEmail,
-        password: password,
-      );
+      final trimmedEmail = email.trim().toLowerCase();
+      UserCredential credential;
+      try {
+        credential = await _auth.createUserWithEmailAndPassword(
+          email: trimmedEmail,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'email-already-in-use') rethrow;
+
+        // Recover an account created by an earlier registration attempt whose
+        // Firestore profile/invitation claim did not finish.
+        try {
+          credential = await _auth.signInWithEmailAndPassword(
+            email: trimmedEmail,
+            password: password,
+          );
+        } on FirebaseAuthException catch (signInError) {
+          if (signInError.code == 'invalid-credential' ||
+              signInError.code == 'wrong-password' ||
+              signInError.code == 'user-not-found') {
+            return 'This email is already registered. Please sign in with the '
+                'existing password or use a different email.';
+          }
+          rethrow;
+        }
+      }
 
       debugPrint('Account created successfully');
       final trimmedName = username.trim();

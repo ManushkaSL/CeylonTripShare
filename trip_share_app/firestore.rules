@@ -2,11 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if the user is an admin
-    // Simple check: if user has role 'admin' in their user document
+    // Accept the legacy admin account, custom claims, or a role-based admin profile.
     function isAdmin() {
-      return request.auth != null && 
-             request.auth.email == 'admin@gmail.com';
+      return request.auth != null &&
+             (
+               request.auth.token.email == 'admin@gmail.com' ||
+               request.auth.token.admin == true ||
+               request.auth.token.role == 'admin' ||
+               (
+                 exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                 get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+               )
+             );
     }
 
     // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
@@ -94,9 +101,20 @@ service cloud.firestore {
     }
 
     // Drivers collection
-    match /drivers/{document=**} {
+    match /drivers/{driverId} {
       allow read: if request.auth != null;
-      allow write: if false;
+      allow create, delete: if request.auth != null && isAdmin();
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (
+          resource.data.status == 'pending' &&
+          resource.data.email == request.auth.token.email &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.status == 'active' &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.uid == request.auth.uid
+        )
+      );
     }
 
     // Admin bypass - allow admins to read/write everything

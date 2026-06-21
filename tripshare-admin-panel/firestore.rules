@@ -2,11 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if the user is an admin
-    // This matches your app's definition - checking role field in users collection
+    // Accept the legacy admin account, custom claims, or a role-based admin profile.
     function isAdmin() {
       return request.auth != null &&
              (
+               request.auth.token.email == 'admin@gmail.com' ||
                request.auth.token.admin == true ||
                request.auth.token.role == 'admin' ||
                (
@@ -19,18 +19,28 @@ service cloud.firestore {
     // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
     match /tours/{tourId} {
       allow read; // Public access - everyone can read tours
-      allow create: if request.auth != null && (request.auth.uid == request.resource.data.guideId || isAdmin());
-      allow update: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
-      allow delete: if request.auth != null && (request.auth.uid == resource.data.guideId || isAdmin());
+      allow create: if request.auth != null && (
+        request.auth.uid == request.resource.data.guideId ||
+        isAdmin() ||
+        (request.resource.data.keys().hasAll(['sourceIdleTourId']) && request.resource.data.sourceIdleTourId != '')
+      );
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && isAdmin();
 
       // Bookings subcollection
       match /bookings/{subBookingId} {
         allow read: if request.auth != null;
         allow create: if request.auth != null && 
                       request.resource.data.userId == request.auth.uid;
-        allow update, delete: if request.auth != null && 
-                              (resource.data.userId == request.auth.uid || isAdmin());
+        allow update, delete: if request.auth != null;
       }
+    }
+
+    // Active booked occurrences are public, while authenticated users create/update them.
+    match /tour_instances/{instanceId} {
+      allow read;
+      allow create, update: if request.auth != null;
+      allow delete: if isAdmin();
     }
 
     // Users collection - each user has a profile
@@ -58,20 +68,19 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
                     request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && 
-                            (isAdmin() ||
-                             resource.data.userId == request.auth.uid || 
-                             resource.data.driverId == request.auth.uid);
+      allow update: if request.auth != null &&
+                    (resource.data.userId == request.auth.uid || isAdmin()) &&
+                    request.resource.data.userId == resource.data.userId;
+      allow delete: if request.auth != null &&
+                    (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Joined tours (user booking records)
     match /joinedTours/{joinedTourId} {
-      allow read: if request.auth != null && 
-                           (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if request.auth != null;
       allow create: if request.auth != null && 
                            request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && 
-                            (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null;
     }
 
     // Driver live-location sharing
@@ -92,7 +101,18 @@ service cloud.firestore {
     // Drivers collection - for admin panel driver management
     match /drivers/{driverId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && isAdmin();
+      allow create, delete: if request.auth != null && isAdmin();
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (
+          resource.data.status == 'pending' &&
+          resource.data.email == request.auth.token.email &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.status == 'active' &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.uid == request.auth.uid
+        )
+      );
     }
 
     // Admin bypass - allow admins to read/write everything
