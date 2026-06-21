@@ -36,9 +36,14 @@ class ChatMessage {
     };
   }
 
-  Map<String, dynamic> toMapWithTourId(String tourId) {
+  Map<String, dynamic> toMapWithTourId(
+    String tourId, {
+    required DateTime tourDate,
+  }) {
     return {
       'tourId': tourId,
+      'instanceId': tourId,
+      'tourDate': tourDate.toIso8601String(),
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
@@ -90,6 +95,8 @@ class ChatService {
           // Save to cache whenever new data arrives
           if (messages.isNotEmpty) {
             _cacheService.saveMessagesForTour(tourId, messages);
+          } else {
+            _cacheService.clearTourCache(tourId);
           }
 
           return messages;
@@ -130,6 +137,7 @@ class ChatService {
   /// Stores in root-level messages collection with tourId
   Future<void> sendMessage({
     required String tourId,
+    required DateTime tourDate,
     required String userId,
     required String senderName,
     required String messageText,
@@ -149,7 +157,7 @@ class ChatService {
         senderName: senderName,
         text: messageText,
         timestamp: DateTime.now(),
-      ).toMapWithTourId(tourId);
+      ).toMapWithTourId(tourId, tourDate: tourDate);
 
       debugPrint('📋 Message data to save: $messageData');
 

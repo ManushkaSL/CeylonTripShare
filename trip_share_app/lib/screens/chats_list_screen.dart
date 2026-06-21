@@ -214,7 +214,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        tour.name,
+                        '${_formatTourDate(tour.startDate)}: ${tour.name}',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -253,5 +253,23 @@ class _ChatsListBodyState extends State<ChatsListBody> {
         ),
       ),
     );
+  }
+
+  String _formatTourDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }

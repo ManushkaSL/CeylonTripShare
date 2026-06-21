@@ -1,7 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:trip_share_app/screens/booking_details_screen.dart';
 import 'package:trip_share_app/screens/chat_screen.dart';
-import 'package:trip_share_app/screens/tour_detail_screen.dart';
+import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/dynamic_link_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 
@@ -37,7 +40,7 @@ class _JoinedToursScreenState extends State<JoinedToursScreen> {
         backgroundColor: DesignColors.surface.withOpacity(0.8),
         elevation: 0,
         title: const Text(
-          'Joined Tours',
+          'My Bookings',
           style: TextStyle(
             color: DesignColors.textPrimary,
             fontWeight: FontWeight.bold,
@@ -62,14 +65,29 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
   @override
   void initState() {
     super.initState();
+    AuthService().addListener(_onAuthChanged);
     // Load bookings once to populate cache
     JoinedTourService().loadBookings();
   }
 
   @override
+  void dispose() {
+    AuthService().removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final userId = AuthService().userId;
     return StreamBuilder<List<JoinedTour>>(
-      stream: JoinedTourService().streamBookings(),
+      key: ValueKey(userId),
+      stream: userId.isEmpty
+          ? Stream.value(const <JoinedTour>[])
+          : JoinedTourService().streamBookings(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -91,7 +109,7 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'No joined tours yet',
+                      'No bookings yet',
                       style: TextStyle(
                         fontSize: 16,
                         color: DesignColors.textSecondary,
@@ -99,7 +117,7 @@ class _JoinedToursBodyState extends State<JoinedToursBody> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Join a tour from the home screen',
+                      'Book a tour from the home screen',
                       style: TextStyle(
                         fontSize: 13,
                         color: DesignColors.textSecondary,
@@ -136,11 +154,7 @@ class _JoinedTourCard extends StatelessWidget {
     final tour = joinedTour.tour;
 
     return GestureDetector(
-      onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => TourDetailScreen(tour: tour)));
-      },
+      onTap: () => _openBooking(context),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -207,7 +221,7 @@ class _JoinedTourCard extends StatelessWidget {
                     children: [
                       // Tour name
                       Text(
-                        tour.name,
+                        '${tour.name} - ${_formatShortDate(tour.startDate)}',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -217,37 +231,54 @@ class _JoinedTourCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
-                      // Date row
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today,
-                            size: 13,
-                            color: DesignColors.textSecondary,
+                      // Highlighted start date
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: DesignColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: DesignColors.primary.withOpacity(0.22),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDate(tour.startDate),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: DesignColors.textSecondary,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              size: 14,
+                              color: DesignColors.primary,
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Icon(
-                            Icons.access_time,
-                            size: 13,
-                            color: DesignColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatTime(tour.startDate),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: DesignColors.textSecondary,
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                'Starts ${_formatDate(tour.startDate)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: DesignColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            const Icon(
+                              Icons.access_time_rounded,
+                              size: 13,
+                              color: DesignColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(tour.startDate),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: DesignColors.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 6),
                       // Persons
@@ -317,55 +348,52 @@ class _JoinedTourCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      // Buttons row: Live Location + Chat
+                      // Buttons row: View booking + Share + Chat
                       Row(
                         children: [
-                          // Live Location button
                           Expanded(
                             child: SizedBox(
                               height: 30,
                               child: ElevatedButton.icon(
-                                onPressed: joinedTour.isLiveLocationAvailable
-                                    ? () {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Opening live location...',
-                                            ),
-                                            backgroundColor:
-                                                DesignColors.primary,
-                                            duration: Duration(seconds: 1),
-                                          ),
-                                        );
-                                      }
-                                    : null,
-                                icon: Icon(
-                                  Icons.location_on,
+                                onPressed: () => _openBooking(context),
+                                icon: const Icon(
+                                  Icons.receipt_long_outlined,
                                   size: 13,
-                                  color: joinedTour.isLiveLocationAvailable
-                                      ? Colors.white
-                                      : DesignColors.textSecondary,
+                                  color: Colors.white,
                                 ),
-                                label: Text(
-                                  joinedTour.isLiveLocationAvailable
-                                      ? 'Live Location'
-                                      : 'Not Available',
-                                  style: const TextStyle(fontSize: 10),
+                                label: const Text(
+                                  'View',
+                                  style: TextStyle(fontSize: 10),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      joinedTour.isLiveLocationAvailable
-                                      ? DesignColors.primary
-                                      : Colors.grey.shade300,
-                                  foregroundColor:
-                                      joinedTour.isLiveLocationAvailable
-                                      ? Colors.white
-                                      : DesignColors.textSecondary,
-                                  disabledBackgroundColor: Colors.grey.shade200,
-                                  disabledForegroundColor:
-                                      DesignColors.textSecondary,
+                                  backgroundColor: DesignColors.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: SizedBox(
+                              height: 30,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _shareBooking(context),
+                                icon: const Icon(
+                                  Icons.share_outlined,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  'Share',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: DesignColors.accent,
+                                  foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -436,6 +464,57 @@ class _JoinedTourCard extends StatelessWidget {
       'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  String _formatShortDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  void _openBooking(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BookingDetailsScreen(tour: joinedTour.tour),
+      ),
+    );
+  }
+
+  Future<void> _shareBooking(BuildContext context) async {
+    try {
+      final message = await DynamicLinkService().getTourShareMessage(
+        joinedTour.tour,
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text:
+              'My booking: ${joinedTour.tour.name}\n'
+              'Date: ${_formatDate(joinedTour.tour.startDate)} at '
+              '${_formatTime(joinedTour.tour.startDate)}\n\n'
+              '$message',
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share booking: $e'),
+          backgroundColor: DesignColors.error,
+        ),
+      );
+    }
   }
 
   String _formatTime(DateTime date) {

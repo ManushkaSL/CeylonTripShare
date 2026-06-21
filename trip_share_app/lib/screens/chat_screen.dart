@@ -46,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       await _chatService.sendMessage(
         tourId: widget.tour.id,
+        tourDate: widget.tour.startDate,
         userId: _authService.userId,
         senderName: _authService.userName,
         messageText: text,
@@ -126,7 +127,7 @@ class _ChatScreenState extends State<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.tour.name,
+              '${_formatTourDate(widget.tour.startDate)}: ${widget.tour.name}',
               style: const TextStyle(
                 color: DesignColors.textPrimary,
                 fontWeight: FontWeight.bold,
@@ -491,5 +492,23 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return '${dt.day}/${dt.month}/${dt.year} $timeOnly';
     }
+  }
+
+  String _formatTourDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }

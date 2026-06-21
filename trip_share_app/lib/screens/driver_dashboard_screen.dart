@@ -1,17 +1,9 @@
-import 'dart:ui';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:trip_share_app/screens/driver_tour_details_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
-import 'package:trip_share_app/services/joined_tour_service.dart';
-import 'package:trip_share_app/services/location_service.dart';
-import 'package:trip_share_app/screens/chat_screen.dart';
-import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 
-/// Driver dashboard accessible from Profile → "Driver Dashboard".
-/// Shows tours the driver is assigned to (guideId == current user)
-/// and lets them start / stop live-location sharing per tour.
 class DriverDashboardScreen extends StatefulWidget {
   const DriverDashboardScreen({super.key});
 
@@ -20,254 +12,61 @@ class DriverDashboardScreen extends StatefulWidget {
 }
 
 class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
-  final _auth = AuthService();
-  final _location = LocationService();
-  final _firestore = FirebaseFirestore.instance;
-
-  bool _isSharing = false;
-  String? _sharingTourId;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuthService _auth = AuthService();
   int _selectedIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _isSharing = _location.isSharing;
-    _sharingTourId = _location.activeTourId;
-  }
-
-  Future<void> _toggleSharing(String tourId, String tourName) async {
-    if (_isSharing && _sharingTourId == tourId) {
-      // Stop sharing
-      await _location.stopSharing();
-      if (mounted) {
-        setState(() {
-          _isSharing = false;
-          _sharingTourId = null;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Stopped sharing location for "$tourName"'),
-            backgroundColor: DesignColors.warning,
-          ),
-        );
-      }
-    } else if (!_isSharing) {
-      // Start sharing
-      final started = await _location.startSharing(tourId);
-      if (mounted) {
-        if (started) {
-          setState(() {
-            _isSharing = true;
-            _sharingTourId = tourId;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Sharing location for "$tourName"'),
-              backgroundColor: DesignColors.primary,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Could not start sharing. Check location permissions.',
-              ),
-              backgroundColor: DesignColors.error,
-            ),
-          );
-        }
-      }
-    } else {
-      // Already sharing on a different tour
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Stop sharing on the current tour first.'),
-            backgroundColor: DesignColors.warning,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _openChat(String tourId) async {
-    try {
-      debugPrint('💬 Opening chat for tour: $tourId');
-
-      // Fetch the tour from Firestore
-      final tourDoc = await _firestore.collection('tours').doc(tourId).get();
-      debugPrint('📡 Tour document exists: ${tourDoc.exists}');
-
-      if (!tourDoc.exists) {
-        debugPrint('❌ Tour document not found');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tour not found'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final data = tourDoc.data() as Map<String, dynamic>;
-      debugPrint('✅ Tour data loaded: ${data['name']}');
-
-      final tour = Tour(
-        id: tourDoc.id,
-        name: data['name'] ?? 'Unnamed Tour',
-        imageUrl: data['imageUrl'] ?? '',
-        startDate:
-            (data['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        totalSeats: data['totalSeats'] ?? 0,
-        remainingSeats: data['remainingSeats'] ?? 0,
-        price: (data['price'] ?? 0).toDouble(),
-        description: data['description'] ?? '',
-        photos: List<String>.from(data['photos'] ?? []),
-        category: data['category'] ?? '',
-        startLocation: data['startLocation'] ?? '',
-        endLocation: data['endLocation'] ?? '',
-        endTime: data['endTime'] ?? '',
-      );
-
-      if (mounted) {
-        debugPrint('🚀 Navigating to ChatScreen');
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => ChatScreen(tour: tour)));
-      }
-    } catch (e, stackTrace) {
-      debugPrint('❌ Error opening chat: $e');
-      debugPrint('Stack trace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening chat: $e'),
-            backgroundColor: DesignColors.error,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _showLogoutDialog() async {
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Log Out'),
-        content: const Text('Are you sure you want to log out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: DesignColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              JoinedTourService().clearCache();
-              await _auth.logout();
-              if (dialogContext.mounted) {
-                Navigator.of(dialogContext).pop();
-              }
-            },
-            child: Text('Log Out', style: TextStyle(color: DesignColors.error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final userEmail = _auth.userEmail;
-
     return Scaffold(
       backgroundColor: DesignColors.background,
-      extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: ClipRRect(
-          child: kIsWeb
-              ? AppBar(
-                  backgroundColor: DesignColors.surface.withOpacity(0.95),
-                  elevation: 0,
-                  automaticallyImplyLeading: false,
-                  title: const Text(
-                    'Driver Dashboard',
-                    style: TextStyle(
-                      color: DesignColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: Icon(Icons.logout, color: DesignColors.primary),
-                      onPressed: _showLogoutDialog,
-                    ),
-                  ],
-                )
-              : BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: AppBar(
-                    backgroundColor: DesignColors.surface.withOpacity(0.95),
-                    elevation: 0,
-                    automaticallyImplyLeading: false,
-                    title: const Text(
-                      'Driver Dashboard',
-                      style: TextStyle(
-                        color: DesignColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                    actions: [
-                      IconButton(
-                        icon: Icon(Icons.logout, color: DesignColors.primary),
-                        onPressed: _showLogoutDialog,
-                      ),
-                    ],
-                  ),
-                ),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: DesignColors.surface,
+        foregroundColor: DesignColors.textPrimary,
+        elevation: 0,
+        title: Text(
+          switch (_selectedIndex) {
+            0 => 'Dashboard',
+            1 => 'Driver Chat',
+            _ => 'Driver Profile',
+          },
+          style: const TextStyle(fontWeight: FontWeight.w900),
         ),
       ),
-      body: _selectedIndex == 0
-          ? Column(
-              children: [
-                SizedBox(
-                  height:
-                      MediaQuery.of(context).padding.top + kToolbarHeight + 16,
-                ),
-                _buildStatusBanner(),
-                const SizedBox(height: 16),
-                Expanded(child: _buildToursList(userEmail)),
-              ],
-            )
-          : _buildDriverProfileSection(),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildDashboard(),
+          _buildPlaceholder(
+            Icons.chat_bubble_outline_rounded,
+            'Driver Chat',
+            'Chat details will be added next.',
+          ),
+          _buildProfile(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         backgroundColor: DesignColors.surface,
-        surfaceTintColor: DesignColors.surface,
-        indicatorColor: DesignColors.primary.withOpacity(0.16),
+        indicatorColor: DesignColors.primary.withOpacity(0.14),
         onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+          setState(() => _selectedIndex = index);
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment),
-            label: 'Assigned Tours',
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
           ),
         ],
@@ -275,49 +74,161 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildDriverProfileSection() {
-    return ListView(
-      physics: const ClampingScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top + kToolbarHeight + 16,
-        16,
-        24,
-      ),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: DesignColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+  Widget _buildDashboard() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _firestore.collection('bookings').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _messageState(
+            Icons.error_outline_rounded,
+            'Could not load assigned tours',
+            snapshot.error.toString(),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: DesignColors.primary),
+          );
+        }
+
+        final assignments = _groupAssignedTours(snapshot.data!.docs);
+        if (assignments.isEmpty) {
+          return _messageState(
+            Icons.assignment_outlined,
+            'No assigned tours',
+            'Tours assigned to your driver account will appear here.',
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          children: [
+            Text(
+              '${assignments.length} assigned '
+              '${assignments.length == 1 ? 'tour' : 'tours'}',
+              style: const TextStyle(
+                color: DesignColors.textSecondary,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            for (final assignment in assignments)
+              _buildTourCard(assignment),
+          ],
+        );
+      },
+    );
+  }
+
+  List<_DriverTourAssignment> _groupAssignedTours(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final userEmail = _auth.userEmail.trim().toLowerCase();
+    final userId = _auth.userId;
+    final grouped = <String, _DriverTourAssignment>{};
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final driverEmail = (data['driverEmail'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      final driverId = (data['driverId'] ?? '').toString();
+      final isAssigned =
+          (userEmail.isNotEmpty && driverEmail == userEmail) ||
+          (userId.isNotEmpty && driverId == userId);
+      if (!isAssigned) continue;
+
+      final tourDate =
+          DateTime.tryParse(data['tourDate']?.toString() ?? '') ??
+          DateTime.now();
+      final instanceId = (data['instanceId'] ?? '').toString();
+      final tourId = (data['tourId'] ?? '').toString();
+      final templateTourId = (data['templateTourId'] ?? tourId).toString();
+      final key = instanceId.isNotEmpty
+          ? instanceId
+          : '$tourId|${tourDate.toIso8601String()}';
+      final assignment = grouped.putIfAbsent(
+        key,
+        () => _DriverTourAssignment(
+          instanceId: instanceId.isNotEmpty ? instanceId : tourId,
+          templateTourId: templateTourId,
+          tourName: (data['tourName'] ?? 'Unnamed Tour').toString(),
+          startDate: tourDate,
+        ),
+      );
+
+      final passengerCount = _toInt(data['totalPersons']);
+      assignment.passengerCount += passengerCount;
+      assignment.passengers.add(
+        DriverPassengerRecord(
+          name: _passengerName(data),
+          phoneNumber: (data['phoneNumber'] ?? '').toString(),
+          pickupLocation: (data['pickupLocation'] ?? '').toString(),
+          passengerCount: passengerCount,
+        ),
+      );
+    }
+
+    final result = grouped.values.toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    return result;
+  }
+
+  String _passengerName(Map<String, dynamic> data) {
+    final passengers = data['passengers'];
+    if (passengers is List && passengers.isNotEmpty) {
+      final first = passengers.first;
+      if (first is Map) {
+        final name = (first['name'] ?? '').toString().trim();
+        if (name.isNotEmpty) return name;
+      }
+    }
+    final fallback = (data['userName'] ?? data['name'] ?? '').toString().trim();
+    return fallback.isEmpty ? 'Passenger' : fallback;
+  }
+
+  Widget _buildTourCard(_DriverTourAssignment assignment) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: DesignColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: DesignColors.divider),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => DriverTourDetailsScreen(
+                instanceId: assignment.instanceId,
+                templateTourId: assignment.templateTourId,
+                tourName: assignment.tourName,
+                startDate: assignment.startDate,
+                passengerCount: assignment.passengerCount,
+                passengers: assignment.passengers,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: DesignColors.primary.withOpacity(0.12),
-                backgroundImage: _auth.photoUrl.isNotEmpty
-                    ? NetworkImage(_auth.photoUrl)
-                    : null,
-                child: _auth.photoUrl.isEmpty
-                    ? Text(
-                        _auth.userName.isNotEmpty
-                            ? _auth.userName[0].toUpperCase()
-                            : 'D',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: DesignColors.primary,
-                        ),
-                      )
-                    : null,
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: DesignColors.primary.withOpacity(0.11),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.directions_bus_rounded,
+                  color: DesignColors.primary,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -325,71 +236,52 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _auth.userName.isNotEmpty ? _auth.userName : 'Driver',
+                      assignment.tourName,
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: DesignColors.primary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: DesignColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _auth.userEmail,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: DesignColors.textSecondary,
-                      ),
+                    const SizedBox(height: 10),
+                    _cardInfo(
+                      Icons.calendar_month_rounded,
+                      _formatDateTime(assignment.startDate),
+                    ),
+                    const SizedBox(height: 7),
+                    _cardInfo(
+                      Icons.groups_rounded,
+                      '${assignment.passengerCount} '
+                          '${assignment.passengerCount == 1 ? 'passenger' : 'passengers'}',
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: DesignColors.surface,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Driver Tools',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: DesignColors.primary,
+              const Padding(
+                padding: EdgeInsets.only(top: 14),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: DesignColors.textSecondary,
                 ),
               ),
-              SizedBox(height: 8),
-              Text(
-                'Use Assigned Tours to share live location and chat with passengers in tours already assigned to you.',
-                style: TextStyle(fontSize: 13, color: DesignColors.textPrimary),
-              ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 48,
-          child: OutlinedButton.icon(
-            onPressed: _showLogoutDialog,
-            icon: Icon(Icons.logout, color: DesignColors.error),
-            label: Text(
-              'Log Out',
-              style: TextStyle(
-                color: DesignColors.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: DesignColors.error),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+      ),
+    );
+  }
+
+  Widget _cardInfo(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: DesignColors.primary),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: DesignColors.textSecondary,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -397,313 +289,155 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
     );
   }
 
-  Widget _buildStatusBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: _isSharing
-                ? [DesignColors.primary, DesignColors.primaryDark]
-                : [DesignColors.textSecondary, DesignColors.divider],
+  Widget _buildProfile() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        CircleAvatar(
+          radius: 42,
+          backgroundColor: DesignColors.primary.withOpacity(0.12),
+          child: Text(
+            _auth.userName.isEmpty
+                ? 'D'
+                : _auth.userName.substring(0, 1).toUpperCase(),
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: DesignColors.primary,
+            ),
           ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  (_isSharing
-                          ? DesignColors.primary
-                          : DesignColors.textSecondary)
-                      .withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                _isSharing ? Icons.my_location : Icons.location_off,
-                color: Colors.white,
-                size: 26,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _isSharing
-                        ? 'Sharing Live Location'
-                        : 'Location Sharing Off',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _isSharing
-                        ? 'Passengers can see your vehicle on the map'
-                        : 'Tap a tour below to start sharing',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_isSharing)
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: DesignColors.success,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: DesignColors.success.withOpacity(0.6),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-              ),
-          ],
+        const SizedBox(height: 14),
+        Text(
+          _auth.userName.isEmpty ? 'Driver' : _auth.userName,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
+            color: DesignColors.textPrimary,
+          ),
         ),
-      ),
+        const SizedBox(height: 5),
+        Text(
+          _auth.userEmail,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: DesignColors.textSecondary),
+        ),
+        const SizedBox(height: 28),
+        OutlinedButton.icon(
+          onPressed: _showLogoutDialog,
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text('Log Out'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: DesignColors.error,
+            minimumSize: const Size.fromHeight(48),
+            side: const BorderSide(color: DesignColors.error),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildToursList(String userEmail) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('bookings')
-          .where('driverEmail', isEqualTo: userEmail)
-          .orderBy('tourDate', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading assigned tours: ${snapshot.error}',
-              style: TextStyle(color: DesignColors.error),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(color: DesignColors.primary),
-          );
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-
-        if (docs.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.directions_bus_outlined,
-                    size: 64,
-                    color: DesignColors.textSecondary.withOpacity(0.4),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No assigned tours',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: DesignColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Assigned bookings will appear here.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: DesignColors.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        return ListView.builder(
-          physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final tourName = data['tourName'] ?? 'Unnamed Tour';
-            final tourDate = data['tourDate'] as String? ?? '';
-            final totalPersons = data['totalPersons'] ?? 0;
-            final pickupLocation = data['pickupLocation'] ?? '';
-            final tourId = data['tourId'] ?? '';
-            final isSharingThis = _isSharing && _sharingTourId == tourId;
-
-            return _buildBookingCard(
-              tourId: tourId,
-              tourName: tourName,
-              tourDate: tourDate,
-              totalPersons: totalPersons,
-              pickupLocation: pickupLocation,
-              isSharingThis: isSharingThis,
-            );
-          },
-        );
-      },
-    );
+  Widget _buildPlaceholder(IconData icon, String title, String subtitle) {
+    return _messageState(icon, title, subtitle);
   }
 
-  Widget _buildBookingCard({
-    required String tourId,
-    required String tourName,
-    required String tourDate,
-    required int totalPersons,
-    required String pickupLocation,
-    required bool isSharingThis,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withOpacity(0.2)),
-      ),
+  Widget _messageState(IconData icon, String title, String subtitle) {
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tourName,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: DesignColors.success,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tourDate,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            Icon(
+              icon,
+              size: 64,
+              color: DesignColors.textSecondary.withOpacity(0.45),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.people, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  '$totalPersons passengers',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.location_on, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    pickupLocation,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: DesignColors.textPrimary,
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _toggleSharing(tourId, tourName),
-                    icon: Icon(
-                      isSharingThis ? Icons.my_location : Icons.location_off,
-                      size: 18,
-                    ),
-                    label: Text(
-                      isSharingThis ? 'Sharing' : 'Share Location',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isSharingThis
-                          ? DesignColors.success
-                          : Colors.grey.withOpacity(0.15),
-                      foregroundColor: isSharingThis
-                          ? Colors.white
-                          : DesignColors.success,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: isSharingThis ? 2 : 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _openChat(tourId),
-                    icon: const Icon(Icons.message, size: 18),
-                    label: const Text(
-                      'Chat',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: DesignColors.success.withOpacity(0.15),
-                      foregroundColor: DesignColors.success,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 7),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: DesignColors.textSecondary),
             ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _showLogoutDialog() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+    if (shouldLogout == true) await _auth.logout();
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _formatDateTime(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return '${date.day} ${months[date.month - 1]} ${date.year}, '
+        '${hour == 0 ? 12 : hour}:${date.minute.toString().padLeft(2, '0')} '
+        '$period';
+  }
+}
+
+class _DriverTourAssignment {
+  final String instanceId;
+  final String templateTourId;
+  final String tourName;
+  final DateTime startDate;
+  int passengerCount = 0;
+  final List<DriverPassengerRecord> passengers = [];
+
+  _DriverTourAssignment({
+    required this.instanceId,
+    required this.templateTourId,
+    required this.tourName,
+    required this.startDate,
+  });
 }

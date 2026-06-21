@@ -161,7 +161,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       extendBody: false,
       backgroundColor: DesignColors.background,
-      body: _selectedIndex == 0 ? _buildHomeContent() : _buildBody(),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildHomeContent(),
+          const ChatsListBody(),
+          const JoinedToursBody(),
+          const ProfileBody(),
+        ],
+      ),
       appBar: _selectedIndex == 0
           ? null
           : AppBar(
@@ -173,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedIndex == 1
                     ? 'Chats'
                     : _selectedIndex == 2
-                    ? 'Joined Tours'
+                    ? 'My Bookings'
                     : 'Profile',
                 style: TextStyle(
                   color: DesignColors.textPrimary,
@@ -1461,6 +1469,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final rating = tour.rating;
     final bookedSeats = tour.totalSeats - tour.remainingSeats;
     final fillRatio = tour.totalSeats > 0 ? bookedSeats / tour.totalSeats : 0.0;
+    final isActiveTour = tour.sourceIdleTourId.isNotEmpty;
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -1469,7 +1478,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        height: 152,
+        height: isActiveTour ? 174 : 152,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
@@ -1496,7 +1505,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(16),
                     child: SizedBox(
                       width: 120,
-                      height: 128,
+                      height: isActiveTour ? 150 : 128,
                       child: CachedNetworkImage(
                         imageUrl: tour.imageUrl,
                         fit: BoxFit.cover,
@@ -1629,6 +1638,40 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+
+                    if (isActiveTour)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: DesignColors.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              size: 14,
+                              color: DesignColors.primary,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                'Starts ${_formatActiveTourDate(tour.startDate)}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: DesignColors.primary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
                     // Custom seats capacity indicator line
                     Column(
@@ -1810,6 +1853,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  String _formatActiveTourDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = date.hour > 12 ? date.hour - 12 : date.hour;
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final time =
+        '${hour == 0 ? 12 : hour}:${date.minute.toString().padLeft(2, '0')} $period';
+    return '${date.day} ${months[date.month - 1]} ${date.year}, $time';
   }
 
   // ─── CUSTOM SKELETON LOADER ────────────────────────────────────────
@@ -2016,7 +2081,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildNavItem(
                 Icons.luggage_rounded,
                 Icons.luggage_outlined,
-                'Joined',
+                'Bookings',
                 2,
               ),
               _buildNavItem(

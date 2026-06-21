@@ -4,10 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/screens/booking_details_screen.dart';
 import 'package:trip_share_app/screens/booking_screen.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/dynamic_link_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/widgets/custom_button.dart';
 import 'package:trip_share_app/widgets/skeleton_loader.dart';
@@ -70,6 +72,7 @@ class TourCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isFull = !tour.canBook;
+    final bool isUserBooked = JoinedTourService().isJoinedTour(tour);
 
     return GestureDetector(
       onTap: () => _openDetails(context),
@@ -270,7 +273,7 @@ class TourCard extends StatelessWidget {
                         const Spacer(),
 
                         // Compact action buttons
-                        if (!isFull)
+                        if (!isFull || isUserBooked)
                           SizedBox(
                             height: 32,
                             child: CustomButton(
@@ -284,26 +287,38 @@ class TourCard extends StatelessWidget {
                                 if (!context.mounted) return;
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => BookingScreen(tour: tour),
+                                    builder: (_) => isUserBooked
+                                        ? BookingDetailsScreen(tour: tour)
+                                        : BookingScreen(tour: tour),
                                   ),
                                 );
                               },
-                              backgroundColor: DesignColors.accent.withOpacity(
-                                0.2,
-                              ),
+                              backgroundColor:
+                                  (isUserBooked
+                                          ? DesignColors.success
+                                          : DesignColors.accent)
+                                      .withOpacity(0.2),
                               border: Border.all(
-                                color: DesignColors.accent.withOpacity(0.4),
+                                color:
+                                    (isUserBooked
+                                            ? DesignColors.success
+                                            : DesignColors.accent)
+                                        .withOpacity(0.4),
                                 width: 0.8,
                               ),
-                              textColor: DesignColors.accent,
+                              textColor: isUserBooked
+                                  ? DesignColors.success
+                                  : DesignColors.accent,
                               borderRadius: 8,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                               ),
                               child: Text(
-                                tour.status == TourStatus.idle
-                                    ? 'Start'
-                                    : 'Join',
+                                isUserBooked
+                                    ? 'Booking'
+                                    : tour.status == TourStatus.idle
+                                    ? 'Start Tour'
+                                    : 'Join Tour',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -312,7 +327,7 @@ class TourCard extends StatelessWidget {
                             ),
                           ),
 
-                        if (!isFull) const SizedBox(width: 6),
+                        if (!isFull || isUserBooked) const SizedBox(width: 6),
 
                         SizedBox(
                           width: 58,

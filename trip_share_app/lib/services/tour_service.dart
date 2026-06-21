@@ -36,6 +36,23 @@ class TourService {
     return cacheIsNewer ? cached : parsed;
   }
 
+  /// Documents in `tours` are reusable admin-created templates. Their seat
+  /// count is capacity, not live availability; bookings only reduce seats on
+  /// the cloned document in `tour_instances`.
+  Tour _asIdleTemplate(Tour tour) {
+    final capacity = tour.totalSeats > 0
+        ? tour.totalSeats
+        : tour.remainingSeats;
+    return tour.copyWith(
+      totalSeats: capacity,
+      remainingSeats: capacity,
+      bookedSeats: 0,
+      bookedUserIds: const [],
+      firstBookedUserId: '',
+      sourceIdleTourId: '',
+    );
+  }
+
   /// Update a tour in cache for immediate UI refresh after booking changes.
   void updateTourInCache(
     String tourId, {
@@ -237,6 +254,7 @@ class TourService {
     QuerySnapshot<Map<String, dynamic>>? latestToursSnap;
     QuerySnapshot<Map<String, dynamic>>? latestInstSnap;
     Set<String> latestBookedTourIds = {};
+    bool bookingsSnapshotAvailable = false;
     void emitCombinedLatest() {
       try {
         final toursDocs =
@@ -247,26 +265,23 @@ class TourService {
             <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
         final tours = toursDocs
-            .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
+            .map((d) => _asIdleTemplate(parseTour(d.data(), d.id)))
             .whereType<Tour>()
             .toList(growable: false);
 
-        final instances = instDocs
+        final parsedInstances = instDocs
             .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
             .whereType<Tour>()
             .toList(growable: false);
+        final instances = bookingsSnapshotAvailable
+            ? parsedInstances
+                  .where((tour) => latestBookedTourIds.contains(tour.id))
+                  .toList(growable: false)
+            : parsedInstances
+                  .where((tour) => tour.bookedSeats > 0)
+                  .toList(growable: false);
 
-        final instanceSourceIds = instances
-            .map((tour) => tour.sourceIdleTourId)
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        final visibleTours = tours
-            .where(
-              (tour) =>
-                  tour.sourceIdleTourId.isEmpty ||
-                  !instanceSourceIds.contains(tour.id),
-            )
-            .toList(growable: false);
+        final visibleTours = tours.toList(growable: false);
 
         // If instances are unavailable (permission denied), synthesize
         // active markers for tours that have bookings so UI still shows
@@ -372,13 +387,18 @@ class TourService {
           (bSnap) {
             try {
               bookedIds = bSnap.docs
-                  .map((d) => (d.data()['tourId'] ?? '').toString())
+                  .map(
+                    (d) =>
+                        (d.data()['instanceId'] ?? d.data()['tourId'] ?? '')
+                            .toString(),
+                  )
                   .where((id) => id.isNotEmpty)
                   .toSet();
             } catch (e) {
               bookedIds = {};
             }
             latestBookedTourIds = bookedIds;
+            bookingsSnapshotAvailable = true;
             emitCombinedLatest();
           },
           onError: (e, st) {
@@ -387,7 +407,9 @@ class TourService {
               debugPrint(
                 '⚠️ Bookings stream permission denied: $e — cannot infer booked tours',
               );
-              latestBookedTourIds = {};
+              // Keep the last booking-backed result after logout. Falling
+              // back to stale instance counters can resurrect an unconfirmed
+              // or deleted tour only in the logged-out view.
               emitCombinedLatest();
             } else {
               debugPrint('❌ Bookings stream error: $e');

@@ -9,12 +9,14 @@ import 'package:trip_share_app/services/tour_service.dart';
 enum JourneyStatus { notStarted, inProgress }
 
 class JoinedTour {
+  final String bookingId;
   final Tour tour;
   final DateTime joinedAt;
   final int persons;
   JourneyStatus journeyStatus;
 
   JoinedTour({
+    this.bookingId = '',
     required this.tour,
     required this.joinedAt,
     required this.persons,
@@ -48,6 +50,8 @@ class JoinedTourService extends ChangeNotifier {
   final Map<String, int> _lastSeenBookings = {}; // Track booking IDs we've seen
   final Map<String, Map<String, dynamic>> _bookingCache =
       {}; // Cache: bookingId -> {tourId, totalPersons}
+  int _bookingLoadGeneration = 0;
+  String _loadedUserId = '';
   String? lastError;
 
   List<JoinedTour> get joinedTours => List.unmodifiable(_joinedTours);
@@ -139,6 +143,8 @@ class JoinedTourService extends ChangeNotifier {
                 'tourId': data['tourId'] as String?,
                 'totalPersons': data['totalPersons'] as int? ?? 0,
                 'userId': data['userId'] as String?,
+                'instanceId': data['instanceId'] as String?,
+                'tourDate': data['tourDate'] as String?,
               };
             }
 
@@ -199,6 +205,15 @@ class JoinedTourService extends ChangeNotifier {
 
       // If this booking belonged to an instance, refund seats to that instance
       final instanceId = cachedData['instanceId'] as String?;
+      try {
+        await _deleteMessagesForBookingOccurrence(
+          instanceId: instanceId,
+          tourId: tourId,
+          tourDate: cachedData['tourDate'] as String?,
+        );
+      } catch (e) {
+        debugPrint('Could not delete occurrence chat: $e');
+      }
       if (instanceId != null && instanceId.isNotEmpty) {
         final instRef = _firestore.collection('tour_instances').doc(instanceId);
         final instDoc = await instRef.get();
@@ -463,10 +478,21 @@ class JoinedTourService extends ChangeNotifier {
   void _initializeAuthListener() {
     _authService.addListener(() {
       final userId = _authService.userId;
+      final userChanged = _loadedUserId != userId;
+      if (userChanged) {
+        _loadedUserId = userId;
+        _bookingLoadGeneration++;
+        _joinedTours.clear();
+        _bookings.clear();
+        _bookingCache.clear();
+        notifyListeners();
+      }
       if (userId.isNotEmpty) {
         debugPrint('✅ User authenticated: $userId');
         _syncBookingDeletionMonitoring();
-        loadBookings();
+        if (userChanged) {
+          loadBookings();
+        }
       } else {
         debugPrint('❌ User logged out');
         _stopBookingDeletionMonitoring();
@@ -491,6 +517,16 @@ class JoinedTourService extends ChangeNotifier {
         return;
       }
 
+      if (_loadedUserId != userId) {
+        _loadedUserId = userId;
+        _bookingLoadGeneration++;
+        _joinedTours.clear();
+        _bookings.clear();
+        _bookingCache.clear();
+        notifyListeners();
+      }
+      final loadGeneration = ++_bookingLoadGeneration;
+
       final directBookingsSnapshot = await _firestore
           .collection('bookings')
           .where('userId', isEqualTo: userId)
@@ -500,6 +536,8 @@ class JoinedTourService extends ChangeNotifier {
           .collection('bookings')
           .where('passengerIds', arrayContains: userId)
           .get();
+
+      if (!_isCurrentBookingLoad(userId, loadGeneration)) return;
 
       final bookingDocsById =
           <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
@@ -514,6 +552,7 @@ class JoinedTourService extends ChangeNotifier {
       _joinedTours.clear();
 
       for (final doc in bookingDocsById.values) {
+        if (!_isCurrentBookingLoad(userId, loadGeneration)) return;
         final data = doc.data();
         if (!_bookingBelongsToUser(data, userId)) {
           continue;
@@ -543,11 +582,12 @@ class JoinedTourService extends ChangeNotifier {
                   .collection('tour_instances')
                   .doc(instanceId)
                   .get();
+              if (!_isCurrentBookingLoad(userId, loadGeneration)) return;
               if (instDoc.exists) {
                 final inst = instDoc.data() ?? {};
                 final lastJoiningTime = _parseBookingCloseDateTime(inst);
                 tour = Tour(
-                  id: tourId,
+                  id: instanceId,
                   name: inst['name'] ?? data['tourName'] ?? '',
                   imageUrl: inst['imageUrl'] ?? '',
                   startDate: DateTime.parse(
@@ -583,6 +623,7 @@ class JoinedTourService extends ChangeNotifier {
                 .collection('tours')
                 .doc(tourId)
                 .get();
+            if (!_isCurrentBookingLoad(userId, loadGeneration)) return;
             if (tourDoc.exists) {
               final tourData = tourDoc.data() ?? {};
               final lastJoiningTime = _parseBookingCloseDateTime(tourData);
@@ -634,6 +675,7 @@ class JoinedTourService extends ChangeNotifier {
           'totalPersons': data['totalPersons'] as int? ?? 0,
           'userId': data['userId'] as String?,
           'instanceId': (data['instanceId'] as String?) ?? '',
+          'tourDate': data['tourDate'] as String?,
         };
 
         // Add to joined tours
@@ -650,10 +692,17 @@ class JoinedTourService extends ChangeNotifier {
         );
       }
 
-      notifyListeners();
+      if (_isCurrentBookingLoad(userId, loadGeneration)) {
+        notifyListeners();
+      }
     } catch (e) {
       debugPrint('❌ Error loading bookings: $e');
     }
+  }
+
+  bool _isCurrentBookingLoad(String userId, int loadGeneration) {
+    return _authService.userId == userId &&
+        _bookingLoadGeneration == loadGeneration;
   }
 
   /// Count how many passengers in this booking belong to the given user
@@ -735,6 +784,23 @@ class JoinedTourService extends ChangeNotifier {
       final bookingRef = _firestore.collection('bookings').doc();
       final bookedAt = DateTime.now();
 
+      if (!isIdleTemplate) {
+        final existingBookings = await _firestore
+            .collection('bookings')
+            .where('userId', isEqualTo: userId)
+            .get();
+        final alreadyBooked = existingBookings.docs.any((doc) {
+          final data = doc.data();
+          return data['instanceId']?.toString() == tour.id ||
+              data['tourId']?.toString() == tour.id;
+        });
+        if (alreadyBooked) {
+          throw StateError(
+            'You already booked this tour. Open My Booking to edit the passenger count.',
+          );
+        }
+      }
+
       late Tour bookedTour;
       late Booking booking;
 
@@ -745,7 +811,32 @@ class JoinedTourService extends ChangeNotifier {
         var bookedUserIds = List<String>.from(tour.bookedUserIds);
         var firstBookedUserId = tour.firstBookedUserId;
 
-        if (!isIdleTemplate) {
+        if (isIdleTemplate) {
+          final templateRef = _firestore.collection('tours').doc(tour.id);
+          final templateSnapshot = await transaction.get(templateRef);
+          if (!templateSnapshot.exists) {
+            throw StateError('This idle tour no longer exists');
+          }
+
+          final templateData =
+              templateSnapshot.data() ?? <String, dynamic>{};
+          totalSeats = _toInt(
+            templateData['totalSeats'],
+            fallback: _toInt(
+              templateData['available_seats'] ??
+                  templateData['remainingSeats'],
+              fallback: totalSeats,
+            ),
+          );
+
+          // Every active occurrence starts from the administrator's full
+          // template capacity. Previous bookings must never reduce the idle
+          // template's displayed or reusable seat count.
+          remainingSeats = totalSeats;
+          bookedSeats = 0;
+          bookedUserIds = <String>[];
+          firstBookedUserId = '';
+        } else {
           final instanceSnapshot = await transaction.get(instanceRef);
           if (!instanceSnapshot.exists) {
             throw StateError('This active tour no longer exists');
@@ -865,6 +956,7 @@ class JoinedTourService extends ChangeNotifier {
         'totalPersons': totalPersons,
         'userId': userId,
         'instanceId': bookedTour.id,
+        'tourDate': scheduledDate.toIso8601String(),
       };
 
       notifyListeners();
@@ -1353,15 +1445,32 @@ class JoinedTourService extends ChangeNotifier {
       _lastSeenBookings.remove(bookingId);
       debugPrint('✅ Booking deleted: $bookingId');
 
-      // Delete all chat messages for this tour
+      // Delete chat messages only for this scheduled tour occurrence.
       try {
         final messagesSnapshot = await _firestore
             .collection('messages')
-            .where('tourId', isEqualTo: tourId)
+            .where(
+              'tourId',
+              isEqualTo:
+                  (bookingData?['instanceId'] as String?) ?? tourId,
+            )
             .get();
 
         final batch = _firestore.batch();
+        final bookingTourDate = DateTime.tryParse(
+          bookingData?['tourDate']?.toString() ?? '',
+        );
         for (final doc in messagesSnapshot.docs) {
+          final messageTourDate = DateTime.tryParse(
+            doc.data()['tourDate']?.toString() ?? '',
+          );
+          if (bookingTourDate != null &&
+              messageTourDate != null &&
+              (bookingTourDate.year != messageTourDate.year ||
+                  bookingTourDate.month != messageTourDate.month ||
+                  bookingTourDate.day != messageTourDate.day)) {
+            continue;
+          }
           batch.delete(doc.reference);
         }
         await batch.commit();
@@ -1501,6 +1610,48 @@ class JoinedTourService extends ChangeNotifier {
     }
   }
 
+  Future<void> _deleteMessagesForBookingOccurrence({
+    required String? instanceId,
+    required String tourId,
+    required String? tourDate,
+  }) async {
+    final chatId = instanceId != null && instanceId.isNotEmpty
+        ? instanceId
+        : tourId;
+    if (chatId.isEmpty) return;
+
+    final bookingDate = DateTime.tryParse(tourDate ?? '');
+    final messagesSnapshot = await _firestore
+        .collection('messages')
+        .where('tourId', isEqualTo: chatId)
+        .get();
+    final batch = _firestore.batch();
+    var deletedCount = 0;
+
+    for (final doc in messagesSnapshot.docs) {
+      final messageDate = DateTime.tryParse(
+        doc.data()['tourDate']?.toString() ?? '',
+      );
+      final sameDate =
+          bookingDate == null ||
+          messageDate == null ||
+          (bookingDate.year == messageDate.year &&
+              bookingDate.month == messageDate.month &&
+              bookingDate.day == messageDate.day);
+      if (!sameDate) continue;
+
+      batch.delete(doc.reference);
+      deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+      await batch.commit();
+    }
+    debugPrint(
+      'Deleted $deletedCount messages for booking occurrence $chatId',
+    );
+  }
+
   /// Stream real-time bookings from Firestore
   Stream<List<JoinedTour>> streamBookings() {
     final userId = _authService.userId;
@@ -1511,7 +1662,7 @@ class JoinedTourService extends ChangeNotifier {
     return _firestore
         .collection('bookings')
         .snapshots()
-        .map((snapshot) {
+        .asyncMap((snapshot) async {
           final joinedTours = <JoinedTour>[];
 
           for (var doc in snapshot.docs) {
@@ -1520,39 +1671,112 @@ class JoinedTourService extends ChangeNotifier {
               continue;
             }
 
-            final tour = Tour(
-              id: data['tourId'] ?? '',
+            final instanceId =
+                (data['instanceId'] ?? data['tourId'] ?? '').toString();
+            final tourDate = DateTime.tryParse(
+                  data['tourDate']?.toString() ?? '',
+                ) ??
+                DateTime.now();
+            var tour = Tour(
+              id: instanceId,
               name: data['tourName'] ?? '',
               imageUrl: data['imageUrl'] ?? '',
-              startDate: DateTime.parse(
-                data['tourDate'] as String? ?? DateTime.now().toIso8601String(),
-              ),
+              startDate: tourDate,
               totalSeats: (data['instanceTotalSeats'] as num?)?.toInt() ?? 0,
               remainingSeats: (data['instanceAvailable'] as num?)?.toInt() ?? 0,
               price: (data['price'] as num?)?.toDouble() ?? 0.0,
             );
 
+            if (instanceId.isNotEmpty) {
+              try {
+                final instanceDoc = await _firestore
+                    .collection('tour_instances')
+                    .doc(instanceId)
+                    .get();
+                final instance = instanceDoc.data();
+                if (instance != null) {
+                  tour = Tour(
+                    id: instanceId,
+                    name: (instance['name'] ?? data['tourName'] ?? '')
+                        .toString(),
+                    imageUrl:
+                        (instance['imageUrl'] ?? data['imageUrl'] ?? '')
+                            .toString(),
+                    startDate: DateTime.tryParse(
+                          instance['startDate']?.toString() ?? '',
+                        ) ??
+                        tourDate,
+                    totalSeats: _toInt(
+                      instance['totalSeats'],
+                      fallback: tour.totalSeats,
+                    ),
+                    remainingSeats: _toInt(
+                      instance['available_seats'] ??
+                          instance['remainingSeats'],
+                      fallback: tour.remainingSeats,
+                    ),
+                    price: _toDouble(
+                      instance['price'],
+                      fallback: tour.price,
+                    ),
+                    description: (instance['description'] ?? '').toString(),
+                    photos: List<String>.from(instance['photos'] ?? const []),
+                    category: (instance['category'] ?? '').toString(),
+                    startLocation:
+                        (instance['startLocation'] ?? '').toString(),
+                    lastJoiningTime: _parseBookingCloseDateTime(instance),
+                    endTime: (instance['endTime'] ?? '').toString(),
+                    endLocation: (instance['endLocation'] ?? '').toString(),
+                    route: (instance['route'] as List<dynamic>? ?? const [])
+                        .whereType<Map>()
+                        .map(
+                          (stop) => RouteStop(
+                            location: (stop['location'] ?? '').toString(),
+                            time: (stop['time'] ?? '').toString(),
+                          ),
+                        )
+                        .toList(),
+                    operatorName:
+                        (instance['operatorName'] ?? '').toString(),
+                    whatsIncluded: List<String>.from(
+                      instance['whatsIncluded'] ?? const [],
+                    ),
+                    tourFeatures: List<String>.from(
+                      instance['tourFeatures'] ?? const [],
+                    ),
+                    firstBookedUserId:
+                        (instance['firstBookedUserId'] ?? '').toString(),
+                    bookedUserIds: List<String>.from(
+                      instance['bookedUserIds'] ?? const [],
+                    ),
+                    bookedSeats: _toInt(instance['bookedSeats']),
+                    sourceIdleTourId:
+                        (instance['sourceIdleTourId'] ?? '').toString(),
+                  );
+                }
+              } catch (e) {
+                debugPrint(
+                  'Could not load instance $instanceId for booking ${doc.id}: $e',
+                );
+              }
+            }
+
             joinedTours.add(
               JoinedTour(
+                bookingId: doc.id,
                 tour: tour,
                 joinedAt: DateTime.parse(
                   data['bookedAt'] as String? ??
                       DateTime.now().toIso8601String(),
                 ),
-                persons:
-                    (data['passengers'] as List<dynamic>? ?? const [])
-                        .where(
-                          (p) =>
-                              p is Map<String, dynamic> &&
-                              p['userId'] == userId,
-                        )
-                        .isNotEmpty
-                    ? 1
-                    : (data['totalPersons'] ?? 0),
+                persons: _toInt(data['totalPersons']),
               ),
             );
           }
 
+          joinedTours.sort(
+            (a, b) => a.tour.startDate.compareTo(b.tour.startDate),
+          );
           debugPrint('🔄 Real-time update: ${joinedTours.length} bookings');
           return joinedTours;
         })
@@ -1577,12 +1801,188 @@ class JoinedTourService extends ChangeNotifier {
     return _joinedTours.any((jt) => jt.tour.name == tourName);
   }
 
+  bool _bookingMatchesTour(Booking booking, Tour tour) {
+    if (booking.tour.id == tour.id) return true;
+    if (tour.sourceIdleTourId.isNotEmpty &&
+        booking.tour.sourceIdleTourId == tour.sourceIdleTourId &&
+        booking.tour.startDate.isAtSameMomentAs(tour.startDate)) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Returns whether the currently authenticated user booked this exact tour
+  /// occurrence. Tour names are intentionally not used because multiple active
+  /// occurrences can share the same name.
+  bool isJoinedTour(Tour tour) {
+    final userId = _authService.userId;
+    if (userId.isEmpty) return false;
+
+    if (tour.bookedUserIds.contains(userId)) {
+      return true;
+    }
+
+    return _bookings.any(
+      (booking) =>
+          booking.userId == userId && _bookingMatchesTour(booking, tour),
+    );
+  }
+
+  Booking? bookingForTour(Tour tour) {
+    final userId = _authService.userId;
+    if (userId.isEmpty) return null;
+
+    for (final booking in _bookings) {
+      if (booking.userId == userId && _bookingMatchesTour(booking, tour)) {
+        return booking;
+      }
+    }
+    return null;
+  }
+
+  /// Loads the current user's booking for this exact active occurrence.
+  Future<Booking?> loadBookingForTour(Tour tour) async {
+    final cached = bookingForTour(tour);
+    if (cached != null) return cached;
+
+    final userId = _authService.userId;
+    if (userId.isEmpty) return null;
+
+    final snapshot = await _firestore
+        .collection('bookings')
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final instanceId = (data['instanceId'] ?? '').toString();
+      final tourId = (data['tourId'] ?? '').toString();
+      final templateTourId = (data['templateTourId'] ?? '').toString();
+      final matchesInstance = instanceId == tour.id || tourId == tour.id;
+      final matchesTemplate =
+          tour.sourceIdleTourId.isNotEmpty &&
+          templateTourId == tour.sourceIdleTourId &&
+          data['tourDate']?.toString() == tour.startDate.toIso8601String();
+
+      if (matchesInstance || matchesTemplate) {
+        final bookingData = Map<String, dynamic>.from(data);
+        bookingData['id'] = doc.id;
+        return Booking.fromMap(bookingData, tour);
+      }
+    }
+
+    return null;
+  }
+
+  /// Updates only the passenger count and keeps the tour seat totals in sync.
+  Future<void> updateBookingPassengerCount(
+    Booking booking,
+    int newTotalPersons,
+  ) async {
+    final userId = _authService.userId;
+    if (userId.isEmpty || booking.userId != userId) {
+      throw StateError('You can only edit your own booking');
+    }
+    if (newTotalPersons < 1) {
+      throw StateError('A booking needs at least one passenger');
+    }
+    if (newTotalPersons == booking.totalPersons) return;
+
+    final bookingRef = _firestore.collection('bookings').doc(booking.id);
+    final instanceRef = _firestore
+        .collection('tour_instances')
+        .doc(booking.tour.id);
+
+    await _firestore.runTransaction((transaction) async {
+      final bookingSnapshot = await transaction.get(bookingRef);
+      if (!bookingSnapshot.exists) {
+        throw StateError('This booking no longer exists');
+      }
+
+      final bookingData = bookingSnapshot.data() ?? <String, dynamic>{};
+      if (bookingData['userId'] != userId) {
+        throw StateError('You can only edit your own booking');
+      }
+
+      final oldTotal = _toInt(bookingData['totalPersons']);
+      final difference = newTotalPersons - oldTotal;
+      final storedInstanceId = (bookingData['instanceId'] ?? '').toString();
+      final targetInstanceRef = storedInstanceId.isNotEmpty
+          ? _firestore.collection('tour_instances').doc(storedInstanceId)
+          : instanceRef;
+      final instanceSnapshot = await transaction.get(targetInstanceRef);
+      if (!instanceSnapshot.exists) {
+        throw StateError('This active tour no longer exists');
+      }
+
+      final instanceData = instanceSnapshot.data() ?? <String, dynamic>{};
+      final totalSeats = _toInt(instanceData['totalSeats']);
+      final availableSeats = _toInt(
+        instanceData['available_seats'] ?? instanceData['remainingSeats'],
+      );
+      if (difference > availableSeats) {
+        throw StateError(
+          'Only $availableSeats more seat${availableSeats == 1 ? '' : 's'} available',
+        );
+      }
+
+      final newAvailableSeats = (availableSeats - difference)
+          .clamp(0, totalSeats)
+          .toInt();
+      final newBookedSeats = (_toInt(instanceData['bookedSeats']) + difference)
+          .clamp(0, totalSeats)
+          .toInt();
+
+      var adults = _toInt(bookingData['adults']);
+      var kids6to12 = _toInt(bookingData['kids6to12']);
+      var kidsUnder6 = _toInt(bookingData['kidsUnder6']);
+      if (difference > 0) {
+        adults += difference;
+      } else {
+        var toRemove = -difference;
+        final adultsRemoved = toRemove.clamp(0, adults).toInt();
+        adults -= adultsRemoved;
+        toRemove -= adultsRemoved;
+        final kidsRemoved = toRemove.clamp(0, kids6to12).toInt();
+        kids6to12 -= kidsRemoved;
+        toRemove -= kidsRemoved;
+        kidsUnder6 = (kidsUnder6 - toRemove)
+            .clamp(0, kidsUnder6)
+            .toInt();
+      }
+
+      final price = (instanceData['price'] as num?)?.toDouble() ??
+          booking.tour.price;
+      final newTotalPrice = adults * price + kids6to12 * price * 0.5;
+
+      transaction.update(targetInstanceRef, {
+        'available_seats': newAvailableSeats,
+        'remainingSeats': newAvailableSeats,
+        'bookedSeats': newBookedSeats,
+      });
+      transaction.update(bookingRef, {
+        'adults': adults,
+        'kids6to12': kids6to12,
+        'kidsUnder6': kidsUnder6,
+        'totalPersons': newTotalPersons,
+        'totalPrice': newTotalPrice,
+        'instanceAvailable': newAvailableSeats,
+        'instanceTotalSeats': totalSeats,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+
+    await loadBookings();
+  }
+
   List<JoinedTour> get toursWithChats {
     return _joinedTours.where((jt) => jt.isChatAvailable).toList();
   }
 
   /// Clear all cached bookings and tours when user logs out
   void clearCache() {
+    _bookingLoadGeneration++;
+    _loadedUserId = _authService.userId;
     _joinedTours.clear();
     _bookings.clear();
     _lastSeenBookings.clear();

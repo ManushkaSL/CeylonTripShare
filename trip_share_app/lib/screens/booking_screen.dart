@@ -32,6 +32,7 @@ class _BookingScreenState extends State<BookingScreen> {
   final _cardHolderController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isSubmitting = false;
+  DateTime? _selectedTourDate;
 
   // Pricing Constants
   static const double _kidsDiscount = 0.5;
@@ -42,6 +43,43 @@ class _BookingScreenState extends State<BookingScreen> {
   double get _toddlerTotal => _kidsUnder6 * _toddlerPrice;
   double get _totalPrice => _adultTotal + _kids6to12Total + _toddlerTotal;
   int get _totalPersons => _adults + _kids6to12 + _kidsUnder6;
+
+  DateTime get _firstSelectableDate {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime get _initialSelectableDate {
+    final adminDate = DateTime(
+      widget.tour.startDate.year,
+      widget.tour.startDate.month,
+      widget.tour.startDate.day,
+    );
+    return adminDate.isBefore(_firstSelectableDate)
+        ? _firstSelectableDate
+        : adminDate;
+  }
+
+  DateTime get _lastSelectableDate {
+    final oneYearFromToday = _firstSelectableDate.add(
+      const Duration(days: 365),
+    );
+    return _initialSelectableDate.isAfter(oneYearFromToday)
+        ? _initialSelectableDate.add(const Duration(days: 365))
+        : oneYearFromToday;
+  }
+
+  Future<void> _selectTourDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedTourDate ?? _initialSelectableDate,
+      firstDate: _firstSelectableDate,
+      lastDate: _lastSelectableDate,
+    );
+    if (date != null && mounted) {
+      setState(() => _selectedTourDate = date);
+    }
+  }
 
   @override
   void dispose() {
@@ -90,33 +128,27 @@ class _BookingScreenState extends State<BookingScreen> {
     }
 
     DateTime? chosenTourDate;
-    // If this is an idle tour (not an already scheduled/active instance),
-    // prompt the user to pick a start date & time for the booked instance.
     if (widget.tour.status == TourStatus.idle) {
-      final DateTime now = DateTime.now();
-      final initialDate = widget.tour.startDate.isAfter(now)
-          ? widget.tour.startDate
-          : now;
-      final date = await showDatePicker(
-        context: context,
-        initialDate: initialDate,
-        firstDate: now,
-        lastDate: now.add(const Duration(days: 365)),
-      );
-      if (date == null) return; // cancelled
+      final date = _selectedTourDate;
+      if (date == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please select your preferred tour date'),
+            backgroundColor: DesignColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
 
-      final time = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(widget.tour.startDate),
-      );
-      if (time == null) return; // cancelled
-
+      // The customer selects only the date. Tour time is fixed by admin.
       chosenTourDate = DateTime(
         date.year,
         date.month,
         date.day,
-        time.hour,
-        time.minute,
+        widget.tour.startDate.hour,
+        widget.tour.startDate.minute,
+        widget.tour.startDate.second,
       );
     }
 
@@ -300,6 +332,13 @@ class _BookingScreenState extends State<BookingScreen> {
             // Tour info header
             _buildTourHeader(),
             const SizedBox(height: 24),
+
+            if (widget.tour.status == TourStatus.idle) ...[
+              _buildSectionTitle('SELECT TOUR DATE'),
+              const SizedBox(height: 10),
+              _buildTourDateSection(),
+              const SizedBox(height: 24),
+            ],
 
             // Group details counter card
             _buildSectionTitle('TRAVELERS'),
@@ -680,6 +719,132 @@ class _BookingScreenState extends State<BookingScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildTourDateSection() {
+    final fixedTime = TimeOfDay.fromDateTime(widget.tour.startDate);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _selectedTourDate == null
+              ? DesignColors.divider.withOpacity(0.8)
+              : DesignColors.primary.withOpacity(0.45),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _selectTourDate,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBF8F4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: DesignColors.divider),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_month_rounded,
+                    color: DesignColors.primary,
+                    size: 21,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _selectedTourDate == null
+                          ? 'Tap to select tour date'
+                          : _formatSelectedDate(_selectedTourDate!),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _selectedTourDate == null
+                            ? DesignColors.textSecondary
+                            : DesignColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: DesignColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 14, 8, 0),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.schedule_rounded,
+                  color: DesignColors.primary,
+                  size: 21,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Tour start time',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: DesignColors.textSecondary,
+                    ),
+                  ),
+                ),
+                Text(
+                  fixedTime.format(context),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: DesignColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_selectedTourDate == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'Choose the date you want. The tour time is fixed by the administrator.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: DesignColors.textSecondary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatSelectedDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Widget _buildCounter(

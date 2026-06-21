@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/screens/booking_details_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
@@ -18,19 +19,24 @@ class TourDetailScreen extends StatefulWidget {
 class _TourDetailScreenState extends State<TourDetailScreen> {
   int _currentPhoto = 0;
   late final PageController _pageController;
-  late bool _isUserBooked;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    _isUserBooked = JoinedTourService().isJoined(widget.tour.name);
+    JoinedTourService().addListener(_onBookingsChanged);
+    JoinedTourService().loadBookings();
   }
 
   @override
   void dispose() {
+    JoinedTourService().removeListener(_onBookingsChanged);
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onBookingsChanged() {
+    if (mounted) setState(() {});
   }
 
   List<String> get _allPhotos {
@@ -43,8 +49,17 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     if (!AuthService().isLoggedIn) {
       final loggedIn = await LoginDialog.show(context);
       if (!loggedIn) return;
+      await JoinedTourService().loadBookings();
     }
     if (!mounted) return;
+
+    if (JoinedTourService().isJoinedTour(tour)) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => BookingDetailsScreen(tour: tour)),
+      );
+      return;
+    }
+
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => BookingScreen(tour: tour)));
@@ -55,6 +70,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     final tour = widget.tour;
     final status = tour.status;
     final photos = _allPhotos;
+    final isUserBooked = JoinedTourService().isJoinedTour(tour);
 
     return Scaffold(
       backgroundColor: DesignColors.background,
@@ -439,34 +455,33 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
             ),
           ],
         ),
-        child: _isUserBooked
-            ? Container(
+        child: isUserBooked
+            ? SizedBox(
                 height: 52,
-                decoration: BoxDecoration(
-                  color: DesignColors.success.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: DesignColors.success.withOpacity(0.3),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.check_circle_rounded,
-                      size: 20,
-                      color: DesignColors.success,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'You booked this adventure!',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: DesignColors.success,
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BookingDetailsScreen(tour: tour),
                       ),
+                    );
+                  },
+                  icon: const Icon(Icons.edit_calendar_rounded, size: 20),
+                  label: const Text(
+                    'View / Edit My Booking',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
                     ),
-                  ],
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: DesignColors.success,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
               )
             : tour.canBook
@@ -533,7 +548,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                       child: Text(
                         status == TourStatus.idle
                             ? 'Start Tour'
-                            : 'Join Safari',
+                            : 'Join Tour',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
