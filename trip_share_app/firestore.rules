@@ -71,7 +71,27 @@ service cloud.firestore {
       allow create: if request.auth != null &&
                     request.resource.data.userId == request.auth.uid;
       allow update: if request.auth != null &&
-                    (resource.data.userId == request.auth.uid || isAdmin()) &&
+                    (
+                      resource.data.userId == request.auth.uid ||
+                      isAdmin() ||
+                      (
+                        (
+                          resource.data.get('driverId', '') == request.auth.uid ||
+                          (
+                            request.auth.token.email != null &&
+                            resource.data.get('driverEmail', '') == request.auth.token.email
+                          )
+                        ) &&
+                        request.resource.data.status == 'completed' &&
+                        request.resource.data.completedBy == request.auth.uid &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                          'status',
+                          'completedAt',
+                          'completedBy',
+                          'updatedAt'
+                        ])
+                      )
+                    ) &&
                     request.resource.data.userId == resource.data.userId;
       allow delete: if request.auth != null &&
                     (resource.data.userId == request.auth.uid || isAdmin());

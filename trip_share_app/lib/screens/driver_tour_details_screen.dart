@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 
@@ -16,13 +18,14 @@ class DriverPassengerRecord {
   });
 }
 
-class DriverTourDetailsScreen extends StatelessWidget {
+class DriverTourDetailsScreen extends StatefulWidget {
   final String instanceId;
   final String templateTourId;
   final String tourName;
   final DateTime startDate;
   final int passengerCount;
   final List<DriverPassengerRecord> passengers;
+  final List<String> bookingIds;
 
   const DriverTourDetailsScreen({
     super.key,
@@ -32,7 +35,23 @@ class DriverTourDetailsScreen extends StatelessWidget {
     required this.startDate,
     required this.passengerCount,
     required this.passengers,
+    required this.bookingIds,
   });
+
+  @override
+  State<DriverTourDetailsScreen> createState() =>
+      _DriverTourDetailsScreenState();
+}
+
+class _DriverTourDetailsScreenState extends State<DriverTourDetailsScreen> {
+  bool _isCompleting = false;
+
+  String get instanceId => widget.instanceId;
+  String get templateTourId => widget.templateTourId;
+  String get tourName => widget.tourName;
+  DateTime get startDate => widget.startDate;
+  int get passengerCount => widget.passengerCount;
+  List<DriverPassengerRecord> get passengers => widget.passengers;
 
   @override
   Widget build(BuildContext context) {
@@ -92,16 +111,147 @@ class DriverTourDetailsScreen extends StatelessWidget {
                 _emptyPassengers()
               else
                 ...passengers.asMap().entries.map(
-                  (entry) => _buildPassengerCard(
-                    entry.key + 1,
-                    entry.value,
-                  ),
+                  (entry) => _buildPassengerCard(entry.key + 1, entry.value),
                 ),
             ],
           );
         },
       ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: SizedBox(
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: _isCompleting ? null : _confirmCompleteTour,
+            icon: _isCompleting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.check_circle_outline_rounded),
+            label: Text(
+              _isCompleting ? 'Completing...' : 'Complete Tour',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DesignColors.success,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: DesignColors.success.withValues(
+                alpha: 0.55,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  Future<void> _confirmCompleteTour() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Complete this tour?'),
+        content: const Text(
+          'This removes the tour from active assignments and moves it to '
+          'Completed Tours in the admin panel.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DesignColors.success,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Complete Tour'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCompleting = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('Please sign in again before completing this tour.');
+      }
+      if (widget.bookingIds.isEmpty) {
+        throw StateError('No assigned bookings were found for this tour.');
+      }
+
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      final completedAt = FieldValue.serverTimestamp();
+
+      for (final bookingId in widget.bookingIds.toSet()) {
+        batch.update(firestore.collection('bookings').doc(bookingId), {
+          'status': 'completed',
+          'completedAt': completedAt,
+          'completedBy': user.uid,
+          'updatedAt': completedAt,
+        });
+      }
+
+      if (instanceId.isNotEmpty) {
+        final instanceRef = firestore
+            .collection('tour_instances')
+            .doc(instanceId);
+        final instanceSnapshot = await instanceRef.get();
+        if (instanceSnapshot.exists) {
+          batch.update(instanceRef, {
+            'status': 'completed',
+            'completedAt': completedAt,
+            'completedBy': user.uid,
+          });
+        }
+
+        final locationRef = firestore
+            .collection('driver_locations')
+            .doc(instanceId);
+        final locationSnapshot = await locationRef.get();
+        if (locationSnapshot.exists &&
+            (locationSnapshot.data()?['driverId'] ?? '').toString() ==
+                user.uid) {
+          batch.delete(locationRef);
+        }
+      }
+
+      await batch.commit();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tour completed successfully.')),
+      );
+      Navigator.of(context).pop(true);
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      setState(() => _isCompleting = false);
+      final message = error.code == 'permission-denied'
+          ? 'Permission denied. Ask the admin to reassign this tour to your driver account.'
+          : 'Could not complete the tour (${error.code}). Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isCompleting = false);
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Could not complete the tour. Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   Future<Map<String, dynamic>> _loadTourDetails() async {
@@ -114,9 +264,7 @@ class DriverTourDetailsScreen extends StatelessWidget {
       if (instance.exists) return instance.data() ?? {};
     }
 
-    final fallbackId = templateTourId.isNotEmpty
-        ? templateTourId
-        : instanceId;
+    final fallbackId = templateTourId.isNotEmpty ? templateTourId : instanceId;
     if (fallbackId.isEmpty) return {};
     final tour = await firestore.collection('tours').doc(fallbackId).get();
     return tour.data() ?? {};
@@ -152,22 +300,10 @@ class DriverTourDetailsScreen extends StatelessWidget {
             _formatDateTime(startDate),
           ),
           if (startLocation.isNotEmpty)
-            _detailRow(
-              Icons.trip_origin_rounded,
-              'From',
-              startLocation,
-            ),
+            _detailRow(Icons.trip_origin_rounded, 'From', startLocation),
           if (endLocation.isNotEmpty)
-            _detailRow(
-              Icons.location_on_rounded,
-              'To',
-              endLocation,
-            ),
-          _detailRow(
-            Icons.groups_rounded,
-            'Passengers',
-            '$passengerCount',
-          ),
+            _detailRow(Icons.location_on_rounded, 'To', endLocation),
+          _detailRow(Icons.groups_rounded, 'Passengers', '$passengerCount'),
           if (description.isNotEmpty) ...[
             const Divider(height: 24),
             Text(

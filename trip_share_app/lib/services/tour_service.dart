@@ -17,6 +17,8 @@ class TourService {
     return _firestore.collection('bookings').snapshots().map((snapshot) {
       final ids = <String>{};
       for (final doc in snapshot.docs) {
+        final status = (doc.data()['status'] ?? '').toString().toLowerCase();
+        if (status == 'completed' || status == 'cancelled') continue;
         final tourId = (doc.data()['tourId'] ?? '').toString();
         if (tourId.isNotEmpty) ids.add(tourId);
       }
@@ -305,30 +307,36 @@ class TourService {
             .toList(growable: false);
 
         final rawInstances = instDocs
+            .where((d) {
+              final status = (d.data()['status'] ?? '')
+                  .toString()
+                  .toLowerCase();
+              return status != 'completed' && status != 'cancelled';
+            })
             .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
             .whereType<Tour>()
             .toList(growable: false);
-        final templatesById = {
-          for (final tour in tours) tour.id: tour,
-        };
-        final parsedInstances = rawInstances.map((instance) {
-          final template = templatesById[instance.sourceIdleTourId];
-          if (template == null) return instance;
+        final templatesById = {for (final tour in tours) tour.id: tour};
+        final parsedInstances = rawInstances
+            .map((instance) {
+              final template = templatesById[instance.sourceIdleTourId];
+              if (template == null) return instance;
 
-          // The booked occurrence controls the date, while the reusable idle
-          // template controls the administrator-defined start time.
-          final adminTime = template.startDate;
-          return instance.copyWith(
-            startDate: DateTime(
-              instance.startDate.year,
-              instance.startDate.month,
-              instance.startDate.day,
-              adminTime.hour,
-              adminTime.minute,
-              adminTime.second,
-            ),
-          );
-        }).toList(growable: false);
+              // The booked occurrence controls the date, while the reusable idle
+              // template controls the administrator-defined start time.
+              final adminTime = template.startDate;
+              return instance.copyWith(
+                startDate: DateTime(
+                  instance.startDate.year,
+                  instance.startDate.month,
+                  instance.startDate.day,
+                  adminTime.hour,
+                  adminTime.minute,
+                  adminTime.second,
+                ),
+              );
+            })
+            .toList(growable: false);
         final instances = bookingsSnapshotAvailable
             ? parsedInstances
                   .where((tour) => latestBookedTourIds.contains(tour.id))
@@ -443,10 +451,15 @@ class TourService {
           (bSnap) {
             try {
               bookedIds = bSnap.docs
+                  .where((d) {
+                    final status = (d.data()['status'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    return status != 'completed' && status != 'cancelled';
+                  })
                   .map(
-                    (d) =>
-                        (d.data()['instanceId'] ?? d.data()['tourId'] ?? '')
-                            .toString(),
+                    (d) => (d.data()['instanceId'] ?? d.data()['tourId'] ?? '')
+                        .toString(),
                   )
                   .where((id) => id.isNotEmpty)
                   .toSet();

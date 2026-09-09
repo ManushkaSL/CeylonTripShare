@@ -17,6 +17,7 @@ import {
   getDocs,
   getDoc,
   query,
+  onSnapshot,
   serverTimestamp,
   updateDoc,
   setDoc,
@@ -36,6 +37,21 @@ function chunkValues<T>(values: T[], chunkSize: number): T[][] {
     chunks.push(values.slice(index, index + chunkSize));
   }
   return chunks;
+}
+
+function formatCompletedAt(value: unknown) {
+  if (!value) return 'Completion time pending';
+
+  let date: Date;
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    date = (value as { toDate: () => Date }).toDate();
+  } else {
+    date = new Date(value as string | number | Date);
+  }
+
+  return Number.isNaN(date.getTime())
+    ? 'Completion time pending'
+    : date.toLocaleString();
 }
 
 async function deleteDocumentRefsInBatches(
@@ -439,7 +455,7 @@ export default function App() {
   const [routeInput, setRouteInput] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [activeSection, setActiveSection] = useState<'tours' | 'drivers' | 'bookings'>('tours');
+  const [activeSection, setActiveSection] = useState<'tours' | 'drivers' | 'bookings' | 'completed'>('tours');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverEmail, setDriverEmail] = useState('');
   const [addingDriver, setAddingDriver] = useState(false);
@@ -753,6 +769,7 @@ export default function App() {
             id: docSnap.id,
             userId: data.userId || '',
             tourId: data.tourId || '',
+            instanceId: data.instanceId || '',
             status: data.status || 'pending',
             numberOfPeople: data.totalPersons || data.numberOfPeople || 0,
             totalPrice: data.totalPrice || 0,
@@ -765,7 +782,10 @@ export default function App() {
             driverEmail: data.driverEmail,
             passengers: data.passengers || [],
             createdAt: data.createdAt || data.bookedAt,
-            updatedAt: data.updatedAt
+            updatedAt: data.updatedAt,
+            tourDate: data.tourDate,
+            completedAt: data.completedAt,
+            completedBy: data.completedBy
           } as Booking;
         })
       );
@@ -784,19 +804,20 @@ export default function App() {
     }
   };
 
-  // Group bookings by tour
-  const groupBookingsByTour = () => {
+  // Group bookings by a concrete tour occurrence. Older records without an
+  // instance ID fall back to the reusable tour ID.
+  const groupBookingsByTour = (sourceBookings: Booking[] = bookings) => {
     const grouped: { [tourId: string]: { tourTitle: string; bookings: Booking[] } } = {};
     
-    bookings.forEach((booking) => {
-      const tourId = booking.tourId;
-      if (!grouped[tourId]) {
-        grouped[tourId] = {
+    sourceBookings.forEach((booking) => {
+      const occurrenceId = booking.instanceId || booking.tourId;
+      if (!grouped[occurrenceId]) {
+        grouped[occurrenceId] = {
           tourTitle: booking.tourTitle || 'Untitled Tour',
           bookings: []
         };
       }
-      grouped[tourId].bookings.push(booking);
+      grouped[occurrenceId].bookings.push(booking);
     });
     
     return grouped;
@@ -947,10 +968,13 @@ export default function App() {
     }
   };
 
-  const deleteAllBookingsForTour = async (tourId: string) => {
+  const deleteAllBookingsForTour = async (occurrenceId: string) => {
     if (!confirm('Are you sure you want to delete ALL bookings for this tour? This cannot be undone.')) return;
     try {
-      const tourBookings = bookings.filter(b => b.tourId === tourId);
+      const tourBookings = bookings.filter(
+        booking => (booking.instanceId || booking.tourId) === occurrenceId,
+      );
+      const templateTourId = tourBookings[0]?.tourId;
       
       // Calculate total seats to restore
       let totalSeatsToRestore = 0;
@@ -964,14 +988,14 @@ export default function App() {
       }
       
       // Restore seats to tour if needed
-      if (totalSeatsToRestore > 0) {
-        const tour = tours.find(t => t.id === tourId);
+      if (totalSeatsToRestore > 0 && templateTourId) {
+        const tour = tours.find(t => t.id === templateTourId);
         if (tour) {
           const updatedAvailableSeats = Math.min(
             tour.available_seats + totalSeatsToRestore,
             tour.seat_count
           );
-          await updateDoc(doc(db, 'tours', tourId), {
+          await updateDoc(doc(db, 'tours', templateTourId), {
             available_seats: updatedAvailableSeats
           });
         }
@@ -986,10 +1010,12 @@ export default function App() {
     }
   };
 
-  const assignDriverToTour = async (tourId: string, driverId: string) => {
-    setAssigningTourId(tourId);
+  const assignDriverToTour = async (occurrenceId: string, driverId: string) => {
+    setAssigningTourId(occurrenceId);
     try {
-      const tourBookings = bookings.filter(booking => booking.tourId === tourId);
+      const tourBookings = bookings.filter(
+        booking => (booking.instanceId || booking.tourId) === occurrenceId,
+      );
       if (tourBookings.length === 0) {
         throw new Error('No bookings were found for this tour.');
       }
@@ -1048,6 +1074,7 @@ export default function App() {
     return bookings.filter(
       booking =>
         booking.status !== 'cancelled' &&
+        booking.status !== 'completed' &&
         (
           booking.driverId === linkedId ||
           booking.driverEmail?.trim().toLowerCase() === driver?.email
@@ -1076,8 +1103,18 @@ export default function App() {
     if (isAuthenticated) {
       fetchTours();
       fetchDrivers();
-      fetchBookings();
     }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubscribe = onSnapshot(
+      collection(db, 'bookings'),
+      () => fetchBookings(),
+      error => console.error('Bookings listener failed:', error),
+    );
+    return unsubscribe;
   }, [isAuthenticated]);
 
   if (!isAuthenticated) {
@@ -1512,6 +1549,18 @@ export default function App() {
     }
   };
 
+  const activeBookings = bookings.filter(
+    booking => booking.status !== 'completed' && booking.status !== 'cancelled',
+  );
+  const completedBookings = bookings.filter(booking => booking.status === 'completed');
+  const sectionTitle = activeSection === 'tours'
+    ? 'Tours Management'
+    : activeSection === 'bookings'
+      ? 'Active Tours'
+      : activeSection === 'completed'
+        ? 'Completed Tours'
+        : 'Driver Management';
+
   return (
     <div className="min-h-screen flex bg-stone-50">
       {/* Sidebar */}
@@ -1543,7 +1592,7 @@ export default function App() {
             }`}
           >
             <Calendar className="w-4 h-4" />
-            Booking Management
+            Active Tours
           </button>
           <button
             onClick={() => setActiveSection('drivers')}
@@ -1555,6 +1604,17 @@ export default function App() {
           >
             <Users className="w-4 h-4" />
             Driver Management
+          </button>
+          <button
+            onClick={() => setActiveSection('completed')}
+            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
+              activeSection === 'completed'
+                ? 'text-emerald-700 bg-emerald-50'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+            }`}
+          >
+            <CheckCircle className="w-4 h-4" />
+            Completed Tours
           </button>
         </nav>
         <div className="p-4 border-t border-stone-100">
@@ -1579,7 +1639,7 @@ export default function App() {
         <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-stone-900">
-              {activeSection === 'tours' ? 'Tours Management' : activeSection === 'bookings' ? 'Booking Management' : 'Driver Management'}
+              {sectionTitle}
             </h2>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
               <Lock className="w-3 h-3" />
@@ -1598,18 +1658,19 @@ export default function App() {
         </header>
 
         <div className="md:hidden px-4 pt-4">
-          <div className="grid grid-cols-3 gap-2 p-1 border border-stone-200 rounded-xl" style={{ backgroundColor: '#ffffff' }}>
+          <div className="grid grid-cols-4 gap-2 p-1 border border-stone-200 rounded-xl" style={{ backgroundColor: '#ffffff' }}>
             {[
               { key: 'tours', label: 'Tours', icon: LayoutDashboard },
-              { key: 'bookings', label: 'Bookings', icon: Calendar },
+              { key: 'bookings', label: 'Active', icon: Calendar },
               { key: 'drivers', label: 'Drivers', icon: Users },
+              { key: 'completed', label: 'Done', icon: CheckCircle },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeSection === item.key;
               return (
                 <button
                   key={item.key}
-                  onClick={() => setActiveSection(item.key as 'tours' | 'bookings' | 'drivers')}
+                  onClick={() => setActiveSection(item.key as 'tours' | 'bookings' | 'drivers' | 'completed')}
                   className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors ${
                     isActive ? 'bg-emerald-600 text-white' : 'text-stone-700 hover:bg-stone-100'
                   }`}
@@ -1964,8 +2025,8 @@ export default function App() {
             }}>
               <div className="p-6 border-b border-stone-100 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-stone-900">All Bookings</h3>
-                  <p className="text-sm text-stone-600 mt-1">Manage and track all tour bookings</p>
+                  <h3 className="text-lg font-semibold text-stone-900">Active Tours</h3>
+                  <p className="text-sm text-stone-600 mt-1">Manage bookings for tours that have not been completed</p>
                 </div>
                 <button
                   onClick={fetchBookings}
@@ -1981,15 +2042,15 @@ export default function App() {
                   <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
                   <p className="text-stone-600">Loading bookings...</p>
                 </div>
-              ) : bookings.length === 0 ? (
+              ) : activeBookings.length === 0 ? (
                 <div className="p-12 text-center">
                   <Calendar className="w-8 h-8 text-stone-300 mx-auto mb-3" />
-                  <p className="text-stone-600">No bookings found</p>
+                  <p className="text-stone-600">No active tours found</p>
                 </div>
               ) : (
                 <div className="divide-y divide-zinc-100">
                   <AnimatePresence mode="popLayout">
-                    {Object.entries(groupBookingsByTour()).map(([tourId, tourData]) => {
+                    {Object.entries(groupBookingsByTour(activeBookings)).map(([tourId, tourData]) => {
                       const totalPeople = tourData.bookings.reduce((sum, b) => sum + (b.numberOfPeople || 0), 0);
                       const totalPrice = tourData.bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
                       const assignedDriverId = getTourDriverRecordId(tourData.bookings);
@@ -2118,6 +2179,66 @@ export default function App() {
             </div>
           </div>
         </div>
+        )}
+
+        {activeSection === 'completed' && (
+          <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+            <div className="rounded-2xl border border-stone-200 overflow-hidden bg-white shadow-sm">
+              <div className="p-6 border-b border-stone-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-stone-900">Completed Tours</h3>
+                  <p className="text-sm text-stone-600 mt-1">Tours marked complete by their assigned driver</p>
+                </div>
+                <button
+                  onClick={fetchBookings}
+                  className="px-4 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                  disabled={bookingsLoading}
+                >
+                  {bookingsLoading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+
+              {bookingsLoading ? (
+                <div className="p-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+                  <p className="text-stone-600">Loading completed tours...</p>
+                </div>
+              ) : completedBookings.length === 0 ? (
+                <div className="p-12 text-center">
+                  <CheckCircle className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+                  <p className="text-stone-600">No completed tours yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {Object.entries(groupBookingsByTour(completedBookings)).map(([tourId, tourData]) => {
+                    const totalPeople = tourData.bookings.reduce((sum, booking) => sum + (booking.numberOfPeople || 0), 0);
+                    const totalRevenue = tourData.bookings.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
+                    const completedAt = tourData.bookings.find(booking => booking.completedAt)?.completedAt;
+                    return (
+                      <div key={tourId} className="p-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-center">
+                        <div>
+                          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Tour</p>
+                          <p className="font-semibold text-stone-900">{tourData.tourTitle || 'Untitled Tour'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Passengers</p>
+                          <p className="font-medium text-stone-900">{totalPeople}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Revenue</p>
+                          <p className="font-bold text-emerald-600">Rs. {totalRevenue.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Completed</p>
+                          <p className="text-sm font-medium text-stone-900">{formatCompletedAt(completedAt)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </main>
 

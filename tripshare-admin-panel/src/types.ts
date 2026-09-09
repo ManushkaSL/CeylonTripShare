@@ -59,7 +59,8 @@ export interface Booking {
   id: string;
   userId: string;
   tourId: string;
-  status: 'pending' | 'confirmed' | 'cancelled';
+  instanceId?: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   numberOfPeople: number;
   totalPrice: number;
   userEmail?: string;
@@ -72,4 +73,7 @@ export interface Booking {
   passengers?: PassengerInfo[];
   createdAt?: unknown;
   updatedAt?: unknown;
+  tourDate?: unknown;
+  completedAt?: unknown;
+  completedBy?: string;
 }

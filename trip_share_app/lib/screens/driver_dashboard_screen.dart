@@ -28,22 +28,15 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         backgroundColor: DesignColors.surface,
         foregroundColor: DesignColors.textPrimary,
         elevation: 0,
-        title: Text(
-          switch (_selectedIndex) {
-            0 => 'Dashboard',
-            1 => 'Driver Chat',
-            _ => 'Driver Profile',
-          },
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
+        title: Text(switch (_selectedIndex) {
+          0 => 'Dashboard',
+          1 => 'Driver Chat',
+          _ => 'Driver Profile',
+        }, style: const TextStyle(fontWeight: FontWeight.w900)),
       ),
       body: IndexedStack(
         index: _selectedIndex,
-        children: [
-          _buildDashboard(),
-          _buildDriverChats(),
-          _buildProfile(),
-        ],
+        children: [_buildDashboard(), _buildDriverChats(), _buildProfile()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -120,8 +113,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              for (final assignment in assignments)
-                _buildTourCard(assignment),
+              for (final assignment in assignments) _buildTourCard(assignment),
             ],
           ],
         );
@@ -175,8 +167,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              for (final assignment in assignments)
-                _buildChatCard(assignment),
+              for (final assignment in assignments) _buildChatCard(assignment),
             ],
           ],
         );
@@ -193,6 +184,10 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
     for (final doc in docs) {
       final data = doc.data();
+      final bookingStatus = (data['status'] ?? '').toString().toLowerCase();
+      if (bookingStatus == 'completed' || bookingStatus == 'cancelled') {
+        continue;
+      }
       final driverEmail = (data['driverEmail'] ?? '')
           .toString()
           .trim()
@@ -224,6 +219,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
 
       final passengerCount = _toInt(data['totalPersons']);
       assignment.passengerCount += passengerCount;
+      assignment.bookingIds.add(doc.id);
       assignment.passengers.add(
         DriverPassengerRecord(
           name: _passengerName(data),
@@ -272,10 +268,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.filter_alt_outlined,
-              color: DesignColors.primary,
-            ),
+            const Icon(Icons.filter_alt_outlined, color: DesignColors.primary),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -358,6 +351,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                 startDate: assignment.startDate,
                 passengerCount: assignment.passengerCount,
                 passengers: assignment.passengers,
+                bookingIds: assignment.bookingIds,
               ),
             ),
           );
@@ -401,7 +395,7 @@ class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
                     _cardInfo(
                       Icons.groups_rounded,
                       '${assignment.passengerCount} '
-                          '${assignment.passengerCount == 1 ? 'passenger' : 'passengers'}',
+                      '${assignment.passengerCount == 1 ? 'passenger' : 'passengers'}',
                     ),
                   ],
                 ),
@@ -697,6 +691,7 @@ class _DriverTourAssignment {
   final DateTime startDate;
   int passengerCount = 0;
   final List<DriverPassengerRecord> passengers = [];
+  final List<String> bookingIds = [];
 
   _DriverTourAssignment({
     required this.instanceId,
