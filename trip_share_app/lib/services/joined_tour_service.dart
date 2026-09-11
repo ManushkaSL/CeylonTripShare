@@ -13,6 +13,7 @@ class JoinedTour {
   final Tour tour;
   final DateTime joinedAt;
   final int persons;
+  final String bookingStatus;
   JourneyStatus journeyStatus;
 
   JoinedTour({
@@ -20,13 +21,13 @@ class JoinedTour {
     required this.tour,
     required this.joinedAt,
     required this.persons,
+    this.bookingStatus = 'active',
     this.journeyStatus = JourneyStatus.notStarted,
   });
 
-  bool get isChatAvailable {
-    // Chat is always available once the tour is booked
-    return true;
-  }
+  bool get isChatAvailable =>
+      bookingStatus.toLowerCase() != 'completed' &&
+      bookingStatus.toLowerCase() != 'cancelled';
 
   bool get isLiveLocationAvailable => journeyStatus == JourneyStatus.inProgress;
 }
@@ -714,6 +715,7 @@ class JoinedTourService extends ChangeNotifier {
             persons: _countUserPassengersInBooking(data, userId).isNotEmpty
                 ? _countUserPassengersInBooking(data, userId).length
                 : (data['totalPersons'] ?? 0),
+            bookingStatus: (data['status'] ?? 'active').toString(),
           ),
         );
       }
@@ -1797,6 +1799,7 @@ class JoinedTourService extends ChangeNotifier {
                       DateTime.now().toIso8601String(),
                 ),
                 persons: _toInt(data['totalPersons']),
+                bookingStatus: (data['status'] ?? 'active').toString(),
               ),
             );
           }

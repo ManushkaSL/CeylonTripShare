@@ -27,15 +27,11 @@ class TourService {
   }
 
   Tour _mergeWithCache(Tour parsed) {
-    final cached = _tourCache[parsed.id];
-    if (cached == null) return parsed;
-
-    final cacheIsNewer =
-        cached.bookedSeats > parsed.bookedSeats ||
-        cached.bookedUserIds.length > parsed.bookedUserIds.length ||
-        cached.remainingSeats < parsed.remainingSeats;
-
-    return cacheIsNewer ? cached : parsed;
+    // A Firestore snapshot is authoritative. Keeping a cached version merely
+    // because it had more booked seats resurrected tours after their final
+    // booking was removed (for example, showing 0/6 as an Active Tour).
+    _tourCache[parsed.id] = parsed;
+    return parsed;
   }
 
   /// Documents in `tours` are reusable admin-created templates. Their seat
@@ -292,6 +288,7 @@ class TourService {
     QuerySnapshot<Map<String, dynamic>>? latestToursSnap;
     QuerySnapshot<Map<String, dynamic>>? latestInstSnap;
     Set<String> latestBookedTourIds = {};
+    List<Map<String, dynamic>> latestActiveBookings = const [];
     bool bookingsSnapshotAvailable = false;
     void emitCombinedLatest() {
       try {
@@ -347,9 +344,7 @@ class TourService {
         final instances = parsedInstances
             .where(
               (tour) =>
-                  tour.bookedSeats > 0 ||
-                  tour.bookedUserIds.isNotEmpty ||
-                  tour.firstBookedUserId.isNotEmpty ||
+                  tour.hasBookings ||
                   (bookingsSnapshotAvailable &&
                       latestBookedTourIds.contains(tour.id)),
             )
@@ -385,8 +380,74 @@ class TourService {
           );
         }
 
-        final combined = [...effectiveTours, ...instances]
-          ..sort((a, b) => a.startDate.compareTo(b.startDate));
+        // Rebuild any occurrence missing from the instances snapshot using
+        // the same booking records that power the admin Active Tours section.
+        // This covers delayed snapshots and restrictive deployed rules.
+        final representedInstanceIds = instances.map((tour) => tour.id).toSet();
+        final bookingsByOccurrence = <String, List<Map<String, dynamic>>>{};
+        for (final booking in latestActiveBookings) {
+          final occurrenceId =
+              (booking['instanceId'] ?? booking['tourId'] ?? '').toString();
+          if (occurrenceId.isEmpty ||
+              representedInstanceIds.contains(occurrenceId)) {
+            continue;
+          }
+          bookingsByOccurrence.putIfAbsent(occurrenceId, () => []).add(booking);
+        }
+
+        final synthesizedInstances = <Tour>[];
+        for (final entry in bookingsByOccurrence.entries) {
+          final occurrenceBookings = entry.value;
+          final first = occurrenceBookings.first;
+          final templateId =
+              (first['templateTourId'] ??
+                      first['sourceIdleTourId'] ??
+                      first['tourId'] ??
+                      '')
+                  .toString();
+          final template = templatesById[templateId];
+          if (template == null) continue;
+
+          final bookedSeats = occurrenceBookings.fold<int>(
+            0,
+            (total, booking) => total + _intFrom(booking['totalPersons'] ?? 0),
+          );
+          final bookedUserIds = occurrenceBookings
+              .map((booking) => (booking['userId'] ?? '').toString())
+              .where((id) => id.isNotEmpty)
+              .toSet()
+              .toList(growable: false);
+          final bookingDate = _dateTimeFrom(first['tourDate']);
+          final isPrivate = occurrenceBookings.any(
+            (booking) =>
+                booking['isPrivate'] == true ||
+                (booking['visibility'] ?? '').toString().toLowerCase() ==
+                    'private',
+          );
+
+          synthesizedInstances.add(
+            template.copyWith(
+              id: entry.key,
+              startDate: bookingDate ?? template.startDate,
+              remainingSeats: (template.totalSeats - bookedSeats)
+                  .clamp(0, template.totalSeats)
+                  .toInt(),
+              bookedSeats: bookedSeats,
+              bookedUserIds: bookedUserIds,
+              firstBookedUserId: bookedUserIds.isEmpty
+                  ? '_booked'
+                  : bookedUserIds.first,
+              sourceIdleTourId: template.id,
+              isPrivate: isPrivate,
+            ),
+          );
+        }
+
+        final combined = [
+          ...effectiveTours,
+          ...instances,
+          ...synthesizedInstances,
+        ]..sort((a, b) => a.startDate.compareTo(b.startDate));
 
         for (final tour in combined) {
           _tourCache[tour.id] = tour;
@@ -460,13 +521,18 @@ class TourService {
         .listen(
           (bSnap) {
             try {
-              bookedIds = bSnap.docs
+              final activeBookingDocs = bSnap.docs
                   .where((d) {
                     final status = (d.data()['status'] ?? '')
                         .toString()
                         .toLowerCase();
                     return status != 'completed' && status != 'cancelled';
                   })
+                  .toList(growable: false);
+              latestActiveBookings = activeBookingDocs
+                  .map((doc) => doc.data())
+                  .toList(growable: false);
+              bookedIds = activeBookingDocs
                   .map(
                     (d) => (d.data()['instanceId'] ?? d.data()['tourId'] ?? '')
                         .toString(),
@@ -475,6 +541,7 @@ class TourService {
                   .toSet();
             } catch (e) {
               bookedIds = {};
+              latestActiveBookings = const [];
             }
             latestBookedTourIds = bookedIds;
             bookingsSnapshotAvailable = true;

@@ -107,7 +107,7 @@ class _ChatsListBodyState extends State<ChatsListBody> {
       );
     }
 
-    final allChats = JoinedTourService().joinedTours;
+    final allChats = JoinedTourService().toursWithChats;
 
     // Deduplicate chats by tour ID
     final uniqueChats = <String, JoinedTour>{};

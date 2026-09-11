@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:trip_share_app/services/app_stats_service.dart';
+import 'package:trip_share_app/services/chat_cache_service.dart';
 import 'package:trip_share_app/theme/design_system.dart';
 
 class DriverPassengerRecord {
@@ -93,7 +94,7 @@ class _DriverTourDetailsScreenState extends State<DriverTourDetailsScreen> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: DesignColors.primary.withOpacity(0.1),
+                      color: DesignColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -160,7 +161,8 @@ class _DriverTourDetailsScreenState extends State<DriverTourDetailsScreen> {
         title: const Text('Complete this tour?'),
         content: const Text(
           'This removes the tour from active assignments and moves it to '
-          'Completed Tours in the admin panel.',
+          'Completed Tours in the admin panel. Its group chat and all '
+          'messages will be permanently deleted.',
         ),
         actions: [
           TextButton(
@@ -189,48 +191,122 @@ class _DriverTourDetailsScreenState extends State<DriverTourDetailsScreen> {
       if (widget.bookingIds.isEmpty) {
         throw StateError('No assigned bookings were found for this tour.');
       }
-
-      final firestore = FirebaseFirestore.instance;
-      final batch = firestore.batch();
-      final completedAt = FieldValue.serverTimestamp();
-
-      for (final bookingId in widget.bookingIds.toSet()) {
-        batch.update(firestore.collection('bookings').doc(bookingId), {
-          'status': 'completed',
-          'completedAt': completedAt,
-          'completedBy': user.uid,
-          'updatedAt': completedAt,
-        });
+      if (instanceId.isEmpty) {
+        throw StateError('The active tour record could not be found.');
       }
 
-      if (instanceId.isNotEmpty) {
-        final instanceRef = firestore
-            .collection('tour_instances')
-            .doc(instanceId);
-        final instanceSnapshot = await instanceRef.get();
-        if (instanceSnapshot.exists) {
-          batch.update(instanceRef, {
+      final firestore = FirebaseFirestore.instance;
+      final completedAt = FieldValue.serverTimestamp();
+      final uniqueBookingIds = widget.bookingIds.toSet();
+
+      final messageDocs =
+          <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+      final messageSnapshots = await Future.wait([
+        firestore
+            .collection('messages')
+            .where('instanceId', isEqualTo: instanceId)
+            .get(),
+        firestore
+            .collection('messages')
+            .where('tourId', isEqualTo: instanceId)
+            .get(),
+      ]);
+      for (final snapshot in messageSnapshots) {
+        for (final messageDoc in snapshot.docs) {
+          messageDocs[messageDoc.id] = messageDoc;
+        }
+      }
+
+      final locationRef = firestore
+          .collection('driver_locations')
+          .doc(instanceId);
+      final locationSnapshot = await locationRef.get();
+      final shouldDeleteLocation =
+          locationSnapshot.exists &&
+          (locationSnapshot.data()?['driverId'] ?? '').toString() == user.uid;
+
+      // A Firestore transaction supports at most 500 writes. Completion,
+      // counter increment, and chat deletion must succeed or fail together.
+      final operationCount =
+          uniqueBookingIds.length +
+          messageDocs.length +
+          2 +
+          (shouldDeleteLocation ? 1 : 0);
+      if (operationCount > 500) {
+        throw StateError(
+          'This chat has too many messages to delete safely in one operation. '
+          'Please ask an administrator to complete the tour.',
+        );
+      }
+
+      final instanceRef = firestore
+          .collection('tour_instances')
+          .doc(instanceId);
+      final statsRef = AppStatsService(firestore: firestore).globalStatsRef;
+      final wasNewlyCompleted = await firestore.runTransaction<bool>((
+        transaction,
+      ) async {
+        final instanceSnapshot = await transaction.get(instanceRef);
+        if (!instanceSnapshot.exists) {
+          throw StateError('The active tour record could not be found.');
+        }
+        if ((instanceSnapshot.data()?['status'] ?? '')
+                .toString()
+                .toLowerCase() ==
+            'completed') {
+          return false;
+        }
+        final statsSnapshot = await transaction.get(statsRef);
+
+        for (final bookingId in uniqueBookingIds) {
+          transaction.update(firestore.collection('bookings').doc(bookingId), {
             'status': 'completed',
             'completedAt': completedAt,
             'completedBy': user.uid,
+            'updatedAt': completedAt,
           });
         }
 
-        final locationRef = firestore
-            .collection('driver_locations')
-            .doc(instanceId);
-        final locationSnapshot = await locationRef.get();
-        if (locationSnapshot.exists &&
-            (locationSnapshot.data()?['driverId'] ?? '').toString() ==
-                user.uid) {
-          batch.delete(locationRef);
-        }
-      }
+        transaction.update(instanceRef, {
+          'status': 'completed',
+          'completedAt': completedAt,
+          'completedBy': user.uid,
+          'completionBookingId': uniqueBookingIds.first,
+        });
 
-      await batch.commit();
+        if (shouldDeleteLocation) {
+          transaction.delete(locationRef);
+        }
+
+        for (final messageDoc in messageDocs.values) {
+          transaction.delete(messageDoc.reference);
+        }
+
+        final nextCompletedCount =
+            AppStatsService.completedTourCountFrom(statsSnapshot.data()) + 1;
+        final statsData = <String, dynamic>{
+          'completedTourCount': nextCompletedCount,
+          'lastCompletedInstanceId': instanceId,
+          'updatedAt': completedAt,
+        };
+        if (statsSnapshot.exists) {
+          transaction.update(statsRef, statsData);
+        } else {
+          transaction.set(statsRef, statsData);
+        }
+        return true;
+      });
+
+      await ChatCacheService().clearTourCache(instanceId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tour completed successfully.')),
+        SnackBar(
+          content: Text(
+            wasNewlyCompleted
+                ? 'Tour completed successfully.'
+                : 'This tour was already completed.',
+          ),
+        ),
       );
       Navigator.of(context).pop(true);
     } on FirebaseException catch (error) {
@@ -367,7 +443,7 @@ class _DriverTourDetailsScreenState extends State<DriverTourDetailsScreen> {
             children: [
               CircleAvatar(
                 radius: 19,
-                backgroundColor: DesignColors.primary.withOpacity(0.12),
+                backgroundColor: DesignColors.primary.withValues(alpha: 0.12),
                 child: Text(
                   '$number',
                   style: const TextStyle(

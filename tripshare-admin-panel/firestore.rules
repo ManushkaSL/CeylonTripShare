@@ -16,6 +16,62 @@ service cloud.firestore {
              );
     }
 
+    function isCompletingAssignedTour(instanceId) {
+      let bookingId = request.resource.data.get('completionBookingId', '');
+      let completedBooking = getAfter(
+        /databases/$(database)/documents/bookings/$(bookingId)
+      ).data;
+      return request.auth != null &&
+             bookingId is string &&
+             bookingId != '' &&
+             completedBooking.get('instanceId', '') == instanceId &&
+             completedBooking.get('status', '') == 'completed' &&
+             completedBooking.get('completedBy', '') == request.auth.uid &&
+             (
+               completedBooking.get('driverId', '') == request.auth.uid ||
+               (
+                 request.auth.token.email != null &&
+                 completedBooking.get('driverEmail', '') == request.auth.token.email
+               )
+             ) &&
+             request.resource.data.get('status', '') == 'completed' &&
+             request.resource.data.get('completedBy', '') == request.auth.uid &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'status',
+               'completedAt',
+               'completedBy',
+               'completionBookingId'
+             ]);
+    }
+
+    function wasCompletedByCurrentDriver(instanceId) {
+      return request.auth != null &&
+             instanceId is string &&
+             instanceId != '' &&
+             exists(/databases/$(database)/documents/tour_instances/$(instanceId)) &&
+             getAfter(
+               /databases/$(database)/documents/tour_instances/$(instanceId)
+             ).data.get('status', '') == 'completed' &&
+             getAfter(
+               /databases/$(database)/documents/tour_instances/$(instanceId)
+             ).data.get('completedBy', '') == request.auth.uid;
+    }
+
+    function recordsNewCompletedTour(instanceId) {
+      let beforeInstance = get(
+        /databases/$(database)/documents/tour_instances/$(instanceId)
+      ).data;
+      let afterInstance = getAfter(
+        /databases/$(database)/documents/tour_instances/$(instanceId)
+      ).data;
+      return request.auth != null &&
+             instanceId is string &&
+             instanceId != '' &&
+             beforeInstance.get('status', '') != 'completed' &&
+             afterInstance.get('status', '') == 'completed' &&
+             afterInstance.get('completedBy', '') == request.auth.uid;
+    }
+
     // TOURS COLLECTION - PUBLIC READ (Allow everyone to browse tours)
     match /tours/{tourId} {
       allow read; // Public access - everyone can read tours
@@ -39,8 +95,57 @@ service cloud.firestore {
     // Active booked occurrences are public, while authenticated users create/update them.
     match /tour_instances/{instanceId} {
       allow read;
-      allow create, update: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if isAdmin() ||
+                    (
+                      request.auth != null &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'totalSeats',
+                        'available_seats',
+                        'remainingSeats',
+                        'bookedSeats',
+                        'bookedUserIds',
+                        'firstBookedUserId'
+                      ])
+                    ) ||
+                    isCompletingAssignedTour(instanceId);
       allow delete: if isAdmin();
+    }
+
+    // Public marketing statistics. The completion count can only move by one
+    // in the same atomic operation that completes a real tour instance.
+    match /app_stats/{statsId} {
+      allow read: if statsId == 'global';
+      allow create: if statsId == 'global' &&
+                    request.resource.data.keys().hasAll([
+                      'completedTourCount',
+                      'lastCompletedInstanceId',
+                      'updatedAt'
+                    ]) &&
+                    request.resource.data.keys().hasOnly([
+                      'completedTourCount',
+                      'lastCompletedInstanceId',
+                      'updatedAt'
+                    ]) &&
+                    request.resource.data.completedTourCount == 128 &&
+                    request.resource.data.updatedAt == request.time &&
+                    recordsNewCompletedTour(
+                      request.resource.data.lastCompletedInstanceId
+                    );
+      allow update: if statsId == 'global' &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'completedTourCount',
+                      'lastCompletedInstanceId',
+                      'updatedAt'
+                    ]) &&
+                    resource.data.completedTourCount is int &&
+                    request.resource.data.completedTourCount ==
+                      resource.data.completedTourCount + 1 &&
+                    request.resource.data.updatedAt == request.time &&
+                    recordsNewCompletedTour(
+                      request.resource.data.lastCompletedInstanceId
+                    );
+      allow delete: if false;
     }
 
     // Users collection - each user has a profile
@@ -55,11 +160,31 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                     request.resource.data.senderId == request.auth.uid &&
                     request.resource.data.tourId is string &&
+                    request.resource.data.instanceId is string &&
+                    exists(
+                      /databases/$(database)/documents/tour_instances/$(request.resource.data.instanceId)
+                    ) &&
+                    get(
+                      /databases/$(database)/documents/tour_instances/$(request.resource.data.instanceId)
+                    ).data.get('status', '') != 'completed' &&
+                    get(
+                      /databases/$(database)/documents/tour_instances/$(request.resource.data.instanceId)
+                    ).data.get('status', '') != 'cancelled' &&
+                    request.resource.data.tourDate is string &&
                     request.resource.data.text is string &&
                     request.resource.data.senderName is string &&
                     request.resource.data.timestamp is timestamp;
       allow delete: if request.auth != null && 
-                    (resource.data.senderId == request.auth.uid || isAdmin());
+                    (
+                      resource.data.senderId == request.auth.uid ||
+                      isAdmin() ||
+                      wasCompletedByCurrentDriver(
+                        resource.data.get(
+                          'instanceId',
+                          resource.data.get('tourId', '')
+                        )
+                      )
+                    );
       allow update: if false;
     }
 

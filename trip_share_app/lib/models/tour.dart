@@ -73,6 +73,11 @@ class Tour {
 
   bool get canBook => remainingSeats > 0;
 
+  bool get hasBookings =>
+      bookedSeats > 0 ||
+      bookedUserIds.isNotEmpty ||
+      firstBookedUserId.isNotEmpty;
+
   Tour copyWith({
     String? id,
     String? name,
@@ -129,9 +134,7 @@ class Tour {
 
   TourStatus get status {
     if (!canBook) return TourStatus.fullBooked;
-    if (bookedSeats > 0 ||
-        bookedUserIds.isNotEmpty ||
-        firstBookedUserId.isNotEmpty) {
+    if (hasBookings) {
       return TourStatus.active;
     }
     // Clones of idle tours should never revert to idle status

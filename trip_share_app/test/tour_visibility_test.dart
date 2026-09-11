@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trip_share_app/models/booking.dart';
 import 'package:trip_share_app/models/tour.dart';
+import 'package:trip_share_app/services/app_stats_service.dart';
+import 'package:trip_share_app/services/joined_tour_service.dart';
 
 Tour _tour() => Tour(
   id: 'instance-1',
@@ -51,5 +53,37 @@ void main() {
     }, _tour());
 
     expect(booking.isPrivate, isFalse);
+  });
+
+  test('an active occurrence with all seats available has no bookings', () {
+    final orphanedInstance = _tour().copyWith(
+      remainingSeats: 10,
+      bookedSeats: 0,
+      bookedUserIds: const [],
+      firstBookedUserId: '',
+    );
+
+    expect(orphanedInstance.hasBookings, isFalse);
+  });
+
+  test('completed and cancelled tours no longer expose a chat', () {
+    JoinedTour joinedTour(String status) => JoinedTour(
+      tour: _tour(),
+      joinedAt: DateTime(2026, 9, 11),
+      persons: 1,
+      bookingStatus: status,
+    );
+
+    expect(joinedTour('active').isChatAvailable, isTrue);
+    expect(joinedTour('completed').isChatAvailable, isFalse);
+    expect(joinedTour('cancelled').isChatAvailable, isFalse);
+  });
+
+  test('completed-tour marketing count starts at 127', () {
+    expect(AppStatsService.completedTourCountFrom(null), 127);
+    expect(
+      AppStatsService.completedTourCountFrom({'completedTourCount': 128}),
+      128,
+    );
   });
 }

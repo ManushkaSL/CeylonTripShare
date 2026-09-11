@@ -5,6 +5,7 @@ import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/tour_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/app_stats_service.dart';
 import 'package:trip_share_app/services/dynamic_link_service.dart';
 import 'package:trip_share_app/screens/tour_detail_screen.dart';
 import 'package:trip_share_app/widgets/skeleton_loader.dart';
@@ -49,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   };
 
   late final Stream<List<Tour>> _toursStream;
+  late final Stream<int> _completedTourCountStream;
   final ScrollController _scrollController = ScrollController();
   Timer? _greetingTimer;
   final TextEditingController _searchController = TextEditingController();
@@ -68,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _toursStream = _tourService.streamTours();
+    _completedTourCountStream = AppStatsService().watchCompletedTourCount();
     _joinedTourService.addListener(_onBookingUpdate);
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) _joinedTourService.loadBookings();
@@ -372,6 +375,84 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildCompletedTourCounter() {
+    return StreamBuilder<int>(
+      stream: _completedTourCountStream,
+      initialData: AppStatsService.completedTourSeed,
+      builder: (context, snapshot) {
+        final completedTours =
+            snapshot.data ?? AppStatsService.completedTourSeed;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF9F1E7), Color(0xFFFFFBF7)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: DesignColors.primary.withValues(alpha: 0.18),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: DesignColors.primary.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: DesignColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.verified_rounded,
+                    color: Colors.white,
+                    size: 23,
+                  ),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$completedTours+ tours completed',
+                        style: const TextStyle(
+                          color: DesignColors.primary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Trusted journeys across Sri Lanka',
+                        style: TextStyle(
+                          color: DesignColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _selectHomeFilterDate() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -515,7 +596,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'The Great Wild Safari',
+                  'Best Tour Operators',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
@@ -2087,6 +2168,10 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               // Hero Banner
               _buildHeroBanner(),
+              const SizedBox(height: 18),
+
+              // Global social-proof counter
+              _buildCompletedTourCounter(),
               const SizedBox(height: 18),
 
               // Search Bar

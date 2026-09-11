@@ -7,6 +7,7 @@ import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/services/notification_service.dart';
 import 'package:trip_share_app/screens/live_tracking_screen.dart';
+import 'package:trip_share_app/screens/chat_tour_details_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Tour tour;
@@ -111,6 +112,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _openTourDetails() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatTourDetailsScreen(tour: widget.tour),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,39 +132,56 @@ class _ChatScreenState extends State<ChatScreen> {
           icon: const Icon(Icons.arrow_back, color: DesignColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${_formatTourDate(widget.tour.startDate)}: ${widget.tour.name}',
-              style: const TextStyle(
-                color: DesignColors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Builder(
-              builder: (context) {
-                return FutureBuilder<int>(
-                  future: JoinedTourService().getPassengerCountForTour(
-                    widget.tour.id,
-                  ),
-                  builder: (context, snapshot) {
-                    final count = snapshot.data ?? 0;
-                    return Text(
-                      '$count ${count == 1 ? 'passenger' : 'passengers'}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: DesignColors.textSecondary,
+        title: InkWell(
+          onTap: _openTourDetails,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_formatTourDate(widget.tour.startDate)}: ${widget.tour.name}',
+                        style: const TextStyle(
+                          color: DesignColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    );
-                  },
-                );
-              },
+                      FutureBuilder<int>(
+                        future: JoinedTourService().getPassengerCountForTour(
+                          widget.tour.id,
+                        ),
+                        builder: (context, snapshot) {
+                          final count = snapshot.data ?? 0;
+                          return Text(
+                            '$count ${count == 1 ? 'passenger' : 'passengers'} - Tap for details',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: DesignColors.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 19,
+                  color: DesignColors.textSecondary,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           IconButton(
@@ -277,7 +303,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: DesignColors.surface,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, -2),
                 ),
@@ -289,7 +315,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: DesignColors.divider.withOpacity(0.6),
+                      color: DesignColors.divider.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: TextField(
@@ -354,7 +380,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (!isMe)
               CircleAvatar(
                 radius: 16,
-                backgroundColor: DesignColors.primary.withOpacity(0.18),
+                backgroundColor: DesignColors.primary.withValues(alpha: 0.18),
                 child: Text(
                   userInitial,
                   style: const TextStyle(
@@ -403,7 +429,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 3,
                           offset: const Offset(0, 1),
                         ),
