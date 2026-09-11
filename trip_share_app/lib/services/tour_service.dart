@@ -338,13 +338,22 @@ class TourService {
               );
             })
             .toList(growable: false);
-        final instances = bookingsSnapshotAvailable
-            ? parsedInstances
-                  .where((tour) => latestBookedTourIds.contains(tour.id))
-                  .toList(growable: false)
-            : parsedInstances
-                  .where((tour) => tour.bookedSeats > 0)
-                  .toList(growable: false);
+        // The instance is written in the same transaction as its first
+        // booking, so its own booking markers are the most reliable source of
+        // truth. The bookings stream arrives independently and used to hide a
+        // brand-new public instance until (or unless) its snapshot contained
+        // the exact same ID. Keep the bookings IDs only as a legacy fallback
+        // for older instance documents that do not contain counters.
+        final instances = parsedInstances
+            .where(
+              (tour) =>
+                  tour.bookedSeats > 0 ||
+                  tour.bookedUserIds.isNotEmpty ||
+                  tour.firstBookedUserId.isNotEmpty ||
+                  (bookingsSnapshotAvailable &&
+                      latestBookedTourIds.contains(tour.id)),
+            )
+            .toList(growable: false);
 
         final visibleTours = tours.toList(growable: false);
 
