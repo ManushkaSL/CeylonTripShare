@@ -60,6 +60,8 @@ export interface Booking {
   userId: string;
   tourId: string;
   instanceId?: string;
+  visibility: 'public' | 'private';
+  isPrivate: boolean;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   numberOfPeople: number;
   totalPrice: number;

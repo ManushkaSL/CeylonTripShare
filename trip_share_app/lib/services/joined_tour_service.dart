@@ -586,6 +586,9 @@ class JoinedTourService extends ChangeNotifier {
           totalSeats: 0,
           remainingSeats: 0,
           price: 0.0,
+          isPrivate:
+              data['isPrivate'] == true ||
+              data['visibility']?.toString().toLowerCase() == 'private',
         );
 
         // Prefer instance data if booking references an instance; otherwise
@@ -629,6 +632,10 @@ class JoinedTourService extends ChangeNotifier {
                   firstBookedUserId: inst['firstBookedUserId'] ?? '',
                   bookedUserIds: List<String>.from(inst['bookedUserIds'] ?? []),
                   bookedSeats: _toInt(inst['bookedSeats']),
+                  sourceIdleTourId: (inst['sourceIdleTourId'] ?? '').toString(),
+                  isPrivate:
+                      inst['isPrivate'] == true ||
+                      inst['visibility']?.toString().toLowerCase() == 'private',
                 );
               }
             } catch (e) {
@@ -675,6 +682,9 @@ class JoinedTourService extends ChangeNotifier {
                   tourData['bookedUserIds'] ?? [],
                 ),
                 bookedSeats: _toInt(tourData['bookedSeats']),
+                isPrivate:
+                    data['isPrivate'] == true ||
+                    data['visibility']?.toString().toLowerCase() == 'private',
               );
             }
           }
@@ -748,6 +758,7 @@ class JoinedTourService extends ChangeNotifier {
   Future<bool> joinTour({
     required Tour tour,
     DateTime? tourDate,
+    bool isPrivate = false,
     required int adults,
     required int kids6to12,
     required int kidsUnder6,
@@ -790,6 +801,7 @@ class JoinedTourService extends ChangeNotifier {
         phone: phoneNumber,
       );
       final isIdleTemplate = tour.sourceIdleTourId.isEmpty;
+      final resolvedIsPrivate = isIdleTemplate ? isPrivate : tour.isPrivate;
       final sourceIdleTourId = isIdleTemplate ? tour.id : tour.sourceIdleTourId;
       final scheduledDate = isIdleTemplate
           ? (tourDate ?? tour.startDate)
@@ -834,13 +846,11 @@ class JoinedTourService extends ChangeNotifier {
             throw StateError('This idle tour no longer exists');
           }
 
-          final templateData =
-              templateSnapshot.data() ?? <String, dynamic>{};
+          final templateData = templateSnapshot.data() ?? <String, dynamic>{};
           totalSeats = _toInt(
             templateData['totalSeats'],
             fallback: _toInt(
-              templateData['available_seats'] ??
-                  templateData['remainingSeats'],
+              templateData['available_seats'] ?? templateData['remainingSeats'],
               fallback: totalSeats,
             ),
           );
@@ -897,6 +907,7 @@ class JoinedTourService extends ChangeNotifier {
           bookedUserIds: bookedUserIds,
           firstBookedUserId: firstBookedUserId,
           sourceIdleTourId: sourceIdleTourId,
+          isPrivate: resolvedIsPrivate,
         );
 
         if (isIdleTemplate) {
@@ -927,6 +938,8 @@ class JoinedTourService extends ChangeNotifier {
             'whatsIncluded': tour.whatsIncluded,
             'tourFeatures': tour.tourFeatures,
             'rating': tour.rating,
+            'visibility': resolvedIsPrivate ? 'private' : 'public',
+            'isPrivate': resolvedIsPrivate,
             'createdAt': FieldValue.serverTimestamp(),
           });
         } else {
@@ -954,6 +967,7 @@ class JoinedTourService extends ChangeNotifier {
           cardHolderName: cardHolderName,
           phoneNumber: phoneNumber,
           passengers: [passenger],
+          isPrivate: resolvedIsPrivate,
         );
         final bookingData = booking.toMap()
           ..addAll({
@@ -1467,8 +1481,7 @@ class JoinedTourService extends ChangeNotifier {
             .collection('messages')
             .where(
               'tourId',
-              isEqualTo:
-                  (bookingData?['instanceId'] as String?) ?? tourId,
+              isEqualTo: (bookingData?['instanceId'] as String?) ?? tourId,
             )
             .get();
 
@@ -1663,9 +1676,7 @@ class JoinedTourService extends ChangeNotifier {
     if (deletedCount > 0) {
       await batch.commit();
     }
-    debugPrint(
-      'Deleted $deletedCount messages for booking occurrence $chatId',
-    );
+    debugPrint('Deleted $deletedCount messages for booking occurrence $chatId');
   }
 
   /// Stream real-time bookings from Firestore
@@ -1687,11 +1698,10 @@ class JoinedTourService extends ChangeNotifier {
               continue;
             }
 
-            final instanceId =
-                (data['instanceId'] ?? data['tourId'] ?? '').toString();
-            final tourDate = DateTime.tryParse(
-                  data['tourDate']?.toString() ?? '',
-                ) ??
+            final instanceId = (data['instanceId'] ?? data['tourId'] ?? '')
+                .toString();
+            final tourDate =
+                DateTime.tryParse(data['tourDate']?.toString() ?? '') ??
                 DateTime.now();
             var tour = Tour(
               id: instanceId,
@@ -1701,6 +1711,9 @@ class JoinedTourService extends ChangeNotifier {
               totalSeats: (data['instanceTotalSeats'] as num?)?.toInt() ?? 0,
               remainingSeats: (data['instanceAvailable'] as num?)?.toInt() ?? 0,
               price: (data['price'] as num?)?.toDouble() ?? 0.0,
+              isPrivate:
+                  data['isPrivate'] == true ||
+                  data['visibility']?.toString().toLowerCase() == 'private',
             );
 
             if (instanceId.isNotEmpty) {
@@ -1715,10 +1728,10 @@ class JoinedTourService extends ChangeNotifier {
                     id: instanceId,
                     name: (instance['name'] ?? data['tourName'] ?? '')
                         .toString(),
-                    imageUrl:
-                        (instance['imageUrl'] ?? data['imageUrl'] ?? '')
-                            .toString(),
-                    startDate: DateTime.tryParse(
+                    imageUrl: (instance['imageUrl'] ?? data['imageUrl'] ?? '')
+                        .toString(),
+                    startDate:
+                        DateTime.tryParse(
                           instance['startDate']?.toString() ?? '',
                         ) ??
                         tourDate,
@@ -1727,19 +1740,14 @@ class JoinedTourService extends ChangeNotifier {
                       fallback: tour.totalSeats,
                     ),
                     remainingSeats: _toInt(
-                      instance['available_seats'] ??
-                          instance['remainingSeats'],
+                      instance['available_seats'] ?? instance['remainingSeats'],
                       fallback: tour.remainingSeats,
                     ),
-                    price: _toDouble(
-                      instance['price'],
-                      fallback: tour.price,
-                    ),
+                    price: _toDouble(instance['price'], fallback: tour.price),
                     description: (instance['description'] ?? '').toString(),
                     photos: List<String>.from(instance['photos'] ?? const []),
                     category: (instance['category'] ?? '').toString(),
-                    startLocation:
-                        (instance['startLocation'] ?? '').toString(),
+                    startLocation: (instance['startLocation'] ?? '').toString(),
                     lastJoiningTime: _parseBookingCloseDateTime(instance),
                     endTime: (instance['endTime'] ?? '').toString(),
                     endLocation: (instance['endLocation'] ?? '').toString(),
@@ -1752,22 +1760,25 @@ class JoinedTourService extends ChangeNotifier {
                           ),
                         )
                         .toList(),
-                    operatorName:
-                        (instance['operatorName'] ?? '').toString(),
+                    operatorName: (instance['operatorName'] ?? '').toString(),
                     whatsIncluded: List<String>.from(
                       instance['whatsIncluded'] ?? const [],
                     ),
                     tourFeatures: List<String>.from(
                       instance['tourFeatures'] ?? const [],
                     ),
-                    firstBookedUserId:
-                        (instance['firstBookedUserId'] ?? '').toString(),
+                    firstBookedUserId: (instance['firstBookedUserId'] ?? '')
+                        .toString(),
                     bookedUserIds: List<String>.from(
                       instance['bookedUserIds'] ?? const [],
                     ),
                     bookedSeats: _toInt(instance['bookedSeats']),
-                    sourceIdleTourId:
-                        (instance['sourceIdleTourId'] ?? '').toString(),
+                    sourceIdleTourId: (instance['sourceIdleTourId'] ?? '')
+                        .toString(),
+                    isPrivate:
+                        instance['isPrivate'] == true ||
+                        instance['visibility']?.toString().toLowerCase() ==
+                            'private',
                   );
                 }
               } catch (e) {
@@ -1962,13 +1973,11 @@ class JoinedTourService extends ChangeNotifier {
         final kidsRemoved = toRemove.clamp(0, kids6to12).toInt();
         kids6to12 -= kidsRemoved;
         toRemove -= kidsRemoved;
-        kidsUnder6 = (kidsUnder6 - toRemove)
-            .clamp(0, kidsUnder6)
-            .toInt();
+        kidsUnder6 = (kidsUnder6 - toRemove).clamp(0, kidsUnder6).toInt();
       }
 
-      final price = (instanceData['price'] as num?)?.toDouble() ??
-          booking.tour.price;
+      final price =
+          (instanceData['price'] as num?)?.toDouble() ?? booking.tour.price;
       final newTotalPrice = adults * price + kids6to12 * price * 0.5;
 
       transaction.update(targetInstanceRef, {

@@ -33,6 +33,7 @@ class _BookingScreenState extends State<BookingScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSubmitting = false;
   DateTime? _selectedTourDate;
+  bool _isPrivateTour = false;
 
   // Pricing Constants
   static const double _kidsDiscount = 0.5;
@@ -175,6 +176,7 @@ class _BookingScreenState extends State<BookingScreen> {
       final success = await JoinedTourService().joinTour(
         tour: widget.tour,
         tourDate: chosenTourDate,
+        isPrivate: _isPrivateTour,
         adults: _adults,
         kids6to12: _kids6to12,
         kidsUnder6: _kidsUnder6,
@@ -337,6 +339,10 @@ class _BookingScreenState extends State<BookingScreen> {
               _buildSectionTitle('SELECT TOUR DATE'),
               const SizedBox(height: 10),
               _buildTourDateSection(),
+              const SizedBox(height: 24),
+              _buildSectionTitle('TOUR VISIBILITY'),
+              const SizedBox(height: 10),
+              _buildTourVisibilitySection(),
               const SizedBox(height: 24),
             ],
 
@@ -616,6 +622,96 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  Widget _buildTourVisibilitySection() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DesignColors.divider, width: 1.2),
+      ),
+      child: Column(
+        children: [
+          _buildVisibilityOption(
+            isPrivate: false,
+            icon: Icons.public_rounded,
+            title: 'Public tour',
+            subtitle: 'Shown in Active Tours so anyone can discover and join.',
+          ),
+          const Divider(height: 1, color: DesignColors.divider),
+          _buildVisibilityOption(
+            isPrivate: true,
+            icon: Icons.lock_outline_rounded,
+            title: 'Private tour',
+            subtitle:
+                'Hidden from Active Tours. People can join using your link.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVisibilityOption({
+    required bool isPrivate,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final isSelected = _isPrivateTour == isPrivate;
+
+    return InkWell(
+      onTap: () => setState(() => _isPrivateTour = isPrivate),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isSelected
+                  ? DesignColors.primary
+                  : DesignColors.textSecondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: DesignColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: DesignColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: isSelected
+                  ? DesignColors.primary
+                  : DesignColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTourHeader() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -742,10 +838,7 @@ class _BookingScreenState extends State<BookingScreen> {
             onTap: _selectTourDate,
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 color: const Color(0xFFFBF8F4),
                 borderRadius: BorderRadius.circular(12),

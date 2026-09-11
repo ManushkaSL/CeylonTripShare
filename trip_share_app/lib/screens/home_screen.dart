@@ -123,7 +123,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Tour> _activeTours(List<Tour> tours) {
-    return tours.where((t) => t.sourceIdleTourId.isNotEmpty).toList()
+    return tours
+        .where((t) => t.sourceIdleTourId.isNotEmpty && !t.isPrivate)
+        .toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
   }
 

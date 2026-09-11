@@ -28,7 +28,9 @@ class Tour {
   final List<String> bookedUserIds; // List of all booked user IDs
   final int bookedSeats; // Total seats already booked across all users
   final double rating; // Rating of the tour (0-5 stars)
-  final String sourceIdleTourId; // ID of the original idle tour if this is a clone
+  /// ID of the original idle tour if this is an active occurrence.
+  final String sourceIdleTourId;
+  final bool isPrivate; // Private active tours are discoverable by link only
 
   const Tour({
     required this.id,
@@ -54,6 +56,7 @@ class Tour {
     this.bookedSeats = 0,
     this.rating = 4.5,
     this.sourceIdleTourId = '',
+    this.isPrivate = false,
   });
 
   /// Creates an empty tour instance (useful for placeholders)
@@ -94,6 +97,7 @@ class Tour {
     int? bookedSeats,
     double? rating,
     String? sourceIdleTourId,
+    bool? isPrivate,
   }) {
     return Tour(
       id: id ?? this.id,
@@ -119,6 +123,7 @@ class Tour {
       bookedSeats: bookedSeats ?? this.bookedSeats,
       rating: rating ?? this.rating,
       sourceIdleTourId: sourceIdleTourId ?? this.sourceIdleTourId,
+      isPrivate: isPrivate ?? this.isPrivate,
     );
   }
 

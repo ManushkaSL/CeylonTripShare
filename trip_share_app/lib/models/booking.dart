@@ -42,6 +42,7 @@ class Booking {
   final String? cardHolderName;
   final String phoneNumber;
   final List<PassengerInfo> passengers;
+  final bool isPrivate;
 
   Booking({
     required this.id,
@@ -58,6 +59,7 @@ class Booking {
     this.cardHolderName,
     required this.phoneNumber,
     this.passengers = const [],
+    this.isPrivate = false,
   }) : tourDate = tourDate ?? tour.startDate;
 
   /// Convert to Firestore document data
@@ -85,6 +87,8 @@ class Booking {
       'phoneNumber': phoneNumber,
       'passengers': passengers.map((p) => p.toMap()).toList(),
       'passengerIds': passengerIds,
+      'visibility': isPrivate ? 'private' : 'public',
+      'isPrivate': isPrivate,
     };
   }
 
@@ -135,6 +139,9 @@ class Booking {
       cardHolderName: map['cardHolderName'] as String?,
       phoneNumber: map['phoneNumber'] ?? '',
       passengers: passengersList,
+      isPrivate:
+          map['isPrivate'] == true ||
+          map['visibility']?.toString().toLowerCase() == 'private',
     );
   }
 }

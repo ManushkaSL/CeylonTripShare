@@ -99,6 +99,7 @@ class TourService {
       bookedUserIds: userIds,
       bookedSeats: bookedSeats,
       sourceIdleTourId: oldTour.sourceIdleTourId,
+      isPrivate: oldTour.isPrivate,
     );
     debugPrint(
       '✅ Updated tour cache: $tourId remaining=$newRemainingSeats booked=$bookedSeats',
@@ -752,6 +753,9 @@ class TourService {
       sourceIdleTourId: _stringFrom(
         _pick(map, ['sourceIdleTourId', 'source_idle_tour_id']),
       ),
+      isPrivate:
+          map['isPrivate'] == true ||
+          _stringFrom(map['visibility']).toLowerCase() == 'private',
     );
   }
 

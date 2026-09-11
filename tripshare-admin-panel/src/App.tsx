@@ -770,6 +770,12 @@ export default function App() {
             userId: data.userId || '',
             tourId: data.tourId || '',
             instanceId: data.instanceId || '',
+            visibility:
+              data.isPrivate === true || data.visibility === 'private'
+                ? 'private'
+                : 'public',
+            isPrivate:
+              data.isPrivate === true || data.visibility === 'private',
             status: data.status || 'pending',
             numberOfPeople: data.totalPersons || data.numberOfPeople || 0,
             totalPrice: data.totalPrice || 0,
@@ -2054,6 +2060,7 @@ export default function App() {
                       const totalPeople = tourData.bookings.reduce((sum, b) => sum + (b.numberOfPeople || 0), 0);
                       const totalPrice = tourData.bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
                       const assignedDriverId = getTourDriverRecordId(tourData.bookings);
+                      const isPrivateTour = tourData.bookings.some(booking => booking.isPrivate);
                       
                       return (
                         <div key={tourId}>
@@ -2069,6 +2076,13 @@ export default function App() {
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Tour Name</p>
                                 <p className="font-medium text-stone-900 truncate">{tourData.tourTitle || 'N/A'}</p>
+                                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  isPrivateTour
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {isPrivateTour ? 'Private' : 'Public'}
+                                </span>
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1">Total Passengers</p>
@@ -2214,11 +2228,19 @@ export default function App() {
                     const totalPeople = tourData.bookings.reduce((sum, booking) => sum + (booking.numberOfPeople || 0), 0);
                     const totalRevenue = tourData.bookings.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
                     const completedAt = tourData.bookings.find(booking => booking.completedAt)?.completedAt;
+                    const isPrivateTour = tourData.bookings.some(booking => booking.isPrivate);
                     return (
                       <div key={tourId} className="p-6 grid grid-cols-1 sm:grid-cols-4 gap-4 items-center">
                         <div>
                           <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Tour</p>
                           <p className="font-semibold text-stone-900">{tourData.tourTitle || 'Untitled Tour'}</p>
+                          <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            isPrivateTour
+                              ? 'bg-violet-100 text-violet-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {isPrivateTour ? 'Private' : 'Public'}
+                          </span>
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Passengers</p>

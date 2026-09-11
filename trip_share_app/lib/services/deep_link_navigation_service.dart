@@ -7,16 +7,35 @@ import 'package:trip_share_app/services/tour_service.dart';
 class DeepLinkNavigationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  static Future<Tour?> _loadTour(String tourId) async {
+    // Shared active-tour links contain the occurrence ID. This is especially
+    // important for private tours because they are intentionally absent from
+    // the public Active Tours list.
+    final instanceDoc = await _firestore
+        .collection('tour_instances')
+        .doc(tourId)
+        .get();
+    if (instanceDoc.exists) {
+      return TourService().parseTour(instanceDoc.data()!, instanceDoc.id);
+    }
+
+    // Idle/template links continue to work as before.
+    final templateDoc = await _firestore.collection('tours').doc(tourId).get();
+    if (templateDoc.exists) {
+      return TourService().parseTour(templateDoc.data()!, templateDoc.id);
+    }
+    return null;
+  }
+
   /// Navigate to tour detail screen from deep link
   static Future<void> navigateToTour(
     BuildContext context,
     String tourId,
   ) async {
     try {
-      // Fetch tour from Firestore
-      final tourDoc = await _firestore.collection('tours').doc(tourId).get();
+      final tour = await _loadTour(tourId);
 
-      if (!tourDoc.exists) {
+      if (tour == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -27,9 +46,6 @@ class DeepLinkNavigationService {
         }
         return;
       }
-
-      final tourData = tourDoc.data() as Map<String, dynamic>;
-      final tour = TourService().parseTour(tourData, tourDoc.id);
 
       // Navigate to tour detail screen
       if (context.mounted) {
@@ -54,10 +70,9 @@ class DeepLinkNavigationService {
     String tourId,
   ) async {
     try {
-      // Fetch tour from Firestore
-      final tourDoc = await _firestore.collection('tours').doc(tourId).get();
+      final tour = await _loadTour(tourId);
 
-      if (!tourDoc.exists) {
+      if (tour == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -68,9 +83,6 @@ class DeepLinkNavigationService {
         }
         return;
       }
-
-      final tourData = tourDoc.data() as Map<String, dynamic>;
-      final tour = TourService().parseTour(tourData, tourDoc.id);
 
       // Navigate using MaterialPageRoute
       if (context.mounted) {
