@@ -1,0 +1,59 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:trip_share_app/services/pricing_service.dart';
+
+void main() {
+  test('pricing quote decodes the callable API response', () {
+    final quote = PricingQuote.fromMap({
+      'pricingVersion': 1,
+      'currency': 'LKR',
+      'isPrivate': false,
+      'counts': {
+        'adults': 2,
+        'kids6to12': 1,
+        'kidsUnder6': 1,
+        'totalPersons': 4,
+      },
+      'unitPrices': {'adult': 1000, 'child': 500, 'infant': 0},
+      'adultTotal': 2000,
+      'childTotal': 500,
+      'infantTotal': 0,
+      'privateTourSurcharge': 0,
+      'serviceFeePercent': 0,
+      'serviceFee': 0,
+      'subtotal': 2500,
+      'total': 2500,
+      'quoteExpiresAt': '2026-09-11T10:00:00.000Z',
+    });
+
+    expect(quote.currency, 'LKR');
+    expect(quote.totalPersons, 4);
+    expect(quote.childUnitPrice, 500);
+    expect(quote.total, 2500);
+    expect(quote.expiresAt.isUtc, isTrue);
+  });
+
+  test('booking pricing audit map includes server totals', () {
+    final quote = PricingQuote.fromMap({
+      'currency': 'LKR',
+      'counts': {
+        'adults': 1,
+        'kids6to12': 0,
+        'kidsUnder6': 0,
+        'totalPersons': 1,
+      },
+      'unitPrices': {'adult': 1200, 'child': 600, 'infant': 0},
+      'adultTotal': 1200,
+      'childTotal': 0,
+      'infantTotal': 0,
+      'privateTourSurcharge': 0,
+      'serviceFeePercent': 0,
+      'serviceFee': 0,
+      'subtotal': 1200,
+      'total': 1200,
+      'quoteExpiresAt': '2026-09-11T10:00:00.000Z',
+    });
+
+    expect(quote.toBookingPricingMap()['total'], 1200);
+    expect(quote.toBookingPricingMap()['currency'], 'LKR');
+  });
+}

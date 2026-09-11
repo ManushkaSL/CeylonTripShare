@@ -47,6 +47,7 @@ dependencies:
   geolocator: ^13.0.2
   google_maps_flutter: ^2.12.1
   provider: ^6.0.0
+  cloud_functions: ^6.4.0
 
 dev_dependencies:
   flutter_test:

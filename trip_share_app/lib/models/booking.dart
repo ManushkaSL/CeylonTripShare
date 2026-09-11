@@ -38,6 +38,7 @@ class Booking {
   final int kidsUnder6;
   final String pickupLocation;
   final double totalPrice;
+  final String currency;
   final int totalPersons;
   final String? cardHolderName;
   final String phoneNumber;
@@ -55,6 +56,7 @@ class Booking {
     required this.kidsUnder6,
     required this.pickupLocation,
     required this.totalPrice,
+    this.currency = 'LKR',
     required this.totalPersons,
     this.cardHolderName,
     required this.phoneNumber,
@@ -82,6 +84,7 @@ class Booking {
       'kidsUnder6': kidsUnder6,
       'pickupLocation': pickupLocation,
       'totalPrice': totalPrice,
+      'currency': currency,
       'totalPersons': totalPersons,
       'cardHolderName': cardHolderName,
       'phoneNumber': phoneNumber,
@@ -135,6 +138,7 @@ class Booking {
       kidsUnder6: (map['kidsUnder6'] as num?)?.toInt() ?? 0,
       pickupLocation: map['pickupLocation'] ?? '',
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0.0,
+      currency: (map['currency'] ?? 'LKR').toString(),
       totalPersons: (map['totalPersons'] as num?)?.toInt() ?? 0,
       cardHolderName: map['cardHolderName'] as String?,
       phoneNumber: map['phoneNumber'] ?? '',

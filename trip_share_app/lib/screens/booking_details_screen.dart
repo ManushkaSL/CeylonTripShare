@@ -98,156 +98,149 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
               child: CircularProgressIndicator(color: DesignColors.primary),
             )
           : booking == null
-              ? const Center(child: Text('Booking details were not found.'))
-              : ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    _detailCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.tour.name,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              color: DesignColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          _row(
-                            Icons.calendar_month_rounded,
-                            'Tour date',
-                            _formatDate(booking.tourDate),
-                          ),
-                          _row(
-                            Icons.location_on_outlined,
-                            'Pickup',
-                            booking.pickupLocation,
-                          ),
-                          _row(
-                            Icons.phone_outlined,
-                            'Phone',
-                            booking.phoneNumber,
-                          ),
-                          _row(
-                            Icons.payments_outlined,
-                            'Total',
-                            '\$${booking.totalPrice.toStringAsFixed(2)}',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _detailCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Passenger count',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: DesignColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'For now, this is the only booking detail you can edit.',
-                            style: TextStyle(
-                              color: DesignColors.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _countButton(
-                                Icons.remove_rounded,
-                                _passengerCount > 1
-                                    ? () => setState(
-                                          () => _passengerCount--,
-                                        )
-                                    : null,
-                              ),
-                              SizedBox(
-                                width: 90,
-                                child: Text(
-                                  '$_passengerCount',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w900,
-                                    color: DesignColors.primary,
-                                  ),
-                                ),
-                              ),
-                              _countButton(
-                                Icons.add_rounded,
-                                () => setState(() => _passengerCount++),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed:
-                                  _isSaving ||
-                                      _passengerCount == booking.totalPersons
-                                  ? null
-                                  : _savePassengerCount,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: DesignColors.primary,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: _isSaving
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Save Passenger Count',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                TourDetailScreen(tour: widget.tour),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.info_outline_rounded),
-                      label: const Text('View Tour Details'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: DesignColors.primary,
-                        minimumSize: const Size.fromHeight(48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+          ? const Center(child: Text('Booking details were not found.'))
+          : ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                _detailCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.tour.name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: DesignColors.textPrimary,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      _row(
+                        Icons.calendar_month_rounded,
+                        'Tour date',
+                        _formatDate(booking.tourDate),
+                      ),
+                      _row(
+                        Icons.location_on_outlined,
+                        'Pickup',
+                        booking.pickupLocation,
+                      ),
+                      _row(Icons.phone_outlined, 'Phone', booking.phoneNumber),
+                      _row(
+                        Icons.payments_outlined,
+                        'Total',
+                        booking.currency == 'LKR'
+                            ? 'Rs. ${booking.totalPrice.toStringAsFixed(2)}'
+                            : '${booking.currency} ${booking.totalPrice.toStringAsFixed(2)}',
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                _detailCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Passenger count',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: DesignColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'For now, this is the only booking detail you can edit.',
+                        style: TextStyle(
+                          color: DesignColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _countButton(
+                            Icons.remove_rounded,
+                            _passengerCount > 1
+                                ? () => setState(() => _passengerCount--)
+                                : null,
+                          ),
+                          SizedBox(
+                            width: 90,
+                            child: Text(
+                              '$_passengerCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: DesignColors.primary,
+                              ),
+                            ),
+                          ),
+                          _countButton(
+                            Icons.add_rounded,
+                            () => setState(() => _passengerCount++),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed:
+                              _isSaving ||
+                                  _passengerCount == booking.totalPersons
+                              ? null
+                              : _savePassengerCount,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: DesignColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Save Passenger Count',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TourDetailScreen(tour: widget.tour),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.info_outline_rounded),
+                  label: const Text('View Tour Details'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: DesignColors.primary,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 

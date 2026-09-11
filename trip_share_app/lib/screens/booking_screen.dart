@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/services/joined_tour_service.dart';
+import 'package:trip_share_app/services/pricing_service.dart';
 import 'package:trip_share_app/services/auth_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/theme/design_system.dart';
@@ -34,16 +36,87 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _isSubmitting = false;
   DateTime? _selectedTourDate;
   bool _isPrivateTour = false;
+  final PricingService _pricingService = PricingService();
+  PricingQuote? _pricingQuote;
+  Timer? _pricingDebounce;
+  int _pricingRequestId = 0;
+  bool _isLoadingPricing = true;
+  String? _pricingError;
 
-  // Pricing Constants
+  // Local estimates are displayed only while the authoritative API quote loads.
   static const double _kidsDiscount = 0.5;
   static const double _toddlerPrice = 0.0;
 
-  double get _adultTotal => _adults * widget.tour.price;
-  double get _kids6to12Total => _kids6to12 * widget.tour.price * _kidsDiscount;
-  double get _toddlerTotal => _kidsUnder6 * _toddlerPrice;
-  double get _totalPrice => _adultTotal + _kids6to12Total + _toddlerTotal;
+  double get _adultTotal =>
+      _pricingQuote?.adultTotal ?? _adults * widget.tour.price;
+  double get _kids6to12Total =>
+      _pricingQuote?.childTotal ??
+      _kids6to12 * widget.tour.price * _kidsDiscount;
+  double get _toddlerTotal =>
+      _pricingQuote?.infantTotal ?? _kidsUnder6 * _toddlerPrice;
+  double get _totalPrice =>
+      _pricingQuote?.total ?? _adultTotal + _kids6to12Total + _toddlerTotal;
   int get _totalPersons => _adults + _kids6to12 + _kidsUnder6;
+  String get _currency => _pricingQuote?.currency ?? 'LKR';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshPricing());
+  }
+
+  String _formatMoney(double value) {
+    final amount = value.toStringAsFixed(2);
+    return _currency == 'LKR' ? 'Rs. $amount' : '$_currency $amount';
+  }
+
+  void _schedulePricingRefresh() {
+    _pricingDebounce?.cancel();
+    final requestId = ++_pricingRequestId;
+    setState(() {
+      _pricingQuote = null;
+      _pricingError = null;
+      _isLoadingPricing = true;
+    });
+    _pricingDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _refreshPricing(requestId: requestId),
+    );
+  }
+
+  Future<PricingQuote?> _refreshPricing({int? requestId}) async {
+    final currentRequestId = requestId ?? ++_pricingRequestId;
+    if (mounted && requestId == null) {
+      setState(() {
+        _pricingError = null;
+        _isLoadingPricing = true;
+      });
+    }
+
+    try {
+      final quote = await _pricingService.calculateTourPrice(
+        tourId: widget.tour.id,
+        adults: _adults,
+        kids6to12: _kids6to12,
+        kidsUnder6: _kidsUnder6,
+        isPrivate: _isPrivateTour,
+      );
+      if (!mounted || currentRequestId != _pricingRequestId) return null;
+      setState(() {
+        _pricingQuote = quote;
+        _pricingError = null;
+        _isLoadingPricing = false;
+      });
+      return quote;
+    } catch (error) {
+      if (!mounted || currentRequestId != _pricingRequestId) return null;
+      setState(() {
+        _pricingError = error.toString();
+        _isLoadingPricing = false;
+      });
+      return null;
+    }
+  }
 
   DateTime get _firstSelectableDate {
     final now = DateTime.now();
@@ -84,6 +157,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   void dispose() {
+    _pricingDebounce?.cancel();
     _pickupController.dispose();
     _phoneController.dispose();
     _cardNumberController.dispose();
@@ -172,6 +246,23 @@ class _BookingScreenState extends State<BookingScreen> {
           return;
         }
       }
+      _pricingDebounce?.cancel();
+      final authoritativeQuote = await _refreshPricing();
+      if (authoritativeQuote == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _pricingError ??
+                    'Could not verify the booking price. Please try again.',
+              ),
+              backgroundColor: DesignColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
       final fullPhoneNumber = '$_countryCode${_phoneController.text.trim()}';
       final success = await JoinedTourService().joinTour(
         tour: widget.tour,
@@ -181,7 +272,10 @@ class _BookingScreenState extends State<BookingScreen> {
         kids6to12: _kids6to12,
         kidsUnder6: _kidsUnder6,
         pickupLocation: _pickupController.text.trim(),
-        totalPrice: _totalPrice,
+        totalPrice: authoritativeQuote.total,
+        currency: authoritativeQuote.currency,
+        pricingVersion: authoritativeQuote.pricingVersion,
+        pricingBreakdown: authoritativeQuote.toBookingPricingMap(),
         cardHolderName: _cardHolderController.text.trim(),
         phoneNumber: fullPhoneNumber,
       );
@@ -233,7 +327,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ],
             ),
             content: Text(
-              'Successfully reserved ${widget.tour.name} for $_totalPersons traveler(s).\n\nTotal Paid: \$${_totalPrice.toStringAsFixed(2)}',
+              'Successfully reserved ${widget.tour.name} for $_totalPersons traveler(s).\n\nTotal: ${_formatMoney(authoritativeQuote.total)}',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 14,
@@ -363,6 +457,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 children: [
                   _buildCounter('Adults (Above 12 yrs)', _adults, 1, (v) {
                     setState(() => _adults = v);
+                    _schedulePricingRefresh();
                   }),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -370,6 +465,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   _buildCounter('Kids (6 - 12 yrs)', _kids6to12, 0, (v) {
                     setState(() => _kids6to12 = v);
+                    _schedulePricingRefresh();
                   }),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -377,6 +473,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   _buildCounter('Infants (Under 6 yrs)', _kidsUnder6, 0, (v) {
                     setState(() => _kidsUnder6 = v);
+                    _schedulePricingRefresh();
                   }),
                 ],
               ),
@@ -660,7 +757,11 @@ class _BookingScreenState extends State<BookingScreen> {
     final isSelected = _isPrivateTour == isPrivate;
 
     return InkWell(
-      onTap: () => setState(() => _isPrivateTour = isPrivate),
+      onTap: () {
+        if (_isPrivateTour == isPrivate) return;
+        setState(() => _isPrivateTour = isPrivate);
+        _schedulePricingRefresh();
+      },
       borderRadius: BorderRadius.circular(14),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -768,7 +869,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '\$${widget.tour.price.toInt()} per person',
+                  '${_formatMoney(widget.tour.price)} per person',
                   style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w800,
@@ -1040,21 +1141,70 @@ class _BookingScreenState extends State<BookingScreen> {
       ),
       child: Column(
         children: [
-          _buildPriceRow(
-            'Adults (x$_adults)',
-            '\$${_adultTotal.toStringAsFixed(2)}',
-          ),
+          if (_isLoadingPricing) ...[
+            const LinearProgressIndicator(
+              minHeight: 3,
+              color: DesignColors.primary,
+              backgroundColor: DesignColors.divider,
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (_pricingError != null) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 18,
+                  color: DesignColors.error,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Estimated price shown. Connect to verify before booking.',
+                    style: TextStyle(
+                      color: DesignColors.error,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _isLoadingPricing ? null : _refreshPricing,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+          _buildPriceRow('Adults (x$_adults)', _formatMoney(_adultTotal)),
           if (_kids6to12 > 0) ...[
             const SizedBox(height: 10),
             _buildPriceRow(
               'Kids 6-12 (x$_kids6to12) [50% Off]',
-              '\$${_kids6to12Total.toStringAsFixed(2)}',
+              _formatMoney(_kids6to12Total),
               accented: true,
             ),
           ],
           if (_kidsUnder6 > 0) ...[
             const SizedBox(height: 10),
-            _buildPriceRow('Kids under 6 (x$_kidsUnder6)', 'Free'),
+            _buildPriceRow(
+              'Kids under 6 (x$_kidsUnder6)',
+              _toddlerTotal == 0 ? 'Free' : _formatMoney(_toddlerTotal),
+            ),
+          ],
+          if ((_pricingQuote?.privateTourSurcharge ?? 0) > 0) ...[
+            const SizedBox(height: 10),
+            _buildPriceRow(
+              'Private tour surcharge',
+              _formatMoney(_pricingQuote!.privateTourSurcharge),
+            ),
+          ],
+          if ((_pricingQuote?.serviceFee ?? 0) > 0) ...[
+            const SizedBox(height: 10),
+            _buildPriceRow(
+              'Service fee (${_pricingQuote!.serviceFeePercent.toStringAsFixed(1)}%)',
+              _formatMoney(_pricingQuote!.serviceFee),
+            ),
           ],
           const Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1072,7 +1222,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
               ),
               Text(
-                '\$${_totalPrice.toStringAsFixed(2)}',
+                _formatMoney(_totalPrice),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,

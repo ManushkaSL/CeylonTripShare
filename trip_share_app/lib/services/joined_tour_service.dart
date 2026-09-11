@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/models/booking.dart';
 import 'package:trip_share_app/services/auth_service.dart';
+import 'package:trip_share_app/services/pricing_service.dart';
 import 'package:trip_share_app/services/tour_service.dart';
 
 enum JourneyStatus { notStarted, inProgress }
@@ -766,6 +767,9 @@ class JoinedTourService extends ChangeNotifier {
     required int kidsUnder6,
     required String pickupLocation,
     required double totalPrice,
+    required String currency,
+    required int pricingVersion,
+    required Map<String, dynamic> pricingBreakdown,
     String? cardHolderName,
     required String phoneNumber,
   }) async {
@@ -965,6 +969,7 @@ class JoinedTourService extends ChangeNotifier {
           kidsUnder6: kidsUnder6,
           pickupLocation: pickupLocation,
           totalPrice: totalPrice,
+          currency: currency,
           totalPersons: totalPersons,
           cardHolderName: cardHolderName,
           phoneNumber: phoneNumber,
@@ -975,6 +980,9 @@ class JoinedTourService extends ChangeNotifier {
           ..addAll({
             'instanceId': instanceRef.id,
             'templateTourId': sourceIdleTourId,
+            'currency': currency,
+            'pricingVersion': pricingVersion,
+            'pricingBreakdown': pricingBreakdown,
           });
         transaction.set(bookingRef, bookingData);
       });
@@ -1918,6 +1926,36 @@ class JoinedTourService extends ChangeNotifier {
     }
     if (newTotalPersons == booking.totalPersons) return;
 
+    final difference = newTotalPersons - booking.totalPersons;
+    var adults = booking.adults;
+    var kids6to12 = booking.kids6to12;
+    var kidsUnder6 = booking.kidsUnder6;
+    if (adults + kids6to12 + kidsUnder6 != booking.totalPersons) {
+      adults = booking.totalPersons;
+      kids6to12 = 0;
+      kidsUnder6 = 0;
+    }
+    if (difference > 0) {
+      adults += difference;
+    } else {
+      var toRemove = -difference;
+      final infantsRemoved = toRemove.clamp(0, kidsUnder6).toInt();
+      kidsUnder6 -= infantsRemoved;
+      toRemove -= infantsRemoved;
+      final kidsRemoved = toRemove.clamp(0, kids6to12).toInt();
+      kids6to12 -= kidsRemoved;
+      toRemove -= kidsRemoved;
+      adults = (adults - toRemove).clamp(1, adults).toInt();
+    }
+
+    final pricingQuote = await PricingService().calculateTourPrice(
+      tourId: booking.tour.id,
+      adults: adults,
+      kids6to12: kids6to12,
+      kidsUnder6: kidsUnder6,
+      isPrivate: booking.isPrivate || booking.tour.isPrivate,
+    );
+
     final bookingRef = _firestore.collection('bookings').doc(booking.id);
     final instanceRef = _firestore
         .collection('tour_instances')
@@ -1935,7 +1973,11 @@ class JoinedTourService extends ChangeNotifier {
       }
 
       final oldTotal = _toInt(bookingData['totalPersons']);
-      final difference = newTotalPersons - oldTotal;
+      if (oldTotal != booking.totalPersons) {
+        throw StateError(
+          'This booking changed while its price was being calculated. Please try again.',
+        );
+      }
       final storedInstanceId = (bookingData['instanceId'] ?? '').toString();
       final targetInstanceRef = storedInstanceId.isNotEmpty
           ? _firestore.collection('tour_instances').doc(storedInstanceId)
@@ -1963,26 +2005,6 @@ class JoinedTourService extends ChangeNotifier {
           .clamp(0, totalSeats)
           .toInt();
 
-      var adults = _toInt(bookingData['adults']);
-      var kids6to12 = _toInt(bookingData['kids6to12']);
-      var kidsUnder6 = _toInt(bookingData['kidsUnder6']);
-      if (difference > 0) {
-        adults += difference;
-      } else {
-        var toRemove = -difference;
-        final adultsRemoved = toRemove.clamp(0, adults).toInt();
-        adults -= adultsRemoved;
-        toRemove -= adultsRemoved;
-        final kidsRemoved = toRemove.clamp(0, kids6to12).toInt();
-        kids6to12 -= kidsRemoved;
-        toRemove -= kidsRemoved;
-        kidsUnder6 = (kidsUnder6 - toRemove).clamp(0, kidsUnder6).toInt();
-      }
-
-      final price =
-          (instanceData['price'] as num?)?.toDouble() ?? booking.tour.price;
-      final newTotalPrice = adults * price + kids6to12 * price * 0.5;
-
       transaction.update(targetInstanceRef, {
         'available_seats': newAvailableSeats,
         'remainingSeats': newAvailableSeats,
@@ -1993,7 +2015,10 @@ class JoinedTourService extends ChangeNotifier {
         'kids6to12': kids6to12,
         'kidsUnder6': kidsUnder6,
         'totalPersons': newTotalPersons,
-        'totalPrice': newTotalPrice,
+        'totalPrice': pricingQuote.total,
+        'currency': pricingQuote.currency,
+        'pricingVersion': pricingQuote.pricingVersion,
+        'pricingBreakdown': pricingQuote.toBookingPricingMap(),
         'instanceAvailable': newAvailableSeats,
         'instanceTotalSeats': totalSeats,
         'updatedAt': FieldValue.serverTimestamp(),
