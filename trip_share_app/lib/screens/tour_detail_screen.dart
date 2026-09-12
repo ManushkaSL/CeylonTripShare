@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:trip_share_app/models/tour.dart';
 import 'package:trip_share_app/screens/booking_details_screen.dart';
 import 'package:trip_share_app/services/auth_service.dart';
@@ -6,6 +7,7 @@ import 'package:trip_share_app/services/joined_tour_service.dart';
 import 'package:trip_share_app/widgets/login_dialog.dart';
 import 'package:trip_share_app/screens/booking_screen.dart';
 import 'package:trip_share_app/theme/design_system.dart';
+import 'package:trip_share_app/services/dynamic_link_service.dart';
 
 class TourDetailScreen extends StatefulWidget {
   final Tour tour;
@@ -65,6 +67,23 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
     ).push(MaterialPageRoute(builder: (_) => BookingScreen(tour: tour)));
   }
 
+  Future<void> _shareTour() async {
+    try {
+      final message = await DynamicLinkService().getTourShareMessage(
+        widget.tour,
+      );
+      await SharePlus.instance.share(ShareParams(text: message));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not share this tour: $error'),
+          backgroundColor: DesignColors.error,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tour = widget.tour;
@@ -79,7 +98,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
         slivers: [
           // Photo gallery header
           SliverAppBar(
-            expandedHeight: 330,
+            expandedHeight: 360,
             pinned: true,
             stretch: true,
             backgroundColor: DesignColors.background,
@@ -105,6 +124,31 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: IconButton(
+                  tooltip: 'Share tour',
+                  onPressed: _shareTour,
+                  icon: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.42),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.ios_share_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -182,258 +226,265 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
 
           // Main body content (Luxury Alabaster White background panel)
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
-              decoration: BoxDecoration(
-                color: DesignColors.surface,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF2C2219).withOpacity(0.04),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+            child: Transform.translate(
+              offset: const Offset(0, -24),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+                decoration: BoxDecoration(
+                  color: DesignColors.surface,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    width: 1.5,
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Category Badge & Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (tour.category.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: DesignColors.secondary.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: DesignColors.primary.withOpacity(0.15),
-                            ),
-                          ),
-                          child: Text(
-                            tour.category.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: DesignColors.primaryDark,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                      _buildStatusBadge(status),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Tour Name Title
-                  Text(
-                    tour.name,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: DesignColors.textPrimary,
-                      letterSpacing: -0.3,
-                      height: 1.25,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2C2219).withValues(alpha: 0.1),
+                      blurRadius: 30,
+                      offset: const Offset(0, 14),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-
-                  // Operator Description Label
-                  if (tour.operatorName.isNotEmpty)
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category Badge & Row
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(
-                          Icons.shield_outlined,
-                          size: 14,
-                          color: DesignColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          tour.isCommunityRide
-                              ? 'Ride hosted by ${tour.hostName.isNotEmpty ? tour.hostName : tour.operatorName}'
-                              : 'Operated by ${tour.operatorName}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        if (tour.category.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: DesignColors.secondary.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: DesignColors.primary.withOpacity(0.15),
+                              ),
+                            ),
+                            child: Text(
+                              tour.category.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: DesignColors.primaryDark,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        _buildStatusBadge(status),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Tour Name Title
+                    Text(
+                      tour.name,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: DesignColors.textPrimary,
+                        letterSpacing: -0.3,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Operator Description Label
+                    if (tour.operatorName.isNotEmpty)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.shield_outlined,
+                            size: 14,
                             color: DesignColors.textSecondary,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          Text(
+                            tour.isCommunityRide
+                                ? 'Ride hosted by ${tour.hostName.isNotEmpty ? tour.hostName : tour.operatorName}'
+                                : 'Operated by ${tour.operatorName}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: DesignColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18),
+                      child: Divider(color: DesignColors.divider),
                     ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 18),
-                    child: Divider(color: DesignColors.divider),
-                  ),
 
-                  // Elegant Grid Details Chips
-                  Row(
-                    children: [
-                      _buildInfoChip(
-                        Icons.attach_money_rounded,
-                        tour.isFixedTourPricing
-                            ? 'Rs. ${tour.fullTourPrice.toInt()} / full tour'
-                            : 'Rs. ${tour.price.toInt()} / person',
-                      ),
-                      const SizedBox(width: 12),
-                      _buildInfoChip(
-                        Icons.people_outline_rounded,
-                        '${tour.remainingSeats}/${tour.totalSeats} seats left',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      if (status != TourStatus.idle) ...[
+                    // Elegant Grid Details Chips
+                    Row(
+                      children: [
                         _buildInfoChip(
-                          Icons.calendar_month_rounded,
-                          _formatDate(tour.startDate),
+                          Icons.attach_money_rounded,
+                          tour.isFixedTourPricing
+                              ? 'Rs. ${tour.fullTourPrice.toInt()} / full tour'
+                              : 'Rs. ${tour.price.toInt()} / person',
                         ),
                         const SizedBox(width: 12),
+                        _buildInfoChip(
+                          Icons.people_outline_rounded,
+                          '${tour.remainingSeats}/${tour.totalSeats} seats left',
+                        ),
                       ],
-                      _buildInfoChip(
-                        Icons.access_time_rounded,
-                        _formatTime(tour.startDate),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (status != TourStatus.idle) ...[
+                          _buildInfoChip(
+                            Icons.calendar_month_rounded,
+                            _formatDate(tour.startDate),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        _buildInfoChip(
+                          Icons.access_time_rounded,
+                          _formatTime(tour.startDate),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Schedule Card Details
+                    _buildSectionTitle('SCHEDULE DETAIL'),
+                    const SizedBox(height: 10),
+                    _buildDetailCard([
+                      _buildDetailRow(
+                        Icons.play_arrow_rounded,
+                        'Start Departure',
+                        '${_formatTime(tour.startDate)} from ${tour.startLocation}',
                       ),
+                      if (tour.lastJoiningTime != null)
+                        _buildDetailRow(
+                          Icons.hourglass_bottom_rounded,
+                          'Last Booking',
+                          '${_formatTime(tour.lastJoiningTime!)} on ${_formatDate(tour.lastJoiningTime!)}',
+                        ),
+                      if (tour.endTime.isNotEmpty)
+                        _buildDetailRow(
+                          Icons.flag_rounded,
+                          'Arrival Destination',
+                          '${tour.endTime} at ${tour.endLocation}',
+                        ),
+                    ]),
+                    const SizedBox(height: 24),
+
+                    // Tour Description About
+                    _buildSectionTitle('ABOUT THE ADVENTURE'),
+                    const SizedBox(height: 10),
+                    Text(
+                      tour.description.isNotEmpty
+                          ? tour.description
+                          : 'Experience a signature wildlife tour curated by our team, introducing high-end premium hospitality and sightseeing.',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.6,
+                        fontWeight: FontWeight.w500,
+                        color: DesignColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Timeline Stopover Map
+                    if (tour.route.isNotEmpty) ...[
+                      _buildSectionTitle('TOUR ROUTE TIMELINE'),
+                      const SizedBox(height: 12),
+                      _buildRouteTimeline(),
+                      const SizedBox(height: 24),
                     ],
-                  ),
-                  const SizedBox(height: 24),
 
-                  // Schedule Card Details
-                  _buildSectionTitle('SCHEDULE DETAIL'),
-                  const SizedBox(height: 10),
-                  _buildDetailCard([
-                    _buildDetailRow(
-                      Icons.play_arrow_rounded,
-                      'Start Departure',
-                      '${_formatTime(tour.startDate)} from ${tour.startLocation}',
-                    ),
-                    if (tour.lastJoiningTime != null)
-                      _buildDetailRow(
-                        Icons.hourglass_bottom_rounded,
-                        'Last Booking',
-                        '${_formatTime(tour.lastJoiningTime!)} on ${_formatDate(tour.lastJoiningTime!)}',
+                    // What's Included Card
+                    if (tour.whatsIncluded.isNotEmpty) ...[
+                      _buildSectionTitle("WHAT'S INCLUDED"),
+                      const SizedBox(height: 12),
+                      _buildCheckList(
+                        tour.whatsIncluded,
+                        Icons.check_circle_rounded,
+                        DesignColors.success,
                       ),
-                    if (tour.endTime.isNotEmpty)
-                      _buildDetailRow(
-                        Icons.flag_rounded,
-                        'Arrival Destination',
-                        '${tour.endTime} at ${tour.endLocation}',
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Highlights / Special Features
+                    if (tour.tourFeatures.isNotEmpty) ...[
+                      _buildSectionTitle('TOUR HIGHLIGHTS'),
+                      const SizedBox(height: 12),
+                      _buildCheckList(
+                        tour.tourFeatures,
+                        Icons.star_rounded,
+                        DesignColors.accent,
                       ),
-                  ]),
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 24),
+                    ],
 
-                  // Tour Description About
-                  _buildSectionTitle('ABOUT THE ADVENTURE'),
-                  const SizedBox(height: 10),
-                  Text(
-                    tour.description.isNotEmpty
-                        ? tour.description
-                        : 'Experience a signature wildlife tour curated by our team, introducing high-end premium hospitality and sightseeing.',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.6,
-                      fontWeight: FontWeight.w500,
-                      color: DesignColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Timeline Stopover Map
-                  if (tour.route.isNotEmpty) ...[
-                    _buildSectionTitle('TOUR ROUTE TIMELINE'),
-                    const SizedBox(height: 12),
-                    _buildRouteTimeline(),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // What's Included Card
-                  if (tour.whatsIncluded.isNotEmpty) ...[
-                    _buildSectionTitle("WHAT'S INCLUDED"),
-                    const SizedBox(height: 12),
-                    _buildCheckList(
-                      tour.whatsIncluded,
-                      Icons.check_circle_rounded,
-                      DesignColors.success,
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Highlights / Special Features
-                  if (tour.tourFeatures.isNotEmpty) ...[
-                    _buildSectionTitle('TOUR HIGHLIGHTS'),
-                    const SizedBox(height: 12),
-                    _buildCheckList(
-                      tour.tourFeatures,
-                      Icons.star_rounded,
-                      DesignColors.accent,
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Dynamic Thumbnail slide indicators
-                  if (photos.length > 1) ...[
-                    _buildSectionTitle('PHOTO GALLERY'),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 80,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: photos.length,
-                        physics: const BouncingScrollPhysics(),
-                        separatorBuilder: (_, _) => const SizedBox(width: 10),
-                        itemBuilder: (context, index) {
-                          final isSelected = _currentPhoto == index;
-                          return GestureDetector(
-                            onTap: () {
-                              _pageController.animateToPage(
-                                index,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            },
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                width: 110,
-                                decoration: BoxDecoration(
-                                  border: isSelected
-                                      ? Border.all(
-                                          color: DesignColors.primary,
-                                          width: 2.5,
-                                        )
-                                      : Border.all(
-                                          color: DesignColors.divider
-                                              .withOpacity(0.5),
-                                          width: 1,
-                                        ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Image.network(
-                                  photos[index],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => Container(
-                                    color: DesignColors.divider,
-                                    child: const Icon(
-                                      Icons.landscape,
-                                      color: DesignColors.textTertiary,
+                    // Dynamic Thumbnail slide indicators
+                    if (photos.length > 1) ...[
+                      _buildSectionTitle('PHOTO GALLERY'),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 80,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: photos.length,
+                          physics: const BouncingScrollPhysics(),
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemBuilder: (context, index) {
+                            final isSelected = _currentPhoto == index;
+                            return GestureDetector(
+                              onTap: () {
+                                _pageController.animateToPage(
+                                  index,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  width: 110,
+                                  decoration: BoxDecoration(
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: DesignColors.primary,
+                                            width: 2.5,
+                                          )
+                                        : Border.all(
+                                            color: DesignColors.divider
+                                                .withOpacity(0.5),
+                                            width: 1,
+                                          ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Image.network(
+                                    photos[index],
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => Container(
+                                      color: DesignColors.divider,
+                                      child: const Icon(
+                                        Icons.landscape,
+                                        color: DesignColors.textTertiary,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -443,149 +494,159 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
         ],
       ),
       // Sticky Call-to-action bar
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
-        decoration: BoxDecoration(
-          color: DesignColors.surface,
-          border: Border(
-            top: BorderSide(
-              color: DesignColors.divider.withOpacity(0.8),
-              width: 1,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: DesignColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: DesignColors.divider.withValues(alpha: 0.8),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: DesignColors.primaryDark.withValues(alpha: 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: isUserBooked
-            ? SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => BookingDetailsScreen(tour: tour),
+          child: isUserBooked
+              ? SizedBox(
+                  height: 52,
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BookingDetailsScreen(tour: tour),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 20),
+                    label: const Text(
+                      'View / Edit My Booking',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_calendar_rounded, size: 20),
-                  label: const Text(
-                    'View / Edit My Booking',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: DesignColors.success,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: DesignColors.success,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
-                ),
-              )
-            : tour.canBook
-            ? Row(
-                children: [
-                  // Total price indicator
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'TOTAL PRICE',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: DesignColors.textTertiary,
-                            letterSpacing: 0.8,
+                )
+              : tour.canBook
+              ? Row(
+                  children: [
+                    // Total price indicator
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'TOTAL PRICE',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: DesignColors.textTertiary,
+                              letterSpacing: 0.8,
+                            ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            tour.isFixedTourPricing
+                                ? 'Rs. ${tour.fullTourPrice.toInt()} / tour\nRs. ${tour.currentPassengerPrice.toStringAsFixed(2)} / passenger now'
+                                : 'Rs. ${tour.price.toInt()} / person',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              color: DesignColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Luxury gradient confirm button
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            DesignColors.primary,
+                            DesignColors.primaryDark,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          tour.isFixedTourPricing
-                              ? 'Rs. ${tour.fullTourPrice.toInt()} / tour\nRs. ${tour.currentPassengerPrice.toStringAsFixed(2)} / passenger now'
-                              : 'Rs. ${tour.price.toInt()} / person',
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: DesignColors.primary.withOpacity(0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _onJoinPressed,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 36),
+                        ),
+                        child: Text(
+                          status == TourStatus.idle
+                              ? 'Start Tour'
+                              : 'Join Tour',
                           style: const TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            color: DesignColors.primary,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  // Luxury gradient confirm button
-                  Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          DesignColors.primary,
-                          DesignColors.primaryDark,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: DesignColors.primary.withOpacity(0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _onJoinPressed,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 36),
-                      ),
-                      child: Text(
-                        status == TourStatus.idle ? 'Start Tour' : 'Join Tour',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
                       ),
                     ),
-                  ),
-                ],
-              )
-            : SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: null,
-                  icon: const Icon(Icons.lock_rounded, size: 19),
-                  label: const Text(
-                    'Filled',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    disabledBackgroundColor: DesignColors.error.withOpacity(
-                      0.14,
+                  ],
+                )
+              : SizedBox(
+                  height: 52,
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.lock_rounded, size: 19),
+                    label: const Text(
+                      'Filled',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                    disabledForegroundColor: DesignColors.error,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(
-                        color: DesignColors.error.withOpacity(0.3),
+                    style: ElevatedButton.styleFrom(
+                      disabledBackgroundColor: DesignColors.error.withOpacity(
+                        0.14,
+                      ),
+                      disabledForegroundColor: DesignColors.error,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: DesignColors.error.withOpacity(0.3),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

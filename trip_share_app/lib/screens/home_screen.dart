@@ -15,6 +15,7 @@ import 'package:trip_share_app/screens/chats_list_screen.dart';
 import 'package:trip_share_app/screens/profile_screen.dart';
 import 'package:trip_share_app/screens/community_rides_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:trip_share_app/widgets/premium_tour_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -2239,7 +2240,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: activeTours
-                          .map((tour) => _buildTourCard(context, tour))
+                          .map(
+                            (tour) => PremiumTourCard(
+                              tour: tour,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TourDetailScreen(tour: tour),
+                                ),
+                              ),
+                              onShare: () => _shareTour(context, tour),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -2255,7 +2267,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: idleTours
-                          .map((tour) => _buildTourCard(context, tour))
+                          .map(
+                            (tour) => PremiumTourCard(
+                              tour: tour,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TourDetailScreen(tour: tour),
+                                ),
+                              ),
+                              onShare: () => _shareTour(context, tour),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -2272,45 +2295,74 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ─── BOTTOM NAVIGATION BAR ────────────────────────────────────
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: DesignColors.divider, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 66,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home_rounded, Icons.home_outlined, 'Home', 0),
-              _buildNavItem(
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: Container(
+        height: 72,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.98),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: DesignColors.divider.withValues(alpha: 0.85),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: DesignColors.primaryDark.withValues(alpha: 0.14),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.9),
+              blurRadius: 4,
+              offset: const Offset(0, -1),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildNavItem(
+                Icons.home_rounded,
+                Icons.home_outlined,
+                'Home',
+                0,
+              ),
+            ),
+            Expanded(
+              child: _buildNavItem(
                 Icons.chat_bubble_rounded,
                 Icons.chat_bubble_outline_rounded,
                 'Chats',
                 1,
               ),
-              _buildNavItem(
-                Icons.add_road_rounded,
-                Icons.add_road_outlined,
-                'Offer Ride',
+            ),
+            Expanded(
+              child: _buildNavItem(
+                Icons.directions_car_filled_rounded,
+                Icons.directions_car_outlined,
+                'Offer',
                 2,
+                isCenterAction: true,
               ),
-              _buildNavItem(
+            ),
+            Expanded(
+              child: _buildNavItem(
                 Icons.luggage_rounded,
                 Icons.luggage_outlined,
                 'Bookings',
                 3,
               ),
-              _buildNavItem(
+            ),
+            Expanded(
+              child: _buildNavItem(
                 Icons.person_rounded,
                 Icons.person_outline_rounded,
                 'Profile',
                 4,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -2320,34 +2372,127 @@ class _HomeScreenState extends State<HomeScreen> {
     IconData activeIcon,
     IconData inactiveIcon,
     String label,
-    int index,
-  ) {
+    int index, {
+    bool isCenterAction = false,
+  }) {
     final isSelected = _selectedIndex == index;
+    if (isCenterAction) {
+      return GestureDetector(
+        onTap: () => setState(() => _selectedIndex = index),
+        behavior: HitTestBehavior.opaque,
+        child: Transform.translate(
+          offset: const Offset(0, -10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 240),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isSelected
+                        ? const [
+                            DesignColors.primaryLight,
+                            DesignColors.primaryDark,
+                          ]
+                        : const [
+                            DesignColors.primary,
+                            DesignColors.primaryDark,
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: DesignColors.primary.withValues(alpha: 0.34),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Center(
+                      child: Icon(activeIcon, color: Colors.white, size: 23),
+                    ),
+                    Positioned(
+                      top: 5,
+                      right: 4,
+                      child: Container(
+                        width: 15,
+                        height: 15,
+                        decoration: const BoxDecoration(
+                          color: DesignColors.primaryLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.add_rounded,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  color: isSelected
+                      ? DesignColors.primary
+                      : DesignColors.textSecondary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
       behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 68,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: isSelected
-                  ? DesignColors.primary
-                  : DesignColors.textSecondary,
-              size: 24,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 38,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? DesignColors.secondary.withValues(alpha: 0.72)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                isSelected ? activeIcon : inactiveIcon,
+                color: isSelected
+                    ? DesignColors.primary
+                    : DesignColors.textTertiary,
+                size: 21,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               label,
+              maxLines: 1,
               style: TextStyle(
                 color: isSelected
                     ? DesignColors.primary
-                    : DesignColors.textSecondary,
-                fontSize: 11,
+                    : DesignColors.textTertiary,
+                fontSize: 9.5,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                letterSpacing: 0.2,
               ),
             ),
           ],
