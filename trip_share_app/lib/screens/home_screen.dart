@@ -16,6 +16,7 @@ import 'package:trip_share_app/screens/profile_screen.dart';
 import 'package:trip_share_app/screens/community_rides_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:trip_share_app/widgets/custom_bottom_nav.dart';
+import 'package:trip_share_app/widgets/journey_type_selector.dart';
 import 'package:trip_share_app/widgets/premium_tour_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -1495,111 +1496,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ─── LUXURIOUS TAB SWITCHER (CAPSULE INDICATOR) ───────────────────
-  Widget _buildTabSelector(int activeCount, int idleCount) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0EAE3),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: DesignColors.divider, width: 1.2),
-        ),
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedTabIndex = 0),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: _selectedTabIndex == 0
-                        ? const LinearGradient(
-                            colors: [
-                              DesignColors.primary,
-                              DesignColors.primaryDark,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    boxShadow: _selectedTabIndex == 0
-                        ? [
-                            BoxShadow(
-                              color: DesignColors.primary.withOpacity(0.35),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Active Tours ($activeCount)',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: _selectedTabIndex == 0
-                            ? Colors.white
-                            : DesignColors.textPrimary,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedTabIndex = 1),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: _selectedTabIndex == 1
-                        ? const LinearGradient(
-                            colors: [
-                              DesignColors.primary,
-                              DesignColors.primaryDark,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    boxShadow: _selectedTabIndex == 1
-                        ? [
-                            BoxShadow(
-                              color: DesignColors.primary.withOpacity(0.35),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Idle Tours ($idleCount)',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: _selectedTabIndex == 1
-                            ? Colors.white
-                            : DesignColors.textPrimary,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  // ─── SCENIC JOURNEY SELECTOR ───────────────────────────────
+  Widget _buildTabSelector(List<Tour> activeTours, List<Tour> idleTours) {
+    return JourneyTypeSelector(
+      selectedIndex: _selectedTabIndex,
+      activeCount: activeTours.length,
+      idleCount: idleTours.length,
+      onChanged: (index) => setState(() => _selectedTabIndex = index),
     );
   }
 
@@ -2178,6 +2081,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildTourTabContent({
+    required String title,
+    required List<Tour> tours,
+    required bool isLoading,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(title),
+        const SizedBox(height: 14),
+        if (isLoading)
+          _buildSkeletonCards()
+        else if (tours.isEmpty)
+          _buildEmptyState()
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: tours
+                  .map(
+                    (tour) => PremiumTourCard(
+                      tour: tour,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TourDetailScreen(tour: tour),
+                        ),
+                      ),
+                      onShare: () => _shareTour(context, tour),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
   // ─── MAIN HOME CONTENT ──────────────────────────────────────────
   Widget _buildHomeContent() {
     return StreamBuilder<List<Tour>>(
@@ -2225,65 +2166,57 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
 
               // Tab Selector
-              _buildTabSelector(activeTours.length, idleTours.length),
+              _buildTabSelector(activeTours, idleTours),
               const SizedBox(height: 22),
 
-              // SWITCHABLE VIEW: ONLY RENDER SELECTED TAB DATA
-              if (_selectedTabIndex == 0) ...[
-                _buildSectionHeader('Active Tours'),
-                const SizedBox(height: 14),
-                if (isLoading)
-                  _buildSkeletonCards()
-                else if (activeTours.isEmpty)
-                  _buildEmptyState()
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: activeTours
-                          .map(
-                            (tour) => PremiumTourCard(
-                              tour: tour,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TourDetailScreen(tour: tour),
-                                ),
-                              ),
-                              onShare: () => _shareTour(context, tour),
-                            ),
-                          )
-                          .toList(),
+              // Smoothly swap the selected tour collection.
+              AnimatedSize(
+                duration: const Duration(milliseconds: 480),
+                curve: Curves.easeInOutCubic,
+                alignment: Alignment.topCenter,
+                child: ClipRect(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 460),
+                    reverseDuration: const Duration(milliseconds: 360),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) {
+                      final selectedKey = ValueKey<int>(_selectedTabIndex);
+                      final isIncoming = child.key == selectedKey;
+                      final direction = _selectedTabIndex == 1 ? 1.0 : -1.0;
+                      final startX = isIncoming
+                          ? direction * 0.075
+                          : -direction * 0.075;
+                      final curved = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                        reverseCurve: Curves.easeInCubic,
+                      );
+
+                      return FadeTransition(
+                        opacity: curved,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: Offset(startX, 0),
+                            end: Offset.zero,
+                          ).animate(curved),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_selectedTabIndex),
+                      child: _buildTourTabContent(
+                        title: _selectedTabIndex == 0
+                            ? 'Active Tours'
+                            : 'Idle Tours',
+                        tours: _selectedTabIndex == 0 ? activeTours : idleTours,
+                        isLoading: isLoading,
+                      ),
                     ),
                   ),
-              ] else ...[
-                _buildSectionHeader('Idle Tours'),
-                const SizedBox(height: 14),
-                if (isLoading)
-                  _buildSkeletonCards()
-                else if (idleTours.isEmpty)
-                  _buildEmptyState()
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: idleTours
-                          .map(
-                            (tour) => PremiumTourCard(
-                              tour: tour,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TourDetailScreen(tour: tour),
-                                ),
-                              ),
-                              onShare: () => _shareTour(context, tour),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-              ],
+                ),
+              ),
 
               // Clean footer clearance padding
               const SizedBox(height: 32),
