@@ -225,9 +225,11 @@ class TourCard extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                            '\$${tour.price.toInt()}',
+                            tour.isFixedTourPricing
+                                ? 'Rs. ${tour.fullTourPrice.toInt()} / tour\nRs. ${tour.currentPassengerPrice.toStringAsFixed(2)} / passenger'
+                                : 'Rs. ${tour.price.toInt()} / person',
                             style: const TextStyle(
-                              fontSize: 13,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.w700,
                               color: DesignColors.accent,
                             ),

@@ -86,4 +86,17 @@ void main() {
       128,
     );
   });
+
+  test('fixed tour exposes full and current passenger prices', () {
+    final tour = _tour().copyWith(
+      pricingMode: Tour.fixedTourPricing,
+      fixedTourPrice: 30000,
+      bookedSeats: 3,
+      isPrivate: true,
+    );
+
+    expect(tour.isFixedTourPricing, isTrue);
+    expect(tour.fullTourPrice, 30000);
+    expect(tour.currentPassengerPrice, 10000);
+  });
 }

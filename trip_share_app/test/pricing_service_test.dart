@@ -56,4 +56,38 @@ void main() {
     expect(quote.toBookingPricingMap()['total'], 1200);
     expect(quote.toBookingPricingMap()['currency'], 'LKR');
   });
+
+  test('fixed-tour quote exposes full and per-passenger prices', () {
+    final quote = PricingQuote.fromMap({
+      'pricingVersion': 2,
+      'pricingMode': 'fixed_tour',
+      'currency': 'LKR',
+      'isPrivate': true,
+      'counts': {
+        'adults': 1,
+        'kids6to12': 0,
+        'kidsUnder6': 0,
+        'totalPersons': 1,
+      },
+      'passengersAfterBooking': 3,
+      'fullTourPrice': 30000,
+      'fullTourTotal': 30000,
+      'pricePerPassenger': 10000,
+      'unitPrices': {'adult': 10000, 'child': 10000, 'infant': 10000},
+      'adultTotal': 10000,
+      'childTotal': 0,
+      'infantTotal': 0,
+      'privateTourSurcharge': 0,
+      'serviceFeePercent': 0,
+      'serviceFee': 0,
+      'subtotal': 10000,
+      'total': 10000,
+    });
+
+    expect(quote.pricingMode, 'fixed_tour');
+    expect(quote.fullTourPrice, 30000);
+    expect(quote.passengersAfterBooking, 3);
+    expect(quote.pricePerPassenger, 10000);
+    expect(quote.toBookingPricingMap()['fullTourTotal'], 30000);
+  });
 }

@@ -1914,7 +1914,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           text: TextSpan(
                             children: [
                               TextSpan(
-                                text: '\$${tour.price.toInt()}',
+                                text: tour.isFixedTourPricing
+                                    ? 'Rs. ${tour.fullTourPrice.toInt()}'
+                                    : 'Rs. ${tour.price.toInt()}',
                                 style: TextStyle(
                                   fontSize: 19,
                                   fontWeight: FontWeight.w900,
@@ -1922,7 +1924,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               TextSpan(
-                                text: ' / person',
+                                text: tour.isFixedTourPricing
+                                    ? ' / tour\nRs. ${tour.currentPassengerPrice.toStringAsFixed(2)} / passenger now'
+                                    : ' / person',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w600,

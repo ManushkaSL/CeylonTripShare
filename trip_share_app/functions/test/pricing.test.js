@@ -46,3 +46,58 @@ test("rounds all monetary output to two decimal places", () => {
   assert.equal(quote.childTotal, 5.01);
   assert.equal(quote.total, 15.4);
 });
+
+test("splits a fixed private-tour price equally between all passengers", () => {
+  const firstPassenger = calculatePricing({
+    adults: 1,
+    kids6to12: 0,
+    kidsUnder6: 0,
+    pricingMode: "fixed_tour",
+    fixedTourPrice: 30000,
+    passengersAfterBooking: 1,
+    isPrivate: true,
+  });
+  const thirdPassenger = calculatePricing({
+    adults: 1,
+    kids6to12: 0,
+    kidsUnder6: 0,
+    pricingMode: "fixed_tour",
+    fixedTourPrice: 30000,
+    passengersAfterBooking: 3,
+    isPrivate: true,
+  });
+  const twoPassengers = calculatePricing({
+    adults: 1,
+    kids6to12: 0,
+    kidsUnder6: 0,
+    pricingMode: "fixed_tour",
+    fixedTourPrice: 30000,
+    passengersAfterBooking: 2,
+    isPrivate: true,
+    privateTourSurcharge: 2500,
+    serviceFeePercent: 5,
+  });
+
+  assert.equal(firstPassenger.fullTourTotal, 30000);
+  assert.equal(firstPassenger.pricePerPassenger, 30000);
+  assert.equal(firstPassenger.total, 30000);
+  assert.equal(twoPassengers.pricePerPassenger, 15000);
+  assert.equal(twoPassengers.total, 15000);
+  assert.equal(thirdPassenger.pricePerPassenger, 10000);
+  assert.equal(thirdPassenger.total, 10000);
+});
+
+test("charges a booking for its passenger share of a fixed tour", () => {
+  const quote = calculatePricing({
+    adults: 2,
+    kids6to12: 0,
+    kidsUnder6: 0,
+    pricingMode: "fixed_tour",
+    fixedTourPrice: 30000,
+    passengersAfterBooking: 3,
+    isPrivate: true,
+  });
+
+  assert.equal(quote.pricePerPassenger, 10000);
+  assert.equal(quote.total, 20000);
+});

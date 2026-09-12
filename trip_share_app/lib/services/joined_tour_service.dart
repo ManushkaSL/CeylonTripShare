@@ -621,6 +621,13 @@ class JoinedTourService extends ChangeNotifier {
                     inst['available_seats'] ?? inst['remainingSeats'],
                   ),
                   price: (inst['price'] as num?)?.toDouble() ?? 0.0,
+                  pricingMode:
+                      (inst['pricingMode'] ?? '').toString().toLowerCase() ==
+                          Tour.fixedTourPricing
+                      ? Tour.fixedTourPricing
+                      : Tour.perPersonPricing,
+                  fixedTourPrice:
+                      (inst['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
                   description: inst['description'] ?? '',
                   photos: List<String>.from(inst['photos'] ?? []),
                   category: inst['category'] ?? '',
@@ -667,6 +674,13 @@ class JoinedTourService extends ChangeNotifier {
                     tourData['remainingSeats'] ??
                     0,
                 price: (tourData['price'] as num?)?.toDouble() ?? 0.0,
+                pricingMode:
+                    (tourData['pricingMode'] ?? '').toString().toLowerCase() ==
+                        Tour.fixedTourPricing
+                    ? Tour.fixedTourPricing
+                    : Tour.perPersonPricing,
+                fixedTourPrice:
+                    (tourData['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
                 description: tourData['description'] ?? '',
                 photos: List<String>.from(tourData['photos'] ?? []),
                 category: tourData['category'] ?? '',
@@ -930,6 +944,8 @@ class JoinedTourService extends ChangeNotifier {
             'bookedUserIds': bookedUserIds,
             'firstBookedUserId': firstBookedUserId,
             'price': tour.price,
+            'pricingMode': tour.pricingMode,
+            'fixedTourPrice': tour.fixedTourPrice,
             'description': tour.description,
             'photos': tour.photos,
             'category': tour.category,
@@ -1721,6 +1737,13 @@ class JoinedTourService extends ChangeNotifier {
               totalSeats: (data['instanceTotalSeats'] as num?)?.toInt() ?? 0,
               remainingSeats: (data['instanceAvailable'] as num?)?.toInt() ?? 0,
               price: (data['price'] as num?)?.toDouble() ?? 0.0,
+              pricingMode:
+                  (data['pricingMode'] ?? '').toString().toLowerCase() ==
+                      Tour.fixedTourPricing
+                  ? Tour.fixedTourPricing
+                  : Tour.perPersonPricing,
+              fixedTourPrice:
+                  (data['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
               isPrivate:
                   data['isPrivate'] == true ||
                   data['visibility']?.toString().toLowerCase() == 'private',
@@ -1754,6 +1777,17 @@ class JoinedTourService extends ChangeNotifier {
                       fallback: tour.remainingSeats,
                     ),
                     price: _toDouble(instance['price'], fallback: tour.price),
+                    pricingMode:
+                        (instance['pricingMode'] ?? '')
+                                .toString()
+                                .toLowerCase() ==
+                            Tour.fixedTourPricing
+                        ? Tour.fixedTourPricing
+                        : Tour.perPersonPricing,
+                    fixedTourPrice: _toDouble(
+                      instance['fixedTourPrice'],
+                      fallback: tour.fixedTourPrice,
+                    ),
                     description: (instance['description'] ?? '').toString(),
                     photos: List<String>.from(instance['photos'] ?? const []),
                     category: (instance['category'] ?? '').toString(),
@@ -1881,7 +1915,7 @@ class JoinedTourService extends ChangeNotifier {
   /// Loads the current user's booking for this exact active occurrence.
   Future<Booking?> loadBookingForTour(Tour tour) async {
     final cached = bookingForTour(tour);
-    if (cached != null) return cached;
+    if (cached != null && !tour.isFixedTourPricing) return cached;
 
     final userId = _authService.userId;
     if (userId.isEmpty) return null;
@@ -1954,6 +1988,7 @@ class JoinedTourService extends ChangeNotifier {
       kids6to12: kids6to12,
       kidsUnder6: kidsUnder6,
       isPrivate: booking.isPrivate || booking.tour.isPrivate,
+      bookingId: booking.id,
     );
 
     final bookingRef = _firestore.collection('bookings').doc(booking.id);

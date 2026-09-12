@@ -386,6 +386,8 @@ export default function App() {
     available_seats: 0,
     description: '',
     price: 0,
+    pricingMode: 'per_person',
+    fixedTourPrice: 0,
     start_location: '',
     start_day: '',
     start_time: '',
@@ -551,6 +553,8 @@ export default function App() {
       category: tour.category,
       description: tour.description,
       price: tour.price,
+      pricingMode: tour.pricingMode === 'fixed_tour' ? 'fixed_tour' : 'per_person',
+      fixedTourPrice: Number(tour.fixedTourPrice || 0),
       seat_count: Number(tour.seat_count || 0),
       available_seats: Number(tour.available_seats ?? tour.seat_count ?? 0),
       start_location: tour.start_location || tour.location || '',
@@ -1270,7 +1274,17 @@ export default function App() {
   const handleAddTour = async (e: React.FormEvent) => {
     e.preventDefault();
     const isEditMode = Boolean(editingTourId);
+    const pricingMode = newTour.pricingMode === 'fixed_tour' ? 'fixed_tour' : 'per_person';
+    const configuredPrice = pricingMode === 'fixed_tour'
+      ? Number(newTour.fixedTourPrice || 0)
+      : Number(newTour.price || 0);
     setCreateError('');
+    if (configuredPrice <= 0) {
+      setCreateError(pricingMode === 'fixed_tour'
+        ? 'Enter a full tour price greater than zero.'
+        : 'Enter a per-passenger price greater than zero.');
+      return;
+    }
     setIsCreating(true);
     setCreateStep('Preparing upload...');
     try {
@@ -1307,7 +1321,9 @@ export default function App() {
         title: newTour.title || '',
         category: newTour.category || '',
         description: newTour.description || '',
-        price: Number(newTour.price || 0),
+        price: pricingMode === 'per_person' ? configuredPrice : 0,
+        pricingMode,
+        fixedTourPrice: pricingMode === 'fixed_tour' ? configuredPrice : 0,
         seat_count: Number(newTour.seat_count || 0),
         available_seats: Number(newTour.available_seats ?? newTour.seat_count ?? 0),
         
@@ -1765,7 +1781,9 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-1.5 text-stone-900 font-bold">
                             <DollarSign className="w-4 h-4 text-emerald-600" />
-                            {tour.price}
+                            {tour.pricingMode === 'fixed_tour'
+                              ? `Rs. ${Number(tour.fixedTourPrice || 0).toFixed(2)} / tour`
+                              : `Rs. ${Number(tour.price || 0).toFixed(2)} / passenger`}
                           </div>
                         </div>
                       </div>
@@ -2331,6 +2349,26 @@ export default function App() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Pricing Type</label>
+                      <select
+                        value={newTour.pricingMode || 'per_person'}
+                        onChange={e => setNewTour({
+                          ...newTour,
+                          pricingMode: e.target.value as 'per_person' | 'fixed_tour',
+                        })}
+                        className="w-full px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      >
+                        <option value="per_person">Per passenger</option>
+                        <option value="fixed_tour">Fixed full tour price (private tour only)</option>
+                      </select>
+                      <p className="mt-1.5 text-xs text-stone-500">
+                        {newTour.pricingMode === 'fixed_tour'
+                          ? 'The total is divided equally across all passengers. These tours are private and joinable by link only.'
+                          : 'Adults pay this base amount per passenger; child pricing follows the configured pricing rules.'}
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-stone-800 mb-1.5">Category</label>
@@ -2373,22 +2411,26 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">Price</label>
+                      <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                        {newTour.pricingMode === 'fixed_tour' ? 'Full Tour Price' : 'Price Per Passenger'}
+                      </label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                         <input
                           required
                           type="number"
                           min={0}
-                          value={newTour.price}
+                          value={newTour.pricingMode === 'fixed_tour' ? newTour.fixedTourPrice : newTour.price}
                           onFocus={e => {
                             if (e.target.value === '0') {
                               e.target.value = '';
                             }
                           }}
-                          onChange={e => setNewTour({ ...newTour, price: Number(e.target.value || 0) })}
+                          onChange={e => setNewTour(newTour.pricingMode === 'fixed_tour'
+                            ? { ...newTour, fixedTourPrice: Number(e.target.value || 0) }
+                            : { ...newTour, price: Number(e.target.value || 0) })}
                           className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                          placeholder="e.g. 250"
+                          placeholder={newTour.pricingMode === 'fixed_tour' ? 'e.g. 30000' : 'e.g. 5000'}
                         />
                       </div>
                     </div>

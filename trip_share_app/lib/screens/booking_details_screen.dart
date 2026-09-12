@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:trip_share_app/models/booking.dart';
 import 'package:trip_share_app/models/tour.dart';
@@ -19,6 +22,8 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   int _passengerCount = 1;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _bookingSubscription;
 
   @override
   void initState() {
@@ -35,6 +40,7 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
         _passengerCount = booking?.totalPersons ?? 1;
         _isLoading = false;
       });
+      if (booking != null) _watchBooking(booking);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -45,6 +51,31 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
         ),
       );
     }
+  }
+
+  void _watchBooking(Booking booking) {
+    _bookingSubscription?.cancel();
+    _bookingSubscription = FirebaseFirestore.instance
+        .collection('bookings')
+        .doc(booking.id)
+        .snapshots()
+        .listen((snapshot) {
+          if (!mounted || !snapshot.exists) return;
+          final data = snapshot.data();
+          if (data == null) return;
+          final mapped = Map<String, dynamic>.from(data)..['id'] = snapshot.id;
+          final updated = Booking.fromMap(mapped, booking.tour);
+          setState(() {
+            _booking = updated;
+            if (!_isSaving) _passengerCount = updated.totalPersons;
+          });
+        });
+  }
+
+  @override
+  void dispose() {
+    _bookingSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _savePassengerCount() async {
@@ -84,6 +115,19 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final booking = _booking;
+    final pricing = booking?.pricingBreakdown ?? const <String, dynamic>{};
+    final isFixedPricing =
+        booking?.tour.isFixedTourPricing == true ||
+        pricing['pricingMode'] == Tour.fixedTourPricing;
+    final fullTourPrice =
+        (pricing['fullTourTotal'] as num?)?.toDouble() ??
+        (pricing['fullTourPrice'] as num?)?.toDouble() ??
+        booking?.tour.fixedTourPrice ??
+        0;
+    final currentPassengerPrice =
+        (pricing['pricePerPassenger'] as num?)?.toDouble() ??
+        booking?.tour.currentPassengerPrice ??
+        0;
 
     return Scaffold(
       backgroundColor: DesignColors.background,
@@ -126,12 +170,22 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                         booking.pickupLocation,
                       ),
                       _row(Icons.phone_outlined, 'Phone', booking.phoneNumber),
+                      if (isFixedPricing)
+                        _row(
+                          Icons.tour_outlined,
+                          'Full tour total',
+                          _formatMoney(booking.currency, fullTourPrice),
+                        ),
+                      if (isFixedPricing)
+                        _row(
+                          Icons.person_outline_rounded,
+                          'Current price per passenger',
+                          _formatMoney(booking.currency, currentPassengerPrice),
+                        ),
                       _row(
                         Icons.payments_outlined,
-                        'Total',
-                        booking.currency == 'LKR'
-                            ? 'Rs. ${booking.totalPrice.toStringAsFixed(2)}'
-                            : '${booking.currency} ${booking.totalPrice.toStringAsFixed(2)}',
+                        isFixedPricing ? 'Your current share' : 'Total',
+                        _formatMoney(booking.currency, booking.totalPrice),
                       ),
                     ],
                   ),
@@ -243,6 +297,10 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
             ),
     );
   }
+
+  String _formatMoney(String currency, double value) => currency == 'LKR'
+      ? 'Rs. ${value.toStringAsFixed(2)}'
+      : '$currency ${value.toStringAsFixed(2)}';
 
   Widget _detailCard({required Widget child}) {
     return Container(

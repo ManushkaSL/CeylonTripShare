@@ -2,12 +2,17 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 class PricingQuote {
   final int pricingVersion;
+  final String pricingMode;
   final String currency;
   final bool isPrivate;
   final int adults;
   final int kids6to12;
   final int kidsUnder6;
   final int totalPersons;
+  final int passengersAfterBooking;
+  final double fullTourPrice;
+  final double fullTourTotal;
+  final double pricePerPassenger;
   final double adultUnitPrice;
   final double childUnitPrice;
   final double infantUnitPrice;
@@ -23,12 +28,17 @@ class PricingQuote {
 
   const PricingQuote({
     required this.pricingVersion,
+    required this.pricingMode,
     required this.currency,
     required this.isPrivate,
     required this.adults,
     required this.kids6to12,
     required this.kidsUnder6,
     required this.totalPersons,
+    required this.passengersAfterBooking,
+    required this.fullTourPrice,
+    required this.fullTourTotal,
+    required this.pricePerPassenger,
     required this.adultUnitPrice,
     required this.childUnitPrice,
     required this.infantUnitPrice,
@@ -48,12 +58,20 @@ class PricingQuote {
     final unitPrices = _map(data['unitPrices']);
     return PricingQuote(
       pricingVersion: _integer(data['pricingVersion'], fallback: 1),
+      pricingMode: (data['pricingMode'] ?? 'per_person').toString(),
       currency: (data['currency'] ?? 'LKR').toString(),
       isPrivate: data['isPrivate'] == true,
       adults: _integer(counts['adults']),
       kids6to12: _integer(counts['kids6to12']),
       kidsUnder6: _integer(counts['kidsUnder6']),
       totalPersons: _integer(counts['totalPersons']),
+      passengersAfterBooking: _integer(
+        data['passengersAfterBooking'],
+        fallback: _integer(counts['totalPersons']),
+      ),
+      fullTourPrice: _number(data['fullTourPrice']),
+      fullTourTotal: _number(data['fullTourTotal']),
+      pricePerPassenger: _number(data['pricePerPassenger']),
       adultUnitPrice: _number(unitPrices['adult']),
       childUnitPrice: _number(unitPrices['child']),
       infantUnitPrice: _number(unitPrices['infant']),
@@ -73,10 +91,15 @@ class PricingQuote {
 
   Map<String, dynamic> toBookingPricingMap() => {
     'pricingVersion': pricingVersion,
+    'pricingMode': pricingMode,
     'currency': currency,
     'adultUnitPrice': adultUnitPrice,
     'childUnitPrice': childUnitPrice,
     'infantUnitPrice': infantUnitPrice,
+    'passengersAfterBooking': passengersAfterBooking,
+    'fullTourPrice': fullTourPrice,
+    'fullTourTotal': fullTourTotal,
+    'pricePerPassenger': pricePerPassenger,
     'adultTotal': adultTotal,
     'childTotal': childTotal,
     'infantTotal': infantTotal,
@@ -120,17 +143,19 @@ class PricingService {
     required int kids6to12,
     required int kidsUnder6,
     required bool isPrivate,
+    String? bookingId,
   }) async {
     try {
-      final result = await _functions
-          .httpsCallable('calculateTourPrice')
-          .call(<String, dynamic>{
-            'tourId': tourId,
-            'adults': adults,
-            'kids6to12': kids6to12,
-            'kidsUnder6': kidsUnder6,
-            'isPrivate': isPrivate,
-          });
+      final result = await _functions.httpsCallable('calculateTourPrice').call(
+        <String, dynamic>{
+          'tourId': tourId,
+          'adults': adults,
+          'kids6to12': kids6to12,
+          'kidsUnder6': kidsUnder6,
+          'isPrivate': isPrivate,
+          if (bookingId != null && bookingId.isNotEmpty) 'bookingId': bookingId,
+        },
+      );
       final rawData = result.data;
       if (rawData is! Map) {
         throw const PricingException('The pricing service returned no quote.');

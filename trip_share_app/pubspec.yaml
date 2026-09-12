@@ -60,6 +60,11 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+# firebase_core_web 3.11.0 uses a Dart 3.12 JS interop API, while this project
+# currently runs on Flutter 3.41.6 / Dart 3.11.4.
+dependency_overrides:
+  firebase_core_web: 3.10.0
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

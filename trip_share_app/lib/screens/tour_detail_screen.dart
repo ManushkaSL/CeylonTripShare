@@ -274,7 +274,9 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                     children: [
                       _buildInfoChip(
                         Icons.attach_money_rounded,
-                        '\$${tour.price.toInt()} / person',
+                        tour.isFixedTourPricing
+                            ? 'Rs. ${tour.fullTourPrice.toInt()} / full tour'
+                            : 'Rs. ${tour.price.toInt()} / person',
                       ),
                       const SizedBox(width: 12),
                       _buildInfoChip(
@@ -472,10 +474,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   icon: const Icon(Icons.edit_calendar_rounded, size: 20),
                   label: const Text(
                     'View / Edit My Booking',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: DesignColors.success,
@@ -506,9 +505,11 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '\$${tour.price.toInt()} / person',
+                          tour.isFixedTourPricing
+                              ? 'Rs. ${tour.fullTourPrice.toInt()} / tour\nRs. ${tour.currentPassengerPrice.toStringAsFixed(2)} / passenger now'
+                              : 'Rs. ${tour.price.toInt()} / person',
                           style: const TextStyle(
-                            fontSize: 17,
+                            fontSize: 15,
                             fontWeight: FontWeight.w900,
                             color: DesignColors.primary,
                           ),
@@ -548,9 +549,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 36),
                       ),
                       child: Text(
-                        status == TourStatus.idle
-                            ? 'Start Tour'
-                            : 'Join Tour',
+                        status == TourStatus.idle ? 'Start Tour' : 'Join Tour',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -569,10 +568,7 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                   icon: const Icon(Icons.lock_rounded, size: 19),
                   label: const Text(
                     'Filled',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
                   ),
                   style: ElevatedButton.styleFrom(
                     disabledBackgroundColor: DesignColors.error.withOpacity(

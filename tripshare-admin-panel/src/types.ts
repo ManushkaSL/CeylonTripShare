@@ -4,6 +4,8 @@ export interface Tour {
   category: string;
   description: string;
   price: number;
+  pricingMode?: 'per_person' | 'fixed_tour';
+  fixedTourPrice?: number;
   images: string[];
   seat_count: number;
   available_seats: number;

@@ -6,6 +6,9 @@ class RouteStop {
 }
 
 class Tour {
+  static const String perPersonPricing = 'per_person';
+  static const String fixedTourPricing = 'fixed_tour';
+
   final String id;
   final String name;
   final String imageUrl;
@@ -13,6 +16,8 @@ class Tour {
   final int totalSeats;
   final int remainingSeats;
   final double price;
+  final String pricingMode;
+  final double fixedTourPrice;
   final String description;
   final List<String> photos;
   final String category;
@@ -40,6 +45,8 @@ class Tour {
     required this.totalSeats,
     required this.remainingSeats,
     required this.price,
+    this.pricingMode = perPersonPricing,
+    this.fixedTourPrice = 0,
     this.description = '',
     this.photos = const [],
     this.category = '',
@@ -73,6 +80,16 @@ class Tour {
 
   bool get canBook => remainingSeats > 0;
 
+  bool get isFixedTourPricing => pricingMode == fixedTourPricing;
+
+  double get fullTourPrice => isFixedTourPricing ? fixedTourPrice : price;
+
+  double get currentPassengerPrice {
+    if (!isFixedTourPricing) return price;
+    final passengers = bookedSeats > 0 ? bookedSeats : 1;
+    return fixedTourPrice / passengers;
+  }
+
   bool get hasBookings =>
       bookedSeats > 0 ||
       bookedUserIds.isNotEmpty ||
@@ -86,6 +103,8 @@ class Tour {
     int? totalSeats,
     int? remainingSeats,
     double? price,
+    String? pricingMode,
+    double? fixedTourPrice,
     String? description,
     List<String>? photos,
     String? category,
@@ -112,6 +131,8 @@ class Tour {
       totalSeats: totalSeats ?? this.totalSeats,
       remainingSeats: remainingSeats ?? this.remainingSeats,
       price: price ?? this.price,
+      pricingMode: pricingMode ?? this.pricingMode,
+      fixedTourPrice: fixedTourPrice ?? this.fixedTourPrice,
       description: description ?? this.description,
       photos: photos ?? this.photos,
       category: category ?? this.category,

@@ -1,10 +1,11 @@
 "use strict";
 
 const {getApps, initializeApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
+const {FieldValue, getFirestore} = require("firebase-admin/firestore");
 const {logger} = require("firebase-functions");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {HttpsError, onCall} = require("firebase-functions/v2/https");
+const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {calculatePricing, nonNegativeNumber} = require("./pricing");
 
 setGlobalOptions({region: "asia-south1", maxInstances: 10});
@@ -50,6 +51,12 @@ exports.calculateTourPrice = onCall(async (request) => {
   const adults = requiredPassengerCount(data, "adults", {minimum: 1});
   const kids6to12 = requiredPassengerCount(data, "kids6to12");
   const kidsUnder6 = requiredPassengerCount(data, "kidsUnder6");
+  const bookingId = typeof data.bookingId === "string"
+    ? data.bookingId.trim()
+    : "";
+  if (bookingId && (bookingId.length > 256 || bookingId.includes("/"))) {
+    throw new HttpsError("invalid-argument", "A valid bookingId is required.");
+  }
   const totalPersons = adults + kids6to12 + kidsUnder6;
   if (totalPersons > 100) {
     throw new HttpsError(
@@ -58,11 +65,19 @@ exports.calculateTourPrice = onCall(async (request) => {
     );
   }
 
-  const [instanceSnapshot, directTourSnapshot, pricingConfigSnapshot] =
+  const [
+    instanceSnapshot,
+    directTourSnapshot,
+    pricingConfigSnapshot,
+    existingBookingSnapshot,
+  ] =
     await Promise.all([
       db.collection("tour_instances").doc(tourId).get(),
       db.collection("tours").doc(tourId).get(),
       db.collection("app_config").doc("pricing").get(),
+      bookingId
+        ? db.collection("bookings").doc(bookingId).get()
+        : Promise.resolve(null),
     ]);
 
   const instance = instanceSnapshot.data();
@@ -122,12 +137,79 @@ exports.calculateTourPrice = onCall(async (request) => {
   const instanceIsPrivate =
     instance?.isPrivate === true || instance?.visibility === "private";
   const isPrivate = instanceIsPrivate || data.isPrivate === true;
+  const pricingMode = String(
+    tour.pricingMode || tour.pricing_mode || "per_person",
+  ).toLowerCase() === "fixed_tour" ? "fixed_tour" : "per_person";
+  const fixedTourPrice = firstConfiguredNumber(
+    [tour],
+    ["fixedTourPrice", "fixed_tour_price"],
+  );
+
+  if (pricingMode === "fixed_tour" && !isPrivate) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Fixed full-tour pricing is available only for private tours.",
+    );
+  }
+  if (pricingMode === "fixed_tour" && fixedTourPrice <= 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The administrator has not configured the full tour price.",
+    );
+  }
+
+  const alreadyBookedSeats = instance
+    ? firstConfiguredNumber([instance], ["bookedSeats"], 0)
+    : 0;
+  let existingPassengerCount = 0;
+  if (bookingId) {
+    if (!request.auth?.uid) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Sign in before changing an existing booking.",
+      );
+    }
+    const existingBooking = existingBookingSnapshot?.data();
+    if (!existingBooking) {
+      throw new HttpsError("not-found", "This booking no longer exists.");
+    }
+    if (existingBooking.userId !== request.auth.uid) {
+      throw new HttpsError(
+        "permission-denied",
+        "You can calculate changes only for your own booking.",
+      );
+    }
+    const bookingInstanceId = String(
+      existingBooking.instanceId || existingBooking.tourId || "",
+    );
+    if (bookingInstanceId !== tourId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "The booking does not belong to this tour.",
+      );
+    }
+    existingPassengerCount = firstConfiguredNumber(
+      [existingBooking],
+      ["totalPersons", "numberOfPeople"],
+    );
+  }
+  if (existingPassengerCount > alreadyBookedSeats) {
+    throw new HttpsError(
+      "invalid-argument",
+      "The existing passenger count is greater than the booked seats.",
+    );
+  }
+  const passengersAfterBooking =
+    alreadyBookedSeats - existingPassengerCount + totalPersons;
 
   const pricing = calculatePricing({
     adults,
     kids6to12,
     kidsUnder6,
+    pricingMode,
     adultPrice,
+    fixedTourPrice,
+    passengersAfterBooking,
     childPrice,
     infantPrice,
     childRate,
@@ -157,7 +239,7 @@ exports.calculateTourPrice = onCall(async (request) => {
   });
 
   return {
-    pricingVersion: 1,
+    pricingVersion: 2,
     tourId,
     sourceTourId,
     tourName: String(tour.name || tour.title || "Tour"),
@@ -168,3 +250,108 @@ exports.calculateTourPrice = onCall(async (request) => {
     quoteExpiresAt,
   };
 });
+
+exports.rebalanceFixedTourPrices = onDocumentWritten(
+  "tour_instances/{instanceId}",
+  async (event) => {
+    const instance = event.data?.after.data();
+    if (!instance) return;
+
+    const pricingMode = String(
+      instance.pricingMode || instance.pricing_mode || "per_person",
+    ).toLowerCase();
+    const isPrivate =
+      instance.isPrivate === true || instance.visibility === "private";
+    if (pricingMode !== "fixed_tour" || !isPrivate) return;
+
+    const instanceId = event.params.instanceId;
+    const sourceTourId = String(
+      instance.sourceIdleTourId || instance.templateTourId || "",
+    ).trim();
+    const [templateSnapshot, configSnapshot, bookingsSnapshot] =
+      await Promise.all([
+        sourceTourId && !sourceTourId.includes("/")
+          ? db.collection("tours").doc(sourceTourId).get()
+          : Promise.resolve(null),
+        db.collection("app_config").doc("pricing").get(),
+        db.collection("bookings").where("instanceId", "==", instanceId).get(),
+      ]);
+
+    const template = templateSnapshot?.data() || {};
+    const config = configSnapshot.data() || {};
+    const tour = {...template, ...instance};
+    const fixedTourPrice = firstConfiguredNumber(
+      [tour],
+      ["fixedTourPrice", "fixed_tour_price"],
+    );
+    if (fixedTourPrice <= 0) return;
+
+    const activeBookings = bookingsSnapshot.docs.filter((bookingDoc) => {
+      const status = String(bookingDoc.data().status || "active").toLowerCase();
+      return status !== "cancelled";
+    });
+    const bookedSeats = activeBookings.reduce(
+      (sum, bookingDoc) => sum + firstConfiguredNumber(
+        [bookingDoc.data()],
+        ["totalPersons", "numberOfPeople"],
+      ),
+      0,
+    );
+    if (bookedSeats <= 0) return;
+
+    const privateTourSurcharge = firstConfiguredNumber(
+      [tour, config],
+      ["privateTourSurcharge", "private_tour_surcharge"],
+    );
+    const serviceFeePercent = firstConfiguredNumber(
+      [tour, config],
+      ["serviceFeePercent", "service_fee_percent"],
+    );
+    const currency = String(tour.currency || config.currency || "LKR")
+      .toUpperCase();
+    const batch = db.batch();
+
+    for (const bookingDoc of activeBookings) {
+      const booking = bookingDoc.data();
+      const adults = firstConfiguredNumber([booking], ["adults"]);
+      const kids6to12 = firstConfiguredNumber([booking], ["kids6to12"]);
+      const kidsUnder6 = firstConfiguredNumber([booking], ["kidsUnder6"]);
+      const recordedTotal = adults + kids6to12 + kidsUnder6;
+      const totalPersons = firstConfiguredNumber(
+        [booking],
+        ["totalPersons", "numberOfPeople"],
+      );
+      const normalizedAdults = recordedTotal > 0 ? adults : totalPersons;
+      const pricing = calculatePricing({
+        adults: normalizedAdults,
+        kids6to12,
+        kidsUnder6,
+        pricingMode: "fixed_tour",
+        fixedTourPrice,
+        passengersAfterBooking: bookedSeats,
+        privateTourSurcharge,
+        serviceFeePercent,
+        isPrivate: true,
+      });
+      batch.update(bookingDoc.ref, {
+        totalPrice: pricing.total,
+        currency,
+        pricingVersion: 2,
+        pricingBreakdown: {
+          pricingVersion: 2,
+          currency,
+          ...pricing,
+          rebalancedAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+    logger.info("Fixed tour booking prices rebalanced", {
+      instanceId,
+      bookings: activeBookings.length,
+      bookedSeats,
+    });
+  },
+);

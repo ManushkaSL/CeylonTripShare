@@ -48,20 +48,42 @@ class _BookingScreenState extends State<BookingScreen> {
   static const double _toddlerPrice = 0.0;
 
   double get _adultTotal =>
-      _pricingQuote?.adultTotal ?? _adults * widget.tour.price;
+      _pricingQuote?.adultTotal ?? _adults * _estimatedPassengerPrice;
   double get _kids6to12Total =>
       _pricingQuote?.childTotal ??
-      _kids6to12 * widget.tour.price * _kidsDiscount;
+      _kids6to12 *
+          _estimatedPassengerPrice *
+          (_isFixedPricing ? 1 : _kidsDiscount);
   double get _toddlerTotal =>
-      _pricingQuote?.infantTotal ?? _kidsUnder6 * _toddlerPrice;
+      _pricingQuote?.infantTotal ??
+      _kidsUnder6 *
+          (_isFixedPricing ? _estimatedPassengerPrice : _toddlerPrice);
   double get _totalPrice =>
       _pricingQuote?.total ?? _adultTotal + _kids6to12Total + _toddlerTotal;
   int get _totalPersons => _adults + _kids6to12 + _kidsUnder6;
   String get _currency => _pricingQuote?.currency ?? 'LKR';
+  bool get _isFixedPricing =>
+      widget.tour.isFixedTourPricing ||
+      _pricingQuote?.pricingMode == Tour.fixedTourPricing;
+  int get _estimatedPassengersAfterBooking =>
+      _pricingQuote?.passengersAfterBooking ??
+      (widget.tour.bookedSeats + _totalPersons)
+          .clamp(1, widget.tour.totalSeats)
+          .toInt();
+  double get _fullTourPrice =>
+      _pricingQuote?.fullTourPrice ?? widget.tour.fixedTourPrice;
+  double get _fullTourTotal =>
+      _pricingQuote?.fullTourTotal ?? widget.tour.fixedTourPrice;
+  double get _estimatedPassengerPrice {
+    if (!_isFixedPricing) return widget.tour.price;
+    return _pricingQuote?.pricePerPassenger ??
+        _fullTourPrice / _estimatedPassengersAfterBooking;
+  }
 
   @override
   void initState() {
     super.initState();
+    _isPrivateTour = widget.tour.isPrivate || widget.tour.isFixedTourPricing;
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshPricing());
   }
 
@@ -720,6 +742,34 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildTourVisibilitySection() {
+    if (_isFixedPricing) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: DesignColors.primary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: DesignColors.primary.withOpacity(0.2)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.lock_outline_rounded, color: DesignColors.primary),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Private fixed-price tour\nThe full tour price is shared equally by all passengers who join through the private link.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                  color: DesignColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -1176,46 +1226,85 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
             const SizedBox(height: 10),
           ],
-          _buildPriceRow('Adults (x$_adults)', _formatMoney(_adultTotal)),
-          if (_kids6to12 > 0) ...[
+          if (_isFixedPricing) ...[
+            _buildPriceRow(
+              'Full tour base price',
+              _formatMoney(_fullTourPrice),
+            ),
+            if ((_pricingQuote?.fullTourTotal ?? 0) > _fullTourPrice) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Full tour total (fees included)',
+                _formatMoney(_fullTourTotal),
+              ),
+            ],
             const SizedBox(height: 10),
             _buildPriceRow(
-              'Kids 6-12 (x$_kids6to12) [50% Off]',
-              _formatMoney(_kids6to12Total),
+              'Passengers after booking',
+              '$_estimatedPassengersAfterBooking',
+            ),
+            const SizedBox(height: 10),
+            _buildPriceRow(
+              'Current price per passenger',
+              _formatMoney(_estimatedPassengerPrice),
               accented: true,
             ),
-          ],
-          if (_kidsUnder6 > 0) ...[
             const SizedBox(height: 10),
             _buildPriceRow(
-              'Kids under 6 (x$_kidsUnder6)',
-              _toddlerTotal == 0 ? 'Free' : _formatMoney(_toddlerTotal),
+              'Your passengers (x$_totalPersons)',
+              _formatMoney(_totalPrice),
             ),
-          ],
-          if ((_pricingQuote?.privateTourSurcharge ?? 0) > 0) ...[
-            const SizedBox(height: 10),
-            _buildPriceRow(
-              'Private tour surcharge',
-              _formatMoney(_pricingQuote!.privateTourSurcharge),
+            const SizedBox(height: 12),
+            const Text(
+              'Your share decreases when more passengers join. All existing booking totals are recalculated automatically.',
+              style: TextStyle(
+                color: DesignColors.textSecondary,
+                fontSize: 11.5,
+                height: 1.4,
+              ),
             ),
-          ],
-          if ((_pricingQuote?.serviceFee ?? 0) > 0) ...[
-            const SizedBox(height: 10),
-            _buildPriceRow(
-              'Service fee (${_pricingQuote!.serviceFeePercent.toStringAsFixed(1)}%)',
-              _formatMoney(_pricingQuote!.serviceFee),
-            ),
+          ] else ...[
+            _buildPriceRow('Adults (x$_adults)', _formatMoney(_adultTotal)),
+            if (_kids6to12 > 0) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Kids 6-12 (x$_kids6to12) [50% Off]',
+                _formatMoney(_kids6to12Total),
+                accented: true,
+              ),
+            ],
+            if (_kidsUnder6 > 0) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Kids under 6 (x$_kidsUnder6)',
+                _toddlerTotal == 0 ? 'Free' : _formatMoney(_toddlerTotal),
+              ),
+            ],
+            if ((_pricingQuote?.privateTourSurcharge ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Private tour surcharge',
+                _formatMoney(_pricingQuote!.privateTourSurcharge),
+              ),
+            ],
+            if ((_pricingQuote?.serviceFee ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Service fee (${_pricingQuote!.serviceFeePercent.toStringAsFixed(1)}%)',
+                _formatMoney(_pricingQuote!.serviceFee),
+              ),
+            ],
           ],
           const Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: DesignColors.divider),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total Amount',
-                style: TextStyle(
+              Text(
+                _isFixedPricing ? 'Your Current Share' : 'Total Amount',
+                style: const TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w900,
                   color: DesignColors.textPrimary,

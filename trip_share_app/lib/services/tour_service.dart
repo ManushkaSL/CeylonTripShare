@@ -80,6 +80,8 @@ class TourService {
       totalSeats: totalSeats,
       remainingSeats: newRemainingSeats,
       price: oldTour.price,
+      pricingMode: oldTour.pricingMode,
+      fixedTourPrice: oldTour.fixedTourPrice,
       description: oldTour.description,
       photos: oldTour.photos,
       category: oldTour.category,
@@ -802,6 +804,16 @@ class TourService {
       totalSeats: totalSeats,
       remainingSeats: resolvedRemainingSeats,
       price: _doubleFrom(_pick(map, ['price', 'cost', 'amount'])),
+      pricingMode:
+          _stringFrom(
+                _pick(map, ['pricingMode', 'pricing_mode']),
+              ).toLowerCase() ==
+              Tour.fixedTourPricing
+          ? Tour.fixedTourPricing
+          : Tour.perPersonPricing,
+      fixedTourPrice: _doubleFrom(
+        _pick(map, ['fixedTourPrice', 'fixed_tour_price']),
+      ),
       description: _stringFrom(_pick(map, ['description', 'details'])),
       photos: photos,
       category: _stringFrom(_pick(map, ['category', 'type'])),

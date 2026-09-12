@@ -39,6 +39,7 @@ class Booking {
   final String pickupLocation;
   final double totalPrice;
   final String currency;
+  final Map<String, dynamic> pricingBreakdown;
   final int totalPersons;
   final String? cardHolderName;
   final String phoneNumber;
@@ -57,6 +58,7 @@ class Booking {
     required this.pickupLocation,
     required this.totalPrice,
     this.currency = 'LKR',
+    this.pricingBreakdown = const {},
     required this.totalPersons,
     this.cardHolderName,
     required this.phoneNumber,
@@ -85,6 +87,7 @@ class Booking {
       'pickupLocation': pickupLocation,
       'totalPrice': totalPrice,
       'currency': currency,
+      'pricingBreakdown': pricingBreakdown,
       'totalPersons': totalPersons,
       'cardHolderName': cardHolderName,
       'phoneNumber': phoneNumber,
@@ -139,6 +142,9 @@ class Booking {
       pickupLocation: map['pickupLocation'] ?? '',
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0.0,
       currency: (map['currency'] ?? 'LKR').toString(),
+      pricingBreakdown: map['pricingBreakdown'] is Map
+          ? Map<String, dynamic>.from(map['pricingBreakdown'] as Map)
+          : const {},
       totalPersons: (map['totalPersons'] as num?)?.toInt() ?? 0,
       cardHolderName: map['cardHolderName'] as String?,
       phoneNumber: map['phoneNumber'] ?? '',
