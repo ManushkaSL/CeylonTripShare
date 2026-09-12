@@ -53,11 +53,13 @@ class _BookingScreenState extends State<BookingScreen> {
       _pricingQuote?.childTotal ??
       _kids6to12 *
           _estimatedPassengerPrice *
-          (_isFixedPricing ? 1 : _kidsDiscount);
+          (_isFixedPricing || _isPerSeatPricing ? 1 : _kidsDiscount);
   double get _toddlerTotal =>
       _pricingQuote?.infantTotal ??
       _kidsUnder6 *
-          (_isFixedPricing ? _estimatedPassengerPrice : _toddlerPrice);
+          (_isFixedPricing || _isPerSeatPricing
+              ? _estimatedPassengerPrice
+              : _toddlerPrice);
   double get _totalPrice =>
       _pricingQuote?.total ?? _adultTotal + _kids6to12Total + _toddlerTotal;
   int get _totalPersons => _adults + _kids6to12 + _kidsUnder6;
@@ -65,6 +67,9 @@ class _BookingScreenState extends State<BookingScreen> {
   bool get _isFixedPricing =>
       widget.tour.isFixedTourPricing ||
       _pricingQuote?.pricingMode == Tour.fixedTourPricing;
+  bool get _isPerSeatPricing =>
+      widget.tour.isCommunityRide ||
+      _pricingQuote?.pricingMode == Tour.perSeatPricing;
   int get _estimatedPassengersAfterBooking =>
       _pricingQuote?.passengersAfterBooking ??
       (widget.tour.bookedSeats + _totalPersons)
@@ -267,6 +272,21 @@ class _BookingScreenState extends State<BookingScreen> {
           }
           return;
         }
+      }
+      if (widget.tour.isCommunityRide &&
+          widget.tour.hostUserId == AuthService().userId) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'You are hosting this ride, so you cannot book its passenger seats.',
+              ),
+              backgroundColor: DesignColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       }
       _pricingDebounce?.cancel();
       final authoritativeQuote = await _refreshPricing();
@@ -742,6 +762,34 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildTourVisibilitySection() {
+    if (widget.tour.isCommunityRide) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: DesignColors.primary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: DesignColors.primary.withOpacity(0.2)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.public_rounded, color: DesignColors.primary),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Public Community Ride\nPassenger seats can be joined immediately while they remain available.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                  color: DesignColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     if (_isFixedPricing) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -1263,6 +1311,26 @@ class _BookingScreenState extends State<BookingScreen> {
                 height: 1.4,
               ),
             ),
+          ] else if (_isPerSeatPricing) ...[
+            _buildPriceRow(
+              'Price per passenger',
+              _formatMoney(
+                _pricingQuote?.pricePerPassenger ?? widget.tour.price,
+              ),
+              accented: true,
+            ),
+            const SizedBox(height: 10),
+            _buildPriceRow(
+              'Passengers (x$_totalPersons)',
+              _formatMoney(_pricingQuote?.subtotal ?? _totalPrice),
+            ),
+            if ((_pricingQuote?.serviceFee ?? 0) > 0) ...[
+              const SizedBox(height: 10),
+              _buildPriceRow(
+                'Service fee (${_pricingQuote!.serviceFeePercent.toStringAsFixed(1)}%)',
+                _formatMoney(_pricingQuote!.serviceFee),
+              ),
+            ],
           ] else ...[
             _buildPriceRow('Adults (x$_adults)', _formatMoney(_adultTotal)),
             if (_kids6to12 > 0) ...[

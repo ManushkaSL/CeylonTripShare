@@ -9,6 +9,14 @@ import 'package:trip_share_app/services/tour_service.dart';
 
 enum JourneyStatus { notStarted, inProgress }
 
+String _pricingModeFrom(dynamic value) {
+  return switch (value?.toString().toLowerCase()) {
+    Tour.fixedTourPricing => Tour.fixedTourPricing,
+    Tour.perSeatPricing => Tour.perSeatPricing,
+    _ => Tour.perPersonPricing,
+  };
+}
+
 class JoinedTour {
   final String bookingId;
   final Tour tour;
@@ -621,11 +629,7 @@ class JoinedTourService extends ChangeNotifier {
                     inst['available_seats'] ?? inst['remainingSeats'],
                   ),
                   price: (inst['price'] as num?)?.toDouble() ?? 0.0,
-                  pricingMode:
-                      (inst['pricingMode'] ?? '').toString().toLowerCase() ==
-                          Tour.fixedTourPricing
-                      ? Tour.fixedTourPricing
-                      : Tour.perPersonPricing,
+                  pricingMode: _pricingModeFrom(inst['pricingMode']),
                   fixedTourPrice:
                       (inst['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
                   description: inst['description'] ?? '',
@@ -645,6 +649,13 @@ class JoinedTourService extends ChangeNotifier {
                   isPrivate:
                       inst['isPrivate'] == true ||
                       inst['visibility']?.toString().toLowerCase() == 'private',
+                  sourceType: (inst['sourceType'] ?? '').toString(),
+                  approvalStatus: (inst['approvalStatus'] ?? '').toString(),
+                  hostUserId: (inst['hostUserId'] ?? '').toString(),
+                  hostName: (inst['hostName'] ?? '').toString(),
+                  vehicleType: (inst['vehicleType'] ?? '').toString(),
+                  hasAirConditioning: inst['hasAirConditioning'] == true,
+                  luggageAvailable: inst['luggageAvailable'] == true,
                 );
               }
             } catch (e) {
@@ -674,11 +685,7 @@ class JoinedTourService extends ChangeNotifier {
                     tourData['remainingSeats'] ??
                     0,
                 price: (tourData['price'] as num?)?.toDouble() ?? 0.0,
-                pricingMode:
-                    (tourData['pricingMode'] ?? '').toString().toLowerCase() ==
-                        Tour.fixedTourPricing
-                    ? Tour.fixedTourPricing
-                    : Tour.perPersonPricing,
+                pricingMode: _pricingModeFrom(tourData['pricingMode']),
                 fixedTourPrice:
                     (tourData['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
                 description: tourData['description'] ?? '',
@@ -820,7 +827,8 @@ class JoinedTourService extends ChangeNotifier {
         email: userEmail,
         phone: phoneNumber,
       );
-      final isIdleTemplate = tour.sourceIdleTourId.isEmpty;
+      final isIdleTemplate =
+          tour.sourceIdleTourId.isEmpty && !tour.isCommunityRide;
       final resolvedIsPrivate = isIdleTemplate ? isPrivate : tour.isPrivate;
       final sourceIdleTourId = isIdleTemplate ? tour.id : tour.sourceIdleTourId;
       final scheduledDate = isIdleTemplate
@@ -1737,11 +1745,7 @@ class JoinedTourService extends ChangeNotifier {
               totalSeats: (data['instanceTotalSeats'] as num?)?.toInt() ?? 0,
               remainingSeats: (data['instanceAvailable'] as num?)?.toInt() ?? 0,
               price: (data['price'] as num?)?.toDouble() ?? 0.0,
-              pricingMode:
-                  (data['pricingMode'] ?? '').toString().toLowerCase() ==
-                      Tour.fixedTourPricing
-                  ? Tour.fixedTourPricing
-                  : Tour.perPersonPricing,
+              pricingMode: _pricingModeFrom(data['pricingMode']),
               fixedTourPrice:
                   (data['fixedTourPrice'] as num?)?.toDouble() ?? 0.0,
               isPrivate:
@@ -1777,13 +1781,7 @@ class JoinedTourService extends ChangeNotifier {
                       fallback: tour.remainingSeats,
                     ),
                     price: _toDouble(instance['price'], fallback: tour.price),
-                    pricingMode:
-                        (instance['pricingMode'] ?? '')
-                                .toString()
-                                .toLowerCase() ==
-                            Tour.fixedTourPricing
-                        ? Tour.fixedTourPricing
-                        : Tour.perPersonPricing,
+                    pricingMode: _pricingModeFrom(instance['pricingMode']),
                     fixedTourPrice: _toDouble(
                       instance['fixedTourPrice'],
                       fallback: tour.fixedTourPrice,
@@ -1823,6 +1821,14 @@ class JoinedTourService extends ChangeNotifier {
                         instance['isPrivate'] == true ||
                         instance['visibility']?.toString().toLowerCase() ==
                             'private',
+                    sourceType: (instance['sourceType'] ?? '').toString(),
+                    approvalStatus: (instance['approvalStatus'] ?? '')
+                        .toString(),
+                    hostUserId: (instance['hostUserId'] ?? '').toString(),
+                    hostName: (instance['hostName'] ?? '').toString(),
+                    vehicleType: (instance['vehicleType'] ?? '').toString(),
+                    hasAirConditioning: instance['hasAirConditioning'] == true,
+                    luggageAvailable: instance['luggageAvailable'] == true,
                   );
                 }
               } catch (e) {

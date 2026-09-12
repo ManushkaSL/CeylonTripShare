@@ -101,3 +101,18 @@ test("charges a booking for its passenger share of a fixed tour", () => {
   assert.equal(quote.pricePerPassenger, 10000);
   assert.equal(quote.total, 20000);
 });
+
+test("community ride pricing charges every occupied seat equally", () => {
+  const quote = calculatePricing({
+    adults: 1,
+    kids6to12: 1,
+    kidsUnder6: 1,
+    pricingMode: "per_seat",
+    adultPrice: 1500,
+  });
+
+  assert.equal(quote.adultTotal, 1500);
+  assert.equal(quote.childTotal, 1500);
+  assert.equal(quote.infantTotal, 1500);
+  assert.equal(quote.total, 4500);
+});

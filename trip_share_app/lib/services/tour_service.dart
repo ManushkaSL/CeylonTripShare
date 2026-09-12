@@ -98,6 +98,13 @@ class TourService {
       bookedSeats: bookedSeats,
       sourceIdleTourId: oldTour.sourceIdleTourId,
       isPrivate: oldTour.isPrivate,
+      sourceType: oldTour.sourceType,
+      approvalStatus: oldTour.approvalStatus,
+      hostUserId: oldTour.hostUserId,
+      hostName: oldTour.hostName,
+      vehicleType: oldTour.vehicleType,
+      hasAirConditioning: oldTour.hasAirConditioning,
+      luggageAvailable: oldTour.luggageAvailable,
     );
     debugPrint(
       '✅ Updated tour cache: $tourId remaining=$newRemainingSeats booked=$bookedSeats',
@@ -311,7 +318,13 @@ class TourService {
               final status = (d.data()['status'] ?? '')
                   .toString()
                   .toLowerCase();
-              return status != 'completed' && status != 'cancelled';
+              final sourceType = (d.data()['sourceType'] ?? '').toString();
+              final approvalStatus = (d.data()['approvalStatus'] ?? 'approved')
+                  .toString();
+              return status != 'completed' &&
+                  status != 'cancelled' &&
+                  (sourceType != 'community_ride' ||
+                      approvalStatus == 'approved');
             })
             .map((d) => _mergeWithCache(parseTour(d.data(), d.id)))
             .whereType<Tour>()
@@ -346,6 +359,7 @@ class TourService {
         final instances = parsedInstances
             .where(
               (tour) =>
+                  tour.isCommunityRide ||
                   tour.hasBookings ||
                   (bookingsSnapshotAvailable &&
                       latestBookedTourIds.contains(tour.id)),
@@ -804,13 +818,13 @@ class TourService {
       totalSeats: totalSeats,
       remainingSeats: resolvedRemainingSeats,
       price: _doubleFrom(_pick(map, ['price', 'cost', 'amount'])),
-      pricingMode:
-          _stringFrom(
-                _pick(map, ['pricingMode', 'pricing_mode']),
-              ).toLowerCase() ==
-              Tour.fixedTourPricing
-          ? Tour.fixedTourPricing
-          : Tour.perPersonPricing,
+      pricingMode: switch (_stringFrom(
+        _pick(map, ['pricingMode', 'pricing_mode']),
+      ).toLowerCase()) {
+        Tour.fixedTourPricing => Tour.fixedTourPricing,
+        Tour.perSeatPricing => Tour.perSeatPricing,
+        _ => Tour.perPersonPricing,
+      },
       fixedTourPrice: _doubleFrom(
         _pick(map, ['fixedTourPrice', 'fixed_tour_price']),
       ),
@@ -844,6 +858,15 @@ class TourService {
       isPrivate:
           map['isPrivate'] == true ||
           _stringFrom(map['visibility']).toLowerCase() == 'private',
+      sourceType: _stringFrom(_pick(map, ['sourceType', 'source_type'])),
+      approvalStatus: _stringFrom(
+        _pick(map, ['approvalStatus', 'approval_status']),
+      ),
+      hostUserId: _stringFrom(_pick(map, ['hostUserId', 'host_user_id'])),
+      hostName: _stringFrom(_pick(map, ['hostName', 'host_name'])),
+      vehicleType: _stringFrom(_pick(map, ['vehicleType', 'vehicle_type'])),
+      hasAirConditioning: map['hasAirConditioning'] == true,
+      luggageAvailable: map['luggageAvailable'] == true,
     );
   }
 

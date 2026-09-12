@@ -255,7 +255,9 @@ class _TourDetailScreenState extends State<TourDetailScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Operated by ${tour.operatorName}',
+                          tour.isCommunityRide
+                              ? 'Ride hosted by ${tour.hostName.isNotEmpty ? tour.hostName : tour.operatorName}'
+                              : 'Operated by ${tour.operatorName}',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,

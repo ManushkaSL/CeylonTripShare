@@ -38,6 +38,36 @@ function calculatePricing({
     : 0;
   const safeServiceFeePercent = percentage(serviceFeePercent);
 
+  if (pricingMode === "per_seat") {
+    const adultTotal = roundMoney(adults * safeAdultPrice);
+    const childTotal = roundMoney(kids6to12 * safeAdultPrice);
+    const infantTotal = roundMoney(kidsUnder6 * safeAdultPrice);
+    const subtotal = roundMoney(adultTotal + childTotal + infantTotal);
+    const serviceFee = roundMoney(subtotal * safeServiceFeePercent / 100);
+    const total = roundMoney(subtotal + serviceFee);
+    return {
+      pricingMode: "per_seat",
+      passengersAfterBooking: bookingPassengers,
+      fullTourPrice: 0,
+      fullTourSubtotal: 0,
+      fullTourTotal: 0,
+      pricePerPassenger: roundMoney(safeAdultPrice),
+      unitPrices: {
+        adult: roundMoney(safeAdultPrice),
+        child: roundMoney(safeAdultPrice),
+        infant: roundMoney(safeAdultPrice),
+      },
+      adultTotal,
+      childTotal,
+      infantTotal,
+      privateTourSurcharge: 0,
+      serviceFeePercent: safeServiceFeePercent,
+      serviceFee,
+      subtotal,
+      total,
+    };
+  }
+
   if (pricingMode === "fixed_tour") {
     const safeFixedTourPrice = nonNegativeNumber(fixedTourPrice);
     const sharingPassengers = Math.max(

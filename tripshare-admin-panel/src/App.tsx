@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, MapPin, Clock, DollarSign, Image as ImageIcon, Loader2, LayoutDashboard, LogOut, Lock, Mail, Route, User, Tag, Upload, X, ChevronLeft, ChevronRight, Pencil, Users, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Tour, Booking, Driver } from './types';
+import { Tour, Booking, Driver, CommunityRideSubmission } from './types';
 import { db, auth } from './firebase';
 import {
   addDoc,
@@ -52,6 +52,14 @@ function formatCompletedAt(value: unknown) {
   return Number.isNaN(date.getTime())
     ? 'Completion time pending'
     : date.toLocaleString();
+}
+
+function firestoreDate(value: unknown): Date {
+  if (value && typeof value === 'object' && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  const parsed = new Date(value as string | number | Date);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
 async function deleteDocumentRefsInBatches(
@@ -457,7 +465,9 @@ export default function App() {
   const [routeInput, setRouteInput] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [activeSection, setActiveSection] = useState<'tours' | 'drivers' | 'bookings' | 'completed'>('tours');
+  const [activeSection, setActiveSection] = useState<'tours' | 'rides' | 'drivers' | 'bookings' | 'completed'>('tours');
+  const [communityRides, setCommunityRides] = useState<CommunityRideSubmission[]>([]);
+  const [reviewingRideId, setReviewingRideId] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverEmail, setDriverEmail] = useState('');
   const [addingDriver, setAddingDriver] = useState(false);
@@ -510,6 +520,116 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setCommunityRides([]);
+      return;
+    }
+    return onSnapshot(
+      collection(db, 'community_ride_submissions'),
+      snapshot => {
+        const rides = snapshot.docs.map(document => ({
+          id: document.id,
+          ...document.data(),
+        } as CommunityRideSubmission));
+        rides.sort((a, b) => firestoreDate(b.createdAt).getTime() - firestoreDate(a.createdAt).getTime());
+        setCommunityRides(rides);
+      },
+      error => console.error('Community ride listener failed:', error),
+    );
+  }, [isAuthenticated]);
+
+  const approveCommunityRide = async (ride: CommunityRideSubmission) => {
+    setReviewingRideId(ride.id);
+    try {
+      const departure = firestoreDate(ride.departureAt);
+      const arrival = firestoreDate(ride.estimatedArrivalAt);
+      const features = [
+        ride.hasAirConditioning ? 'Air conditioning' : '',
+        ride.luggageAvailable ? 'Luggage space' : '',
+        ride.vehicleType ? `Vehicle: ${ride.vehicleType}` : '',
+      ].filter(Boolean);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'tour_instances', ride.id), {
+        tourId: ride.id,
+        sourceType: 'community_ride',
+        communityRideSubmissionId: ride.id,
+        approvalStatus: 'approved',
+        status: 'active',
+        name: `${ride.origin} to ${ride.destination}`,
+        category: 'Community Ride',
+        description: ride.notes || `Shared ride from ${ride.origin} to ${ride.destination}`,
+        imageUrl: '',
+        photos: [],
+        startDate: departure.toISOString(),
+        estimatedArrivalAt: arrival.toISOString(),
+        lastJoiningTime: departure.toISOString(),
+        endTime: arrival.toISOString(),
+        startLocation: ride.pickupLocation,
+        endLocation: ride.dropoffLocation,
+        origin: ride.origin,
+        destination: ride.destination,
+        route: (ride.routeStops || []).map(stop => ({ location: stop, time: '' })),
+        operatorName: ride.hostName,
+        hostName: ride.hostName,
+        hostUserId: ride.hostUserId,
+        vehicleType: ride.vehicleType || '',
+        hasAirConditioning: ride.hasAirConditioning === true,
+        luggageAvailable: ride.luggageAvailable === true,
+        whatsIncluded: [],
+        tourFeatures: features,
+        totalSeats: Number(ride.offeredSeats || 0),
+        available_seats: Number(ride.offeredSeats || 0),
+        remainingSeats: Number(ride.offeredSeats || 0),
+        bookedSeats: 0,
+        bookedUserIds: [],
+        firstBookedUserId: '',
+        price: Number(ride.pricePerPassenger || 0),
+        pricingMode: 'per_seat',
+        fixedTourPrice: 0,
+        currency: ride.currency || 'LKR',
+        visibility: 'public',
+        isPrivate: false,
+        rating: 4.5,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'community_ride_submissions', ride.id), {
+        approvalStatus: 'approved',
+        status: 'open',
+        reviewNote: '',
+        reviewedAt: serverTimestamp(),
+        reviewedBy: auth.currentUser?.uid || '',
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+    } catch (error: any) {
+      alert(`Could not approve ride: ${error?.message || error}`);
+    } finally {
+      setReviewingRideId(null);
+    }
+  };
+
+  const rejectCommunityRide = async (ride: CommunityRideSubmission) => {
+    const reason = window.prompt('Reason for rejection or requested changes:');
+    if (reason === null) return;
+    setReviewingRideId(ride.id);
+    try {
+      await updateDoc(doc(db, 'community_ride_submissions', ride.id), {
+        approvalStatus: 'rejected',
+        status: 'rejected',
+        reviewNote: reason.trim(),
+        reviewedAt: serverTimestamp(),
+        reviewedBy: auth.currentUser?.uid || '',
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      alert(`Could not reject ride: ${error?.message || error}`);
+    } finally {
+      setReviewingRideId(null);
+    }
+  };
 
   const closeTourModal = () => {
     setIsAdding(false);
@@ -1575,8 +1695,13 @@ export default function App() {
     booking => booking.status !== 'completed' && booking.status !== 'cancelled',
   );
   const completedBookings = bookings.filter(booking => booking.status === 'completed');
+  const publishedCommunityRides = communityRides.filter(
+    ride => ride.approvalStatus === 'approved' && ride.status !== 'cancelled' && ride.status !== 'completed',
+  );
   const sectionTitle = activeSection === 'tours'
     ? 'Tours Management'
+    : activeSection === 'rides'
+      ? 'Ride Approvals'
     : activeSection === 'bookings'
       ? 'Active Tours'
       : activeSection === 'completed'
@@ -1604,6 +1729,22 @@ export default function App() {
           >
             <LayoutDashboard className="w-4 h-4" />
             Tours Management
+          </button>
+          <button
+            onClick={() => setActiveSection('rides')}
+            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg w-full transition-colors ${
+              activeSection === 'rides'
+                ? 'text-emerald-700 bg-emerald-50'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+            }`}
+          >
+            <Route className="w-4 h-4" />
+            Ride Approvals
+            {communityRides.filter(ride => ride.approvalStatus === 'pending_review').length > 0 && (
+              <span className="ml-auto rounded-full bg-orange-500 px-2 py-0.5 text-xs font-bold text-white">
+                {communityRides.filter(ride => ride.approvalStatus === 'pending_review').length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveSection('bookings')}
@@ -1680,9 +1821,10 @@ export default function App() {
         </header>
 
         <div className="md:hidden px-4 pt-4">
-          <div className="grid grid-cols-4 gap-2 p-1 border border-stone-200 rounded-xl" style={{ backgroundColor: '#ffffff' }}>
+          <div className="grid grid-cols-5 gap-2 p-1 border border-stone-200 rounded-xl" style={{ backgroundColor: '#ffffff' }}>
             {[
               { key: 'tours', label: 'Tours', icon: LayoutDashboard },
+              { key: 'rides', label: 'Rides', icon: Route },
               { key: 'bookings', label: 'Active', icon: Calendar },
               { key: 'drivers', label: 'Drivers', icon: Users },
               { key: 'completed', label: 'Done', icon: CheckCircle },
@@ -1692,7 +1834,7 @@ export default function App() {
               return (
                 <button
                   key={item.key}
-                  onClick={() => setActiveSection(item.key as 'tours' | 'bookings' | 'drivers' | 'completed')}
+                  onClick={() => setActiveSection(item.key as 'tours' | 'rides' | 'bookings' | 'drivers' | 'completed')}
                   className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-colors ${
                     isActive ? 'bg-emerald-600 text-white' : 'text-stone-700 hover:bg-stone-100'
                   }`}
@@ -1808,6 +1950,107 @@ export default function App() {
                 <Plus className="w-4 h-4" />
                 Add Tour
               </button>
+            </div>
+          )}
+        </div>
+        )}
+
+        {activeSection === 'rides' && (
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <h3 className="font-bold text-emerald-900">Community Ride Review</h3>
+            <p className="mt-1 text-sm text-emerald-800">
+              Verify the route, contact information and driver licence number before publishing a ride.
+              Approved rides appear in Active Tours immediately.
+            </p>
+          </div>
+          {communityRides.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white py-16 text-center text-stone-500">
+              No Community Ride submissions yet.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {communityRides.map(ride => {
+                const busy = reviewingRideId === ride.id;
+                return (
+                  <div key={ride.id} className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-xl font-bold text-stone-900">{ride.origin} → {ride.destination}</h3>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                            ride.status === 'cancelled'
+                              ? 'bg-stone-200 text-stone-700'
+                              : ride.approvalStatus === 'approved'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : ride.approvalStatus === 'rejected'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {ride.status === 'cancelled' ? 'CANCELLED' : ride.approvalStatus.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-stone-600">
+                          {firestoreDate(ride.departureAt).toLocaleString()} · {ride.offeredSeats} seats · Rs. {Number(ride.pricePerPassenger || 0).toFixed(2)} / passenger
+                        </p>
+                      </div>
+                      {ride.status !== 'cancelled' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => rejectCommunityRide(ride)}
+                            disabled={busy || ride.approvalStatus === 'rejected'}
+                            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            onClick={() => approveCommunityRide(ride)}
+                            disabled={busy || ride.approvalStatus === 'approved'}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {ride.approvalStatus === 'approved' ? 'Published' : 'Approve & Publish'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-1 gap-4 border-t border-stone-100 pt-5 md:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Pickup & Drop-off</p>
+                        <p className="mt-1 text-sm font-medium text-stone-900">{ride.pickupLocation}</p>
+                        <p className="text-sm text-stone-600">to {ride.dropoffLocation}</p>
+                        {ride.routeStops?.length > 0 && <p className="mt-1 text-xs text-stone-500">Via {ride.routeStops.join(', ')}</p>}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Host Contact</p>
+                        <p className="mt-1 text-sm font-medium text-stone-900">{ride.hostName || 'N/A'}</p>
+                        <p className="text-sm text-stone-600">{ride.hostPhone}</p>
+                        <p className="text-sm text-stone-600">{ride.hostEmail}</p>
+                        {ride.whatsappNumber && <p className="text-sm text-stone-600">WhatsApp: {ride.whatsappNumber}</p>}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Driver</p>
+                        <p className="mt-1 text-sm font-medium text-stone-900">{ride.driverName || ride.hostName}</p>
+                        <p className="text-sm text-stone-600">{ride.driverPhone || ride.hostPhone}</p>
+                        <p className="text-sm text-stone-600">Licence: {ride.driverLicenseNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Ride Details</p>
+                        <p className="mt-1 text-sm text-stone-700">Arrival: {firestoreDate(ride.estimatedArrivalAt).toLocaleString()}</p>
+                        <p className="text-sm text-stone-700">Vehicle: {ride.vehicleType || 'Not specified'}</p>
+                        <p className="text-sm text-stone-700">AC: {ride.hasAirConditioning ? 'Yes' : 'No'} · Luggage: {ride.luggageAvailable ? 'Yes' : 'No'}</p>
+                      </div>
+                    </div>
+                    {(ride.notes || ride.reviewNote) && (
+                      <div className="mt-4 rounded-xl bg-stone-50 p-4 text-sm text-stone-700">
+                        {ride.notes && <p><strong>Host notes:</strong> {ride.notes}</p>}
+                        {ride.reviewNote && <p className="mt-1 text-red-700"><strong>Review note:</strong> {ride.reviewNote}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2042,6 +2285,28 @@ export default function App() {
         {activeSection === 'bookings' && (
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
           <div className="space-y-6">
+            {publishedCommunityRides.length > 0 && (
+              <div className="rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-stone-900">Published Community Rides</h3>
+                  <p className="mt-1 text-sm text-stone-600">Approved rides are active even before their first passenger joins.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {publishedCommunityRides.map(ride => (
+                    <div key={ride.id} className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-bold text-stone-900">{ride.origin} → {ride.destination}</p>
+                        <span className="rounded-full bg-violet-600 px-2 py-1 text-[10px] font-bold text-white">COMMUNITY RIDE</span>
+                      </div>
+                      <p className="mt-2 text-sm text-stone-600">
+                        {firestoreDate(ride.departureAt).toLocaleString()} · {ride.offeredSeats} seats
+                      </p>
+                      <p className="mt-1 font-semibold text-emerald-700">Rs. {Number(ride.pricePerPassenger).toFixed(2)} / passenger</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Bookings List */}
             <div className="rounded-2xl border border-stone-200 overflow-hidden" style={{ 
               backgroundColor: '#ffffff',

@@ -40,6 +40,7 @@ class Booking {
   final double totalPrice;
   final String currency;
   final Map<String, dynamic> pricingBreakdown;
+  final Map<String, dynamic> rideHostContact;
   final int totalPersons;
   final String? cardHolderName;
   final String phoneNumber;
@@ -59,6 +60,7 @@ class Booking {
     required this.totalPrice,
     this.currency = 'LKR',
     this.pricingBreakdown = const {},
+    this.rideHostContact = const {},
     required this.totalPersons,
     this.cardHolderName,
     required this.phoneNumber,
@@ -88,6 +90,7 @@ class Booking {
       'totalPrice': totalPrice,
       'currency': currency,
       'pricingBreakdown': pricingBreakdown,
+      if (rideHostContact.isNotEmpty) 'rideHostContact': rideHostContact,
       'totalPersons': totalPersons,
       'cardHolderName': cardHolderName,
       'phoneNumber': phoneNumber,
@@ -144,6 +147,9 @@ class Booking {
       currency: (map['currency'] ?? 'LKR').toString(),
       pricingBreakdown: map['pricingBreakdown'] is Map
           ? Map<String, dynamic>.from(map['pricingBreakdown'] as Map)
+          : const {},
+      rideHostContact: map['rideHostContact'] is Map
+          ? Map<String, dynamic>.from(map['rideHostContact'] as Map)
           : const {},
       totalPersons: (map['totalPersons'] as num?)?.toInt() ?? 0,
       cardHolderName: map['cardHolderName'] as String?,

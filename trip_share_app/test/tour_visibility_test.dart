@@ -99,4 +99,25 @@ void main() {
     expect(tour.fullTourPrice, 30000);
     expect(tour.currentPassengerPrice, 10000);
   });
+
+  test('approved community ride is active before its first booking', () {
+    final ride = Tour(
+      id: 'ride-1',
+      name: 'Kandy to Colombo',
+      imageUrl: '',
+      startDate: DateTime(2026, 9, 20),
+      totalSeats: 3,
+      remainingSeats: 3,
+      price: 1500,
+      pricingMode: Tour.perSeatPricing,
+      sourceType: 'community_ride',
+      approvalStatus: 'approved',
+      hostUserId: 'host-1',
+    );
+
+    expect(ride.isCommunityRide, isTrue);
+    expect(ride.hasBookings, isFalse);
+    expect(ride.status, TourStatus.active);
+    expect(ride.price, 1500);
+  });
 }

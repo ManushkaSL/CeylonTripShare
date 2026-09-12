@@ -8,6 +8,7 @@ class RouteStop {
 class Tour {
   static const String perPersonPricing = 'per_person';
   static const String fixedTourPricing = 'fixed_tour';
+  static const String perSeatPricing = 'per_seat';
 
   final String id;
   final String name;
@@ -36,6 +37,13 @@ class Tour {
   /// ID of the original idle tour if this is an active occurrence.
   final String sourceIdleTourId;
   final bool isPrivate; // Private active tours are discoverable by link only
+  final String sourceType;
+  final String approvalStatus;
+  final String hostUserId;
+  final String hostName;
+  final String vehicleType;
+  final bool hasAirConditioning;
+  final bool luggageAvailable;
 
   const Tour({
     required this.id,
@@ -64,6 +72,13 @@ class Tour {
     this.rating = 4.5,
     this.sourceIdleTourId = '',
     this.isPrivate = false,
+    this.sourceType = 'admin_tour',
+    this.approvalStatus = 'approved',
+    this.hostUserId = '',
+    this.hostName = '',
+    this.vehicleType = '',
+    this.hasAirConditioning = false,
+    this.luggageAvailable = false,
   });
 
   /// Creates an empty tour instance (useful for placeholders)
@@ -81,6 +96,8 @@ class Tour {
   bool get canBook => remainingSeats > 0;
 
   bool get isFixedTourPricing => pricingMode == fixedTourPricing;
+
+  bool get isCommunityRide => sourceType == 'community_ride';
 
   double get fullTourPrice => isFixedTourPricing ? fixedTourPrice : price;
 
@@ -122,6 +139,13 @@ class Tour {
     double? rating,
     String? sourceIdleTourId,
     bool? isPrivate,
+    String? sourceType,
+    String? approvalStatus,
+    String? hostUserId,
+    String? hostName,
+    String? vehicleType,
+    bool? hasAirConditioning,
+    bool? luggageAvailable,
   }) {
     return Tour(
       id: id ?? this.id,
@@ -150,11 +174,19 @@ class Tour {
       rating: rating ?? this.rating,
       sourceIdleTourId: sourceIdleTourId ?? this.sourceIdleTourId,
       isPrivate: isPrivate ?? this.isPrivate,
+      sourceType: sourceType ?? this.sourceType,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
+      hostUserId: hostUserId ?? this.hostUserId,
+      hostName: hostName ?? this.hostName,
+      vehicleType: vehicleType ?? this.vehicleType,
+      hasAirConditioning: hasAirConditioning ?? this.hasAirConditioning,
+      luggageAvailable: luggageAvailable ?? this.luggageAvailable,
     );
   }
 
   TourStatus get status {
     if (!canBook) return TourStatus.fullBooked;
+    if (isCommunityRide) return TourStatus.active;
     if (hasBookings) {
       return TourStatus.active;
     }

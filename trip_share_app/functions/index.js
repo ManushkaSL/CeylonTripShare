@@ -5,7 +5,10 @@ const {FieldValue, getFirestore} = require("firebase-admin/firestore");
 const {logger} = require("firebase-functions");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {HttpsError, onCall} = require("firebase-functions/v2/https");
-const {onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {
+  onDocumentCreated,
+  onDocumentWritten,
+} = require("firebase-functions/v2/firestore");
 const {calculatePricing, nonNegativeNumber} = require("./pricing");
 
 setGlobalOptions({region: "asia-south1", maxInstances: 10});
@@ -137,9 +140,15 @@ exports.calculateTourPrice = onCall(async (request) => {
   const instanceIsPrivate =
     instance?.isPrivate === true || instance?.visibility === "private";
   const isPrivate = instanceIsPrivate || data.isPrivate === true;
-  const pricingMode = String(
+  const configuredPricingMode = String(
     tour.pricingMode || tour.pricing_mode || "per_person",
-  ).toLowerCase() === "fixed_tour" ? "fixed_tour" : "per_person";
+  ).toLowerCase();
+  const pricingMode = configuredPricingMode === "fixed_tour"
+    ? "fixed_tour"
+    : configuredPricingMode === "per_seat" ||
+        tour.sourceType === "community_ride"
+      ? "per_seat"
+      : "per_person";
   const fixedTourPrice = firstConfiguredNumber(
     [tour],
     ["fixedTourPrice", "fixed_tour_price"],
@@ -352,6 +361,49 @@ exports.rebalanceFixedTourPrices = onDocumentWritten(
       instanceId,
       bookings: activeBookings.length,
       bookedSeats,
+    });
+  },
+);
+
+exports.attachCommunityRideContact = onDocumentCreated(
+  "bookings/{bookingId}",
+  async (event) => {
+    const booking = event.data?.data();
+    if (!booking) return;
+    const instanceId = String(booking.instanceId || booking.tourId || "");
+    if (!instanceId) return;
+
+    const instanceSnapshot = await db
+      .collection("tour_instances")
+      .doc(instanceId)
+      .get();
+    const instance = instanceSnapshot.data();
+    if (!instance || instance.sourceType !== "community_ride") return;
+
+    const submissionId = String(
+      instance.communityRideSubmissionId || instanceId,
+    );
+    const submissionSnapshot = await db
+      .collection("community_ride_submissions")
+      .doc(submissionId)
+      .get();
+    const submission = submissionSnapshot.data();
+    if (!submission) return;
+
+    await event.data.ref.update({
+      rideHostContact: {
+        hostName: String(submission.hostName || instance.hostName || ""),
+        hostPhone: String(submission.hostPhone || ""),
+        whatsappNumber: String(submission.whatsappNumber || ""),
+        driverName: String(submission.driverName || ""),
+        driverPhone: String(submission.driverPhone || ""),
+        vehicleType: String(submission.vehicleType || ""),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    logger.info("Community ride contact attached to booking", {
+      bookingId: event.params.bookingId,
+      instanceId,
     });
   },
 );

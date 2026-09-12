@@ -140,6 +140,27 @@ class TourCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Title
+                        if (tour.isCommunityRide) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.deepPurple.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: const Text(
+                              'COMMUNITY RIDE',
+                              style: TextStyle(
+                                color: Colors.deepPurple,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                        ],
                         Text(
                           tour.name.length > 48
                               ? tour.name.substring(0, 45) + '...'

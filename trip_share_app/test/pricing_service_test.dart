@@ -90,4 +90,35 @@ void main() {
     expect(quote.pricePerPassenger, 10000);
     expect(quote.toBookingPricingMap()['fullTourTotal'], 30000);
   });
+
+  test('community ride quote preserves equal per-seat pricing', () {
+    final quote = PricingQuote.fromMap({
+      'pricingVersion': 2,
+      'pricingMode': 'per_seat',
+      'currency': 'LKR',
+      'isPrivate': false,
+      'counts': {
+        'adults': 1,
+        'kids6to12': 1,
+        'kidsUnder6': 1,
+        'totalPersons': 3,
+      },
+      'passengersAfterBooking': 3,
+      'pricePerPassenger': 1500,
+      'unitPrices': {'adult': 1500, 'child': 1500, 'infant': 1500},
+      'adultTotal': 1500,
+      'childTotal': 1500,
+      'infantTotal': 1500,
+      'privateTourSurcharge': 0,
+      'serviceFeePercent': 0,
+      'serviceFee': 0,
+      'subtotal': 4500,
+      'total': 4500,
+    });
+
+    expect(quote.pricingMode, 'per_seat');
+    expect(quote.childUnitPrice, 1500);
+    expect(quote.infantUnitPrice, 1500);
+    expect(quote.total, 4500);
+  });
 }

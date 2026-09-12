@@ -95,8 +95,27 @@ service cloud.firestore {
     // Active booked occurrences are visible to everyone.
     match /tour_instances/{instanceId} {
       allow read;
-      allow create: if request.auth != null;
+      // Community Rides become public only after an administrator approves
+      // the private submission. Customers may still create normal instances
+      // when starting an idle tour.
+      allow create: if isAdmin() ||
+                    (
+                      request.auth != null &&
+                      request.resource.data.get('sourceType', '') != 'community_ride'
+                    );
       allow update: if isAdmin() ||
+                    (
+                      request.auth != null &&
+                      resource.data.get('sourceType', '') == 'community_ride' &&
+                      resource.data.get('hostUserId', '') == request.auth.uid &&
+                      resource.data.get('bookedSeats', 0) == 0 &&
+                      request.resource.data.get('hostUserId', '') == request.auth.uid &&
+                      request.resource.data.get('status', '') == 'cancelled' &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'status',
+                        'updatedAt'
+                      ])
+                    ) ||
                     (
                       request.auth != null &&
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -109,6 +128,46 @@ service cloud.firestore {
                       ])
                     ) ||
                     isCompletingAssignedTour(instanceId);
+      allow delete: if isAdmin();
+    }
+
+    // A Community Ride submission contains private contact and licence data.
+    // Approval creates a separate sanitized document in tour_instances.
+    match /community_ride_submissions/{rideId} {
+      allow read: if isAdmin() ||
+                  (
+                    request.auth != null &&
+                    resource.data.get('hostUserId', '') == request.auth.uid
+                  );
+      allow create: if request.auth != null &&
+                    request.resource.data.get('hostUserId', '') == request.auth.uid &&
+                    request.resource.data.get('sourceType', '') == 'community_ride' &&
+                    request.resource.data.get('approvalStatus', '') == 'pending_review' &&
+                    request.resource.data.get('status', '') == 'pending_review' &&
+                    request.resource.data.get('offeredSeats', 0) is int &&
+                    request.resource.data.get('offeredSeats', 0) >= 1 &&
+                    request.resource.data.get('offeredSeats', 0) <= 20 &&
+                    request.resource.data.get('pricePerPassenger', -1) is number &&
+                    request.resource.data.get('pricePerPassenger', -1) >= 0 &&
+                    request.resource.data.get('origin', '') is string &&
+                    request.resource.data.get('origin', '') != '' &&
+                    request.resource.data.get('destination', '') is string &&
+                    request.resource.data.get('destination', '') != '' &&
+                    request.resource.data.get('hostPhone', '') is string &&
+                    request.resource.data.get('hostPhone', '') != '' &&
+                    request.resource.data.get('driverLicenseNumber', '') is string &&
+                    request.resource.data.get('driverLicenseNumber', '') != '';
+      allow update: if isAdmin() ||
+                    (
+                      request.auth != null &&
+                      resource.data.get('hostUserId', '') == request.auth.uid &&
+                      request.resource.data.get('hostUserId', '') == request.auth.uid &&
+                      request.resource.data.get('status', '') == 'cancelled' &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'status',
+                        'updatedAt'
+                      ])
+                    );
       allow delete: if isAdmin();
     }
 

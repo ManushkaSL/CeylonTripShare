@@ -191,6 +191,59 @@ class _BookingDetailsScreenState extends State<BookingDetailsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (booking.tour.isCommunityRide &&
+                    booking.rideHostContact.isNotEmpty) ...[
+                  _detailCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Ride host contact',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: DesignColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _row(
+                          Icons.person_outline_rounded,
+                          'Host',
+                          (booking.rideHostContact['hostName'] ?? '')
+                              .toString(),
+                        ),
+                        _row(
+                          Icons.phone_outlined,
+                          'Host phone',
+                          (booking.rideHostContact['hostPhone'] ?? '')
+                              .toString(),
+                        ),
+                        if ((booking.rideHostContact['whatsappNumber'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          _row(
+                            Icons.message_outlined,
+                            'WhatsApp',
+                            booking.rideHostContact['whatsappNumber']
+                                .toString(),
+                          ),
+                        _row(
+                          Icons.airline_seat_recline_normal_rounded,
+                          'Driver',
+                          (booking.rideHostContact['driverName'] ?? '')
+                              .toString(),
+                        ),
+                        _row(
+                          Icons.phone_in_talk_outlined,
+                          'Driver phone',
+                          (booking.rideHostContact['driverPhone'] ?? '')
+                              .toString(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _detailCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

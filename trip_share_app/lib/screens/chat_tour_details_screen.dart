@@ -16,6 +16,9 @@ class ChatTourDetailsScreen extends StatefulWidget {
 class _ChatTourDetailsScreenState extends State<ChatTourDetailsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _auth = AuthService();
+  bool get _canViewPassengers =>
+      _auth.isDriver ||
+      (widget.tour.isCommunityRide && widget.tour.hostUserId == _auth.userId);
 
   late Future<_ChatTourDetails> _detailsFuture;
   late bool _lastKnownDriverRole;
@@ -63,7 +66,7 @@ class _ChatTourDetailsScreenState extends State<ChatTourDetailsScreen> {
     }
 
     final merged = <String, dynamic>{...template, ...instance};
-    final passengers = _auth.isDriver
+    final passengers = _canViewPassengers
         ? await _loadAssignedPassengers()
         : const <_PassengerSummary>[];
 
@@ -151,7 +154,7 @@ class _ChatTourDetailsScreenState extends State<ChatTourDetailsScreen> {
         backgroundColor: DesignColors.surface,
         surfaceTintColor: Colors.transparent,
         foregroundColor: DesignColors.textPrimary,
-        title: Text(_auth.isDriver ? 'Tour & passengers' : 'Tour summary'),
+        title: Text(_canViewPassengers ? 'Tour & passengers' : 'Tour summary'),
       ),
       body: FutureBuilder<_ChatTourDetails>(
         future: _detailsFuture,
@@ -186,7 +189,7 @@ class _ChatTourDetailsScreenState extends State<ChatTourDetailsScreen> {
                   const SizedBox(height: 16),
                   _routeSection(_route(details.data)),
                 ],
-                if (_auth.isDriver) ...[
+                if (_canViewPassengers) ...[
                   const SizedBox(height: 24),
                   Text(
                     'Tour passengers (${details.passengers.length})',

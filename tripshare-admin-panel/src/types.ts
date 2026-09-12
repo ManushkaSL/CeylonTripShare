@@ -4,7 +4,7 @@ export interface Tour {
   category: string;
   description: string;
   price: number;
-  pricingMode?: 'per_person' | 'fixed_tour';
+  pricingMode?: 'per_person' | 'fixed_tour' | 'per_seat';
   fixedTourPrice?: number;
   images: string[];
   seat_count: number;
@@ -80,4 +80,36 @@ export interface Booking {
   tourDate?: unknown;
   completedAt?: unknown;
   completedBy?: string;
+}
+
+export interface CommunityRideSubmission {
+  id: string;
+  hostUserId: string;
+  hostName: string;
+  hostEmail: string;
+  hostPhone: string;
+  whatsappNumber?: string;
+  isHostDriver: boolean;
+  driverName: string;
+  driverPhone: string;
+  driverLicenseNumber: string;
+  origin: string;
+  pickupLocation: string;
+  destination: string;
+  dropoffLocation: string;
+  routeStops: string[];
+  departureAt: unknown;
+  estimatedArrivalAt: unknown;
+  offeredSeats: number;
+  pricePerPassenger: number;
+  currency: string;
+  vehicleType?: string;
+  hasAirConditioning: boolean;
+  luggageAvailable: boolean;
+  notes?: string;
+  approvalStatus: 'pending_review' | 'approved' | 'rejected';
+  status: string;
+  reviewNote?: string;
+  createdAt?: unknown;
+  reviewedAt?: unknown;
 }

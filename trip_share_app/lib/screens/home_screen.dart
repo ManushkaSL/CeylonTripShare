@@ -13,6 +13,7 @@ import 'package:trip_share_app/theme/design_system.dart';
 import 'package:trip_share_app/screens/joined_tours_screen.dart';
 import 'package:trip_share_app/screens/chats_list_screen.dart';
 import 'package:trip_share_app/screens/profile_screen.dart';
+import 'package:trip_share_app/screens/community_rides_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'All';
   final List<String> _categories = [
     'All',
+    'Community Ride',
     'Safari',
     'Beach',
     'Camping',
@@ -41,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Map<String, IconData> _categoryIcons = {
     'All': Icons.grid_view_rounded,
+    'Community Ride': Icons.route_rounded,
     'Safari': Icons.local_florist_rounded,
     'Beach': Icons.beach_access_rounded,
     'Camping': Icons.cabin_rounded,
@@ -121,13 +124,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Tour> _idleTours(List<Tour> tours) {
-    return tours.where((t) => t.sourceIdleTourId.isEmpty).toList()
+    return tours
+        .where((t) => t.sourceIdleTourId.isEmpty && !t.isCommunityRide)
+        .toList()
       ..sort((a, b) => a.startDate.compareTo(b.startDate));
   }
 
   List<Tour> _activeTours(List<Tour> tours) {
     return tours
-        .where((t) => t.sourceIdleTourId.isNotEmpty && !t.isPrivate)
+        .where(
+          (t) =>
+              (t.sourceIdleTourId.isNotEmpty || t.isCommunityRide) &&
+              !t.isPrivate,
+        )
         .toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
   }
@@ -172,6 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildHomeContent(),
           const ChatsListBody(),
+          const CommunityRidesBody(),
           const JoinedToursBody(),
           const ProfileBody(),
         ],
@@ -187,6 +197,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedIndex == 1
                     ? 'Chats'
                     : _selectedIndex == 2
+                    ? 'Offer a Ride'
+                    : _selectedIndex == 3
                     ? 'My Bookings'
                     : 'Profile',
                 style: TextStyle(
@@ -206,8 +218,10 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return const ChatsListBody();
       case 2:
-        return const JoinedToursBody();
+        return const CommunityRidesBody();
       case 3:
+        return const JoinedToursBody();
+      case 4:
         return const ProfileBody();
       default:
         return const SizedBox.shrink();
@@ -1767,6 +1781,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Tour name with premium bold font style
+                    if (tour.isCommunityRide) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'COMMUNITY RIDE',
+                          style: TextStyle(
+                            color: Colors.deepPurple,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
                     Text(
                       tour.name,
                       style: TextStyle(
@@ -2256,16 +2292,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 1,
               ),
               _buildNavItem(
+                Icons.add_road_rounded,
+                Icons.add_road_outlined,
+                'Offer Ride',
+                2,
+              ),
+              _buildNavItem(
                 Icons.luggage_rounded,
                 Icons.luggage_outlined,
                 'Bookings',
-                2,
+                3,
               ),
               _buildNavItem(
                 Icons.person_rounded,
                 Icons.person_outline_rounded,
                 'Profile',
-                3,
+                4,
               ),
             ],
           ),
@@ -2285,7 +2327,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () => setState(() => _selectedIndex = index),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 72,
+        width: 68,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
